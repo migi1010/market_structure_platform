@@ -55,13 +55,22 @@ class AlphaRow:
     factor_importance: Dict[str, float]
 
 
-def _try_init_qlib() -> Dict[str, Any]:
+def _try_init_qlib(qlib_available: bool | None = None) -> Dict[str, Any]:
+    if qlib_available is False:
+        return {
+            "available": False,
+            "mode": "fallback",
+            "provider": "Microsoft Qlib compatible pipeline",
+            "factor_set": "Alpha158-inspired live factor subset",
+            "reason": "pyqlib is not installed in this Render runtime",
+        }
     try:
         import qlib  # type: ignore
         from qlib.contrib.data.handler import Alpha158  # type: ignore
 
         return {
             "available": True,
+            "mode": "qlib",
             "provider": "Microsoft Qlib",
             "factor_set": "Alpha158",
             "alpha158_class": Alpha158.__name__,
@@ -70,6 +79,7 @@ def _try_init_qlib() -> Dict[str, Any]:
     except Exception as exc:
         return {
             "available": False,
+            "mode": "fallback",
             "provider": "Microsoft Qlib compatible pipeline",
             "factor_set": "Alpha158-inspired live factor subset",
             "reason": str(exc),
@@ -199,8 +209,8 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
     )
 
 
-def run_alpha_pipeline(universe: str = "sp500") -> Dict[str, Any]:
-    qlib_status = _try_init_qlib()
+def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = None) -> Dict[str, Any]:
+    qlib_status = _try_init_qlib(qlib_available)
     symbols = sorted(set(SP500_UNIVERSE if universe.lower() == "sp500" else NASDAQ100_UNIVERSE))
 
     sector_scores: Dict[str, float] = {}
