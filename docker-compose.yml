@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  market-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: market-structure-platform
+    environment:
+      - STOCK_LIST=${STOCK_LIST:-600519,AAPL}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=Asia/Shanghai
+      
+      # AI Model Configuration
+      - ANSPIRE_API_KEYS=${ANSPIRE_API_KEYS}
+      - AIHUBMIX_KEY=${AIHUBMIX_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Notification Channels
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - EMAIL_SENDER=${EMAIL_SENDER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - WECHAT_WEBHOOK_URL=${WECHAT_WEBHOOK_URL}
+      - FEISHU_WEBHOOK_URL=${FEISHU_WEBHOOK_URL}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      
+      # Data Providers
+      - DATA_PROVIDER_PRIORITY=${DATA_PROVIDER_PRIORITY:-yfinance,akshare}
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      
+      # System
+      - DEBUG=${DEBUG:-false}
+      - DRY_RUN=${DRY_RUN:-false}
+      
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./results:/app/results
+      
+    restart: on-failure:3
+    
+    # For local testing - run once and stop
+    # Remove this for production scheduling
+    command: python market_structure/analysis_scheduler.py --stocks "${STOCK_LIST}" --notify
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "from data_provider.base import DataProviderManager; DataProviderManager()"]
+      interval: 5m
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+# Optional: Add Redis for caching
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: market-cache
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   restart: always
+
+# Optional: Add PostgreSQL for results storage
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: market-database
+  #   environment:
+  #     - POSTGRES_DB=market_analysis
+  #     - POSTGRES_USER=analyzer
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   restart: always
+
+volumes:
+  # redis-data:
+  # postgres-data:
+
+networks:
+  default:
+    name: market-network

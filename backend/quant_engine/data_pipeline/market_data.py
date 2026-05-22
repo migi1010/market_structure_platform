@@ -1,0 +1,204 @@
+﻿from __future__ import annotations
+
+import json
+import pickle
+import sqlite3
+import threading
+import time
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+import pandas as pd
+
+from quant_engine.data_pipeline.providers import (
+    fetch_quote_with_fallbacks,
+    fetch_yfinance_history,
+    fetch_yfinance_news,
+    fetch_yfinance_statements,
+    safe_float,
+)
+from settings import get_settings
+
+_LOCK = threading.Lock()
+
+
+class SQLiteCache:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._initialize()
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.path, timeout=20, check_same_thread=False)
+
+    def _initialize(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS kv_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    content_type TEXT NOT NULL,
+                    payload BLOB NOT NULL,
+                    expires_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.commit()
+
+    def get(self, cache_key: str) -> tuple[str, bytes] | None:
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT content_type, payload, expires_at FROM kv_cache WHERE cache_key = ?",
+                (cache_key,),
+            ).fetchone()
+            if row is None:
+                return None
+            content_type, payload, expires_at = row
+            if int(expires_at) < now:
+                conn.execute("DELETE FROM kv_cache WHERE cache_key = ?", (cache_key,))
+                conn.commit()
+                return None
+            return str(content_type), bytes(payload)
+
+    def set(self, cache_key: str, content_type: str, payload: bytes, ttl_seconds: int) -> None:
+        now = int(time.time())
+        expires_at = now + ttl_seconds
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO kv_cache (cache_key, content_type, payload, expires_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    content_type = excluded.content_type,
+                    payload = excluded.payload,
+                    expires_at = excluded.expires_at,
+                    updated_at = excluded.updated_at
+                """,
+                (cache_key, content_type, payload, expires_at, now),
+            )
+            conn.commit()
+
+
+@lru_cache(maxsize=1)
+def _cache() -> SQLiteCache:
+    return SQLiteCache(get_settings().sqlite_cache_path)
+
+
+def initialize_cache() -> None:
+    _cache()
+
+
+def _get_cached(cache_key: str) -> Any | None:
+    item = _cache().get(cache_key)
+    if item is None:
+        return None
+    content_type, payload = item
+    if content_type == "json":
+        return json.loads(payload.decode("utf-8"))
+    if content_type == "pickle":
+        return pickle.loads(payload)
+    return None
+
+
+def _set_cached(cache_key: str, value: Any, ttl_seconds: int, content_type: str = "json") -> None:
+    if content_type == "json":
+        payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
+    else:
+        payload = pickle.dumps(value)
+    _cache().set(cache_key, content_type, payload, ttl_seconds)
+
+
+def get_quote(symbol: str) -> Dict[str, Any]:
+    normalized = symbol.strip().upper()
+    cache_key = f"quote:{normalized}"
+    cached = _get_cached(cache_key)
+    if isinstance(cached, dict):
+        return cached
+    with _LOCK:
+        cached = _get_cached(cache_key)
+        if isinstance(cached, dict):
+            return cached
+        quote = fetch_quote_with_fallbacks(normalized) or {}
+        _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
+        return quote
+
+
+def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
+    normalized = symbol.strip().upper()
+    cache_key = f"history:{normalized}:{period}"
+    cached = _get_cached(cache_key)
+    if isinstance(cached, pd.DataFrame):
+        return cached
+    with _LOCK:
+        cached = _get_cached(cache_key)
+        if isinstance(cached, pd.DataFrame):
+            return cached
+        df = fetch_yfinance_history(normalized, period)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        result = df.dropna()
+        _set_cached(cache_key, result, get_settings().history_ttl_seconds, "pickle")
+        return result
+
+
+def get_statements(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    normalized = symbol.strip().upper()
+    cache_key = f"statements:{normalized}"
+    cached = _get_cached(cache_key)
+    if isinstance(cached, tuple) and len(cached) == 3:
+        return cached
+    with _LOCK:
+        cached = _get_cached(cache_key)
+        if isinstance(cached, tuple) and len(cached) == 3:
+            return cached
+        statements = fetch_yfinance_statements(normalized)
+        _set_cached(cache_key, statements, get_settings().statement_ttl_seconds, "pickle")
+        return statements
+
+
+def get_news(symbol: str) -> List[Dict[str, Any]]:
+    normalized = symbol.strip().upper()
+    cache_key = f"news:{normalized}"
+    cached = _get_cached(cache_key)
+    if isinstance(cached, list):
+        return cached
+    with _LOCK:
+        cached = _get_cached(cache_key)
+        if isinstance(cached, list):
+            return cached
+        news = fetch_yfinance_news(normalized)
+        _set_cached(cache_key, news, get_settings().news_ttl_seconds, "json")
+        return news
+
+
+def refresh_symbols(symbols: List[str]) -> Dict[str, int]:
+    refreshed = 0
+    failed = 0
+    for symbol in symbols:
+        try:
+            get_quote(symbol)
+            get_history(symbol)
+            get_statements(symbol)
+            get_news(symbol)
+            refreshed += 1
+        except Exception:
+            failed += 1
+    return {"refreshed": refreshed, "failed": failed}
+
+
+def statement_value(statement: pd.DataFrame, names: List[str], offset: int = 0) -> float:
+    if statement is None or statement.empty:
+        return 0.0
+    for name in names:
+        if name in statement.index:
+            series = statement.loc[name]
+            if hasattr(series, "iloc") and len(series) > offset:
+                return safe_float(series.iloc[offset])
+    return 0.0
+
+
+def previous_statement_value(statement: pd.DataFrame, names: List[str]) -> float:
+    return statement_value(statement, names, offset=1)

@@ -1,0 +1,1117 @@
+{
+  "timestamp": "2026-05-22T02:16:38.587631",
+  "duration": 0.0,
+  "regime": {
+    "name": "High Volatility",
+    "confidence": 1.0
+  },
+  "regime_name": "High Volatility",
+  "regime_confidence": 1.0,
+  "alpha_df": [
+    {
+      "美股代號": "INTC",
+      "Growth": 100.0,
+      "品質因子": 26.80712426346343,
+      "Valuation": 0.0,
+      "Momentum": 100.0,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 74.03760169173826,
+      "今日成交量倍數": "0.50x",
+      "泡沫風控評分": 12.21875343089851,
+      "ticker_news": [
+        {
+          "title": "2028 will be a more important 財報表現 year for Nvidia: Analyst",
+          "link": "https://finance.yahoo.com/video/2028-will-be-a-more-important-earnings-year-for-nvidia-analyst-145337681.html"
+        },
+        {
+          "title": "Retirees Face 3 Big Money Challenges in 2026 -- Here's How to Cope",
+          "link": "https://finance.yahoo.com/economy/articles/retirees-face-3-big-money-173200720.html"
+        },
+        {
+          "title": "Why Kevin Warsh Will Have to Defy Trump on Interest Rate Cuts",
+          "link": "https://finance.yahoo.com/economy/policy/articles/why-kevin-warsh-defy-trump-171921469.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "AMD",
+      "Growth": 82.24790125809841,
+      "品質因子": 28.246122263104084,
+      "Valuation": 17.656582755588136,
+      "Momentum": 83.42371389717084,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 64.70224874479321,
+      "今日成交量倍數": "0.44x",
+      "泡沫風控評分": 16.653429811191927,
+      "ticker_news": [
+        {
+          "title": "2028 will be a more important 財報表現 year for Nvidia: Analyst",
+          "link": "https://finance.yahoo.com/video/2028-will-be-a-more-important-earnings-year-for-nvidia-analyst-145337681.html"
+        },
+        {
+          "title": "AMD's $10 Billion Taiwan Push Puts AI Chip Race In Focus",
+          "link": "https://finance.yahoo.com/sectors/technology/articles/amds-10-billion-taiwan-push-173540821.html"
+        },
+        {
+          "title": "Quantum Computing and Robotics Are Arriving Faster Than Most Investors Realize and After Years of Covering This Space These 3 ETFs Stand Out",
+          "link": "https://finance.yahoo.com/news/quantum-computing-robotics-arriving-faster-171144893.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "WMT",
+      "Growth": 53.97295585654002,
+      "品質因子": 57.93481294767781,
+      "Valuation": 59.80156440295538,
+      "Momentum": 49.653855613148416,
+      "SmartMoney": 99.51338391117451,
+      "綜合因子得分": 60.70329156764261,
+      "今日成交量倍數": "2.15x",
+      "泡沫風控評分": 0.0,
+      "ticker_news": [
+        {
+          "title": "The 3 core themes in Walmart's 財報表現. One of them is AI.",
+          "link": "https://finance.yahoo.com/video/the-3-core-themes-in-walmarts-earnings-one-of-them-is-ai-170000084.html"
+        },
+        {
+          "title": "How to end your paycheck-to-paycheck hustle: a financial expert's guide",
+          "link": "https://finance.yahoo.com/video/end-paycheck-paycheck-hustle-financial-100000822.html"
+        }
+      ],
+      "板塊歸屬": "XLP"
+    },
+    {
+      "美股代號": "JNJ",
+      "Growth": 51.36878856372375,
+      "品質因子": 82.85819140344285,
+      "Valuation": 53.57555877507841,
+      "Momentum": 49.82794913117292,
+      "SmartMoney": 70.9891520172449,
+      "綜合因子得分": 57.29625052872159,
+      "今日成交量倍數": "0.21x",
+      "泡沫風控評分": 12.985739775244195,
+      "ticker_news": [
+        {
+          "title": "BAYRY's Kerendia Label Expansion Application Gets Priority Review",
+          "link": "https://finance.yahoo.com/sectors/healthcare/articles/bayrys-kerendia-label-expansion-application-170000821.html"
+        },
+        {
+          "title": "A Dividend Portfolio That Beats the Median Household Income in 47 of the 50 States on $1.1 Million Invested",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/dividend-portfolio-beats-median-household-155740277.html"
+        },
+        {
+          "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+        }
+      ],
+      "板塊歸屬": "XLV"
+    },
+    {
+      "美股代號": "CSCO",
+      "Growth": 65.02783436764665,
+      "品質因子": 47.030224938744084,
+      "Valuation": 29.81253250549536,
+      "Momentum": 67.24744981739983,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 56.864161211224484,
+      "今日成交量倍數": "0.47x",
+      "泡沫風控評分": 48.05010234747227,
+      "ticker_news": [
+        {
+          "title": "Cisco Systems (CSCO): The AI Winner in 2026",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/cisco-systems-csco-ai-winner-161411510.html"
+        },
+        {
+          "title": "IBM Rallies 8% While Oracle, Cisco, HPE Drift: Is the Laggard Finally Bouncing?",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/ibm-rallies-8-while-oracle-150144490.html"
+        },
+        {
+          "title": "Oracle Moves Deeper Into AI Plumbing With Expanded Beam Standards Role",
+          "link": "https://finance.yahoo.com/sectors/technology/articles/oracle-moves-deeper-ai-plumbing-140720668.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "EBAY",
+      "Growth": 62.85986019774447,
+      "品質因子": 41.83889127938564,
+      "Valuation": 45.618035798461925,
+      "Momentum": 60.57236938104581,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 55.38961839753592,
+      "今日成交量倍數": "0.28x",
+      "泡沫風控評分": 31.919296470435807,
+      "ticker_news": [
+        {
+          "title": "Should Ryan Cohen be taken seriously as an eBay investor?",
+          "link": "https://finance.yahoo.com/video/should-ryan-cohen-be-taken-seriously-as-an-ebay-investor-140931702.html"
+        },
+        {
+          "title": "GameStop Raises Economic Exposure to eBay",
+          "link": "https://finance.yahoo.com/markets/options/articles/gamestop-raises-economic-exposure-ebay-125602744.html"
+        },
+        {
+          "title": "1 S&P 500 Stock on Our 買入 List and 2 Facing Headwinds",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/1-p-500-stock-buy-025255384.html"
+        }
+      ],
+      "板塊歸屬": "XLY"
+    },
+    {
+      "美股代號": "AMZN",
+      "Growth": 53.44070919847192,
+      "品質因子": 49.30440752157475,
+      "Valuation": 50.85599616422613,
+      "Momentum": 52.18271236929696,
+      "SmartMoney": 70.9891520172449,
+      "綜合因子得分": 55.086374942879836,
+      "今日成交量倍數": "0.54x",
+      "泡沫風控評分": 18.457869669884133,
+      "ticker_news": [
+        {
+          "title": "Is Walmart stock beginning to crack under stretched consumers?",
+          "link": "https://finance.yahoo.com/video/is-walmart-stock-beginning-to-crack-under-stretched-consumers-142748591.html"
+        },
+        {
+          "title": "How Google's reinvented AI search could be an extinction-level event",
+          "link": "https://finance.yahoo.com/video/how-googles-reinvented-ai-search-could-be-an-extinction-level-event-181831719.html"
+        },
+        {
+          "title": "Sector Update: Tech Stocks Advance Thursday Afternoon",
+          "link": "https://finance.yahoo.com/sectors/technology/articles/sector-tech-stocks-advance-thursday-175009312.html"
+        }
+      ],
+      "板塊歸屬": "XLY"
+    },
+    {
+      "美股代號": "GOOGL",
+      "Growth": 58.11894586007064,
+      "品質因子": 50.92455218371423,
+      "Valuation": 43.04905653268553,
+      "Momentum": 58.04105503453005,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 53.51209223969266,
+      "今日成交量倍數": "0.41x",
+      "泡沫風控評分": 16.967594609913117,
+      "ticker_news": [
+        {
+          "title": "Fugees star Wyclef Jean: AI can't snatch this one thing away from humans",
+          "link": "https://finance.yahoo.com/markets/article/fugees-star-wyclef-jean-ai-cant-snatch-this-one-thing-away-from-humans-133134022.html"
+        },
+        {
+          "title": "Why embracing AI may be the key to career survival",
+          "link": "https://finance.yahoo.com/video/why-embracing-ai-may-be-the-key-to-career-survival-195112832.html"
+        },
+        {
+          "title": "How Google's reinvented AI search could be an extinction-level event",
+          "link": "https://finance.yahoo.com/video/how-googles-reinvented-ai-search-could-be-an-extinction-level-event-181831719.html"
+        }
+      ],
+      "板塊歸屬": "XLC"
+    },
+    {
+      "美股代號": "COST",
+      "Growth": 52.61003427483652,
+      "品質因子": 71.18481173449368,
+      "Valuation": 51.09825900273205,
+      "Momentum": 51.51420857622321,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 52.50776219310491,
+      "今日成交量倍數": "0.61x",
+      "泡沫風控評分": 30.687993374587368,
+      "ticker_news": [
+        {
+          "title": "The 3 core themes in Walmart's 財報表現. One of them is AI.",
+          "link": "https://finance.yahoo.com/video/the-3-core-themes-in-walmarts-earnings-one-of-them-is-ai-170000084.html"
+        },
+        {
+          "title": "Why Costco Stock 重挫ped Today",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/why-costco-stock-dropped-today-164414097.html"
+        },
+        {
+          "title": "$1 Trillion in Spending Has Been Defeated by an Almond",
+          "link": "https://finance.yahoo.com/sectors/technology/articles/1-trillion-spending-defeated-almond-163823093.html"
+        }
+      ],
+      "板塊歸屬": "XLP"
+    },
+    {
+      "美股代號": "AAPL",
+      "Growth": 50.838019737907615,
+      "品質因子": 63.07481420339215,
+      "Valuation": 45.727687860916966,
+      "Momentum": 52.001171640475455,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 50.572640277104746,
+      "今日成交量倍數": "0.40x",
+      "泡沫風控評分": 45.59484260287198,
+      "ticker_news": [
+        {
+          "title": "Nvidia 財報表現: They're accelerating into 成長, not slowing down",
+          "link": "https://finance.yahoo.com/video/nvidia-earnings-theyre-accelerating-into-growth-not-slowing-down-140708416.html"
+        },
+        {
+          "title": "Nvidia's $80 billion stock 買入back and bigger dividend may unleash an Apple-like stock move",
+          "link": "https://finance.yahoo.com/markets/stocks/article/nvidias-80-billion-stock-buyback-and-bigger-dividend-may-unleash-an-apple-like-stock-move-122248827.html"
+        },
+        {
+          "title": "SpaceX unveils $1.29B bitcoin stash in high-valuation IPO filing",
+          "link": "https://finance.yahoo.com/video/spacex-unveils-129b-bitcoin-stash-in-high-valuation-ipo-filing-164550320.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "QCOM",
+      "Growth": 56.57104251738511,
+      "品質因子": 36.354310987440805,
+      "Valuation": 10.038348851150069,
+      "Momentum": 67.66846740796547,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 50.54168910819642,
+      "今日成交量倍數": "0.62x",
+      "泡沫風控評分": 11.785620464991368,
+      "ticker_news": [
+        {
+          "title": "Should You 買入 Taiwan Semiconductor (TSM) in 2026?",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/buy-taiwan-semiconductor-tsm-2026-161713224.html"
+        },
+        {
+          "title": "Can Qualcomm's Advanced AI PC Processors Drive Long-Term 成長?",
+          "link": "https://finance.yahoo.com/sectors/technology/articles/qualcomms-advanced-ai-pc-processors-151600123.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "NVDA",
+      "Growth": 52.44876527523687,
+      "品質因子": 43.316935177296415,
+      "Valuation": 48.09324170742864,
+      "Momentum": 52.37615092065033,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 49.571450794121766,
+      "今日成交量倍數": "0.92x",
+      "泡沫風控評分": 17.289577348513177,
+      "ticker_news": [
+        {
+          "title": "Nvidia CFO Colette Kress says CPU 營收 will total $20 billion across standalone and superchip sales",
+          "link": "https://finance.yahoo.com/news/nvidia-cfo-colette-kress-says-cpu-revenue-will-total-20-billion-across-standalone-and-superchip-sales-152047537.html"
+        },
+        {
+          "title": "Nvidia CFO on Blackwell's & Vera Rubin's trillion-dollar future",
+          "link": "https://finance.yahoo.com/video/nvidia-cfo-on-blackwells--vera-rubins-trillion-dollar-future-132512235.html"
+        },
+        {
+          "title": "Nvidia says it will see $20 billion in CPU sales this year",
+          "link": "https://finance.yahoo.com/news/nvidia-says-it-will-see-20-billion-in-cpu-sales-this-year-221129958.html"
+        }
+      ],
+      "板塊歸屬": "XLK"
+    },
+    {
+      "美股代號": "BRK-B",
+      "Growth": 44.1764066773991,
+      "品質因子": 88.05123783963417,
+      "Valuation": 52.71828362909724,
+      "Momentum": 44.99988278412002,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 49.354374779254705,
+      "今日成交量倍數": "0.36x",
+      "泡沫風控評分": 18.708698772051875,
+      "ticker_news": [
+        {
+          "title": "How Investors May Respond To Berkshire Hathaway (BRK.A) Portfolio Overhaul Under New CEO Greg Abel",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/investors-may-respond-berkshire-hathaway-161446447.html"
+        },
+        {
+          "title": "Aflac Raises 65.9B Yen in Japan Bond Market Amid Foreign Issuer Rush",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/aflac-raises-65-9b-yen-155000528.html"
+        },
+        {
+          "title": "Berkshire Hathaway CEO Greg Abel Is in Clean-Up Mode: 2 Brilliant Stocks He Just Sold",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/berkshire-hathaway-ceo-greg-abel-132000718.html"
+        }
+      ],
+      "板塊歸屬": "SPY"
+    },
+    {
+      "美股代號": "PG",
+      "Growth": 45.44042044755057,
+      "品質因子": 71.90794899265177,
+      "Valuation": 54.15816628141378,
+      "Momentum": 45.42946645076165,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 48.49703558450912,
+      "今日成交量倍數": "0.35x",
+      "泡沫風控評分": 0.0,
+      "ticker_news": [
+        {
+          "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+        },
+        {
+          "title": "You Do Not Need 30 Years of Federal Service to Build a Pension. Here Is the $495,000 Dividend Portfolio That Pays Like One",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/not-30-years-federal-build-121520636.html"
+        },
+        {
+          "title": "How Much Do You Really Need Invested to Replace a $40,000 Salary at 62 and Bridge the Five Years Until Social Security at 67?",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/much-really-invested-replace-40-153210297.html"
+        }
+      ],
+      "板塊歸屬": "XLP"
+    },
+    {
+      "美股代號": "MCD",
+      "Growth": 43.951328947336805,
+      "品質因子": 79.37080288717912,
+      "Valuation": 59.351610904768116,
+      "Momentum": 42.68465670792486,
+      "SmartMoney": 42.379261769279466,
+      "綜合因子得分": 48.48082640050258,
+      "今日成交量倍數": "0.43x",
+      "泡沫風控評分": 0.0,
+      "ticker_news": [
+        {
+          "title": "Walmart Flags Higher Fuel Costs Eroding Retailer’s 財報表現",
+          "link": "https://finance.yahoo.com/economy/articles/walmart-flags-higher-fuel-costs-133726853.html"
+        },
+        {
+          "title": "Why The McDonald's (MCD) Investment Story Is Shifting As Analysts Reset 成長 And Valuation",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/why-mcdonalds-mcd-investment-story-161238887.html"
+        },
+        {
+          "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+          "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+        }
+      ],
+      "板塊歸屬": "XLY"
+    }
+  ],
+  "smart_money_signals": [
+    {
+      "Ticker": "WMT",
+      "SmartMoney": true,
+      "Signal_Strength": 66.69999999999999,
+      "Volume_Ratio": "2.15x",
+      "Price_Momentum": 1.2198727546760706,
+      "Consolidation_Index": 0.8774086216846273
+    },
+    {
+      "Ticker": "INTU",
+      "SmartMoney": true,
+      "Signal_Strength": 66.69999999999999,
+      "Volume_Ratio": "5.16x",
+      "Price_Momentum": 0.9737817567796776,
+      "Consolidation_Index": 0.5977492616972787
+    }
+  ],
+  "bubble_alerts": [],
+  "sector_rankings": [
+    {
+      "板塊代號": "XLC",
+      "板塊強度得分": 89.33384718640761
+    },
+    {
+      "板塊代號": "XLE",
+      "板塊強度得分": 86.98110679419923
+    },
+    {
+      "板塊代號": "XLF",
+      "板塊強度得分": 86.40718299519817
+    },
+    {
+      "板塊代號": "XLI",
+      "板塊強度得分": 82.65977458117165
+    },
+    {
+      "板塊代號": "XLU",
+      "板塊強度得分": 79.20512967915985
+    },
+    {
+      "板塊代號": "XLP",
+      "板塊強度得分": 78.95810993183099
+    },
+    {
+      "板塊代號": "XLV",
+      "板塊強度得分": 75.52297390659896
+    },
+    {
+      "板塊代號": "XLB",
+      "板塊強度得分": 67.43653875452111
+    },
+    {
+      "板塊代號": "XLK",
+      "板塊強度得分": 52.70749812726516
+    },
+    {
+      "板塊代號": "XLY",
+      "板塊強度得分": 51.27683249225595
+    },
+    {
+      "板塊代號": "XLRE",
+      "板塊強度得分": 48.88653659847439
+    }
+  ],
+  "sector_company_flows": {
+    "SPY": [
+      {
+        "美股代號": "BRK-B",
+        "Growth": 44.1764066773991,
+        "品質因子": 88.05123783963417,
+        "Valuation": 52.71828362909724,
+        "Momentum": 44.99988278412002,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 49.354374779254705,
+        "今日成交量倍數": "0.36x",
+        "泡沫風控評分": 18.708698772051875,
+        "ticker_news": [
+          {
+            "title": "How Investors May Respond To Berkshire Hathaway (BRK.A) Portfolio Overhaul Under New CEO Greg Abel",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/investors-may-respond-berkshire-hathaway-161446447.html"
+          },
+          {
+            "title": "Aflac Raises 65.9B Yen in Japan Bond Market Amid Foreign Issuer Rush",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/aflac-raises-65-9b-yen-155000528.html"
+          },
+          {
+            "title": "Berkshire Hathaway CEO Greg Abel Is in Clean-Up Mode: 2 Brilliant Stocks He Just Sold",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/berkshire-hathaway-ceo-greg-abel-132000718.html"
+          }
+        ],
+        "板塊歸屬": "SPY"
+      }
+    ],
+    "XLC": [
+      {
+        "美股代號": "GOOGL",
+        "Growth": 58.11894586007064,
+        "品質因子": 50.92455218371423,
+        "Valuation": 43.04905653268553,
+        "Momentum": 58.04105503453005,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 53.51209223969266,
+        "今日成交量倍數": "0.41x",
+        "泡沫風控評分": 16.967594609913117,
+        "ticker_news": [
+          {
+            "title": "Fugees star Wyclef Jean: AI can't snatch this one thing away from humans",
+            "link": "https://finance.yahoo.com/markets/article/fugees-star-wyclef-jean-ai-cant-snatch-this-one-thing-away-from-humans-133134022.html"
+          },
+          {
+            "title": "Why embracing AI may be the key to career survival",
+            "link": "https://finance.yahoo.com/video/why-embracing-ai-may-be-the-key-to-career-survival-195112832.html"
+          },
+          {
+            "title": "How Google's reinvented AI search could be an extinction-level event",
+            "link": "https://finance.yahoo.com/video/how-googles-reinvented-ai-search-could-be-an-extinction-level-event-181831719.html"
+          }
+        ],
+        "板塊歸屬": "XLC"
+      },
+      {
+        "美股代號": "META",
+        "Growth": 46.98837660166817,
+        "品質因子": 43.436415166578215,
+        "Valuation": 63.0355215107436,
+        "Momentum": 43.64393357724403,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 46.71041696810238,
+        "今日成交量倍數": "0.50x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "Why embracing AI may be the key to career survival",
+            "link": "https://finance.yahoo.com/video/why-embracing-ai-may-be-the-key-to-career-survival-195112832.html"
+          },
+          {
+            "title": "Meta Platforms (META) To Lay Off Roughly 10% Of Its Global Workforce",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/meta-platforms-meta-lay-off-174549689.html"
+          }
+        ],
+        "板塊歸屬": "XLC"
+      },
+      {
+        "美股代號": "NFLX",
+        "Growth": 39.00091615412568,
+        "品質因子": 43.47181120054447,
+        "Valuation": 58.14854842315277,
+        "Momentum": 39.5607592009237,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 42.009481489642845,
+        "今日成交量倍數": "0.51x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "The Zacks Analyst Blog Highlights Johnson & Johnson, Oracle, Netflix and Espey",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/zacks-analyst-blog-highlights-johnson-152500200.html"
+          },
+          {
+            "title": "2 Brilliant Stock Split Stocks to 買入 on the Dip and Hold for 10 Years",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/2-brilliant-stock-split-stocks-145000263.html"
+          },
+          {
+            "title": "Netflix Co-Founder Reed Hastings Says Entertainment Will Be 'Least Affected' As AI Fears Rise — 'We Like Human Conflict'",
+            "link": "https://www.yahoo.com/entertainment/movies/articles/netflix-co-founder-reed-hastings-144616543.html"
+          }
+        ],
+        "板塊歸屬": "XLC"
+      }
+    ],
+    "XLF": [
+      {
+        "美股代號": "V",
+        "Growth": 46.839882059543285,
+        "品質因子": 62.03533898610964,
+        "Valuation": 49.59669309571472,
+        "Momentum": 47.90528701732538,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 48.23236705172302,
+        "今日成交量倍數": "0.35x",
+        "泡沫風控評分": 16.673871043148097,
+        "ticker_news": [
+          {
+            "title": "Is Visa (V) Best Extremely Profitable Stocks To 買入 According To Wall Street Analysts?",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/visa-v-best-extremely-profitable-174604515.html"
+          },
+          {
+            "title": "AmEx Expands Sports Commerce Strategy With Fanatics Tie-Up",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/amex-expands-sports-commerce-strategy-170200983.html"
+          },
+          {
+            "title": "How Investors May Respond To Berkshire Hathaway (BRK.A) Portfolio Overhaul Under New CEO Greg Abel",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/investors-may-respond-berkshire-hathaway-161446447.html"
+          }
+        ],
+        "板塊歸屬": "XLF"
+      },
+      {
+        "美股代號": "MA",
+        "Growth": 43.852201637547665,
+        "品質因子": 62.42998282432279,
+        "Valuation": 56.595048840813135,
+        "Momentum": 43.50998743407165,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 46.67776994544249,
+        "今日成交量倍數": "0.32x",
+        "泡沫風控評分": 3.3860963375664777,
+        "ticker_news": [
+          {
+            "title": "Mastercard (MA) Partners With JD.com To Build Out Global Payment Connectivity And Explore Agentic AI-Powered Purchasing Solutions",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/mastercard-ma-partners-jd-com-174554361.html"
+          },
+          {
+            "title": "Torque Asset Management 買入s $4 Million of Planet Fitness Amid Stock's 54% Decline in 2026",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/torque-asset-management-buys-4-170903096.html"
+          },
+          {
+            "title": "AmEx Expands Sports Commerce Strategy With Fanatics Tie-Up",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/amex-expands-sports-commerce-strategy-170200983.html"
+          }
+        ],
+        "板塊歸屬": "XLF"
+      },
+      {
+        "美股代號": "FISV",
+        "Growth": 42.62042948138572,
+        "品質因子": 26.67484092601763,
+        "Valuation": 64.48638246934819,
+        "Momentum": 40.07122921402526,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 42.53899070098911,
+        "今日成交量倍數": "0.52x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "Fiserv prunes non-core assets",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/fiserv-prunes-non-core-assets-103900049.html"
+          },
+          {
+            "title": "Fiserv Inc. (FISV): Michael Burry Is 多頭ish on This Stock",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/fiserv-inc-fisv-michael-burry-195740583.html"
+          },
+          {
+            "title": "Block’s Pivot to Profits and AI Is Turning Heads",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/block-pivot-profits-ai-turning-112000916.html"
+          }
+        ],
+        "板塊歸屬": "XLF"
+      },
+      {
+        "美股代號": "PYPL",
+        "Growth": 36.3118101573165,
+        "品質因子": 38.26666186238529,
+        "Valuation": 65.6628048986285,
+        "Momentum": 35.20981324775622,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 40.07701331635896,
+        "今日成交量倍數": "0.37x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "Factbox-IPO-bound SpaceX's board is stacked with Musk empire loyalists",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/factbox-ipo-bound-spacexs-board-110616776.html"
+          },
+          {
+            "title": "Michael Burry 買入s beaten-down, forgotten fintech stock",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/michael-burry-buys-beaten-down-023300999.html"
+          }
+        ],
+        "板塊歸屬": "XLF"
+      }
+    ],
+    "XLK": [
+      {
+        "美股代號": "INTC",
+        "Growth": 100.0,
+        "品質因子": 26.80712426346343,
+        "Valuation": 0.0,
+        "Momentum": 100.0,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 74.03760169173826,
+        "今日成交量倍數": "0.50x",
+        "泡沫風控評分": 12.21875343089851,
+        "ticker_news": [
+          {
+            "title": "2028 will be a more important 財報表現 year for Nvidia: Analyst",
+            "link": "https://finance.yahoo.com/video/2028-will-be-a-more-important-earnings-year-for-nvidia-analyst-145337681.html"
+          },
+          {
+            "title": "Retirees Face 3 Big Money Challenges in 2026 -- Here's How to Cope",
+            "link": "https://finance.yahoo.com/economy/articles/retirees-face-3-big-money-173200720.html"
+          },
+          {
+            "title": "Why Kevin Warsh Will Have to Defy Trump on Interest Rate Cuts",
+            "link": "https://finance.yahoo.com/economy/policy/articles/why-kevin-warsh-defy-trump-171921469.html"
+          }
+        ],
+        "板塊歸屬": "XLK"
+      },
+      {
+        "美股代號": "AMD",
+        "Growth": 82.24790125809841,
+        "品質因子": 28.246122263104084,
+        "Valuation": 17.656582755588136,
+        "Momentum": 83.42371389717084,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 64.70224874479321,
+        "今日成交量倍數": "0.44x",
+        "泡沫風控評分": 16.653429811191927,
+        "ticker_news": [
+          {
+            "title": "2028 will be a more important 財報表現 year for Nvidia: Analyst",
+            "link": "https://finance.yahoo.com/video/2028-will-be-a-more-important-earnings-year-for-nvidia-analyst-145337681.html"
+          },
+          {
+            "title": "AMD's $10 Billion Taiwan Push Puts AI Chip Race In Focus",
+            "link": "https://finance.yahoo.com/sectors/technology/articles/amds-10-billion-taiwan-push-173540821.html"
+          },
+          {
+            "title": "Quantum Computing and Robotics Are Arriving Faster Than Most Investors Realize and After Years of Covering This Space These 3 ETFs Stand Out",
+            "link": "https://finance.yahoo.com/news/quantum-computing-robotics-arriving-faster-171144893.html"
+          }
+        ],
+        "板塊歸屬": "XLK"
+      },
+      {
+        "美股代號": "CSCO",
+        "Growth": 65.02783436764665,
+        "品質因子": 47.030224938744084,
+        "Valuation": 29.81253250549536,
+        "Momentum": 67.24744981739983,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 56.864161211224484,
+        "今日成交量倍數": "0.47x",
+        "泡沫風控評分": 48.05010234747227,
+        "ticker_news": [
+          {
+            "title": "Cisco Systems (CSCO): The AI Winner in 2026",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/cisco-systems-csco-ai-winner-161411510.html"
+          },
+          {
+            "title": "IBM Rallies 8% While Oracle, Cisco, HPE Drift: Is the Laggard Finally Bouncing?",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/ibm-rallies-8-while-oracle-150144490.html"
+          },
+          {
+            "title": "Oracle Moves Deeper Into AI Plumbing With Expanded Beam Standards Role",
+            "link": "https://finance.yahoo.com/sectors/technology/articles/oracle-moves-deeper-ai-plumbing-140720668.html"
+          }
+        ],
+        "板塊歸屬": "XLK"
+      },
+      {
+        "美股代號": "AAPL",
+        "Growth": 50.838019737907615,
+        "品質因子": 63.07481420339215,
+        "Valuation": 45.727687860916966,
+        "Momentum": 52.001171640475455,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 50.572640277104746,
+        "今日成交量倍數": "0.40x",
+        "泡沫風控評分": 45.59484260287198,
+        "ticker_news": [
+          {
+            "title": "Nvidia 財報表現: They're accelerating into 成長, not slowing down",
+            "link": "https://finance.yahoo.com/video/nvidia-earnings-theyre-accelerating-into-growth-not-slowing-down-140708416.html"
+          },
+          {
+            "title": "Nvidia's $80 billion stock 買入back and bigger dividend may unleash an Apple-like stock move",
+            "link": "https://finance.yahoo.com/markets/stocks/article/nvidias-80-billion-stock-buyback-and-bigger-dividend-may-unleash-an-apple-like-stock-move-122248827.html"
+          },
+          {
+            "title": "SpaceX unveils $1.29B bitcoin stash in high-valuation IPO filing",
+            "link": "https://finance.yahoo.com/video/spacex-unveils-129b-bitcoin-stash-in-high-valuation-ipo-filing-164550320.html"
+          }
+        ],
+        "板塊歸屬": "XLK"
+      },
+      {
+        "美股代號": "QCOM",
+        "Growth": 56.57104251738511,
+        "品質因子": 36.354310987440805,
+        "Valuation": 10.038348851150069,
+        "Momentum": 67.66846740796547,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 50.54168910819642,
+        "今日成交量倍數": "0.62x",
+        "泡沫風控評分": 11.785620464991368,
+        "ticker_news": [
+          {
+            "title": "Should You 買入 Taiwan Semiconductor (TSM) in 2026?",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/buy-taiwan-semiconductor-tsm-2026-161713224.html"
+          },
+          {
+            "title": "Can Qualcomm's Advanced AI PC Processors Drive Long-Term 成長?",
+            "link": "https://finance.yahoo.com/sectors/technology/articles/qualcomms-advanced-ai-pc-processors-151600123.html"
+          }
+        ],
+        "板塊歸屬": "XLK"
+      }
+    ],
+    "XLP": [
+      {
+        "美股代號": "WMT",
+        "Growth": 53.97295585654002,
+        "品質因子": 57.93481294767781,
+        "Valuation": 59.80156440295538,
+        "Momentum": 49.653855613148416,
+        "SmartMoney": 99.51338391117451,
+        "綜合因子得分": 60.70329156764261,
+        "今日成交量倍數": "2.15x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "The 3 core themes in Walmart's 財報表現. One of them is AI.",
+            "link": "https://finance.yahoo.com/video/the-3-core-themes-in-walmarts-earnings-one-of-them-is-ai-170000084.html"
+          },
+          {
+            "title": "How to end your paycheck-to-paycheck hustle: a financial expert's guide",
+            "link": "https://finance.yahoo.com/video/end-paycheck-paycheck-hustle-financial-100000822.html"
+          }
+        ],
+        "板塊歸屬": "XLP"
+      },
+      {
+        "美股代號": "COST",
+        "Growth": 52.61003427483652,
+        "品質因子": 71.18481173449368,
+        "Valuation": 51.09825900273205,
+        "Momentum": 51.51420857622321,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 52.50776219310491,
+        "今日成交量倍數": "0.61x",
+        "泡沫風控評分": 30.687993374587368,
+        "ticker_news": [
+          {
+            "title": "The 3 core themes in Walmart's 財報表現. One of them is AI.",
+            "link": "https://finance.yahoo.com/video/the-3-core-themes-in-walmarts-earnings-one-of-them-is-ai-170000084.html"
+          },
+          {
+            "title": "Why Costco Stock 重挫ped Today",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/why-costco-stock-dropped-today-164414097.html"
+          },
+          {
+            "title": "$1 Trillion in Spending Has Been Defeated by an Almond",
+            "link": "https://finance.yahoo.com/sectors/technology/articles/1-trillion-spending-defeated-almond-163823093.html"
+          }
+        ],
+        "板塊歸屬": "XLP"
+      },
+      {
+        "美股代號": "PG",
+        "Growth": 45.44042044755057,
+        "品質因子": 71.90794899265177,
+        "Valuation": 54.15816628141378,
+        "Momentum": 45.42946645076165,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 48.49703558450912,
+        "今日成交量倍數": "0.35x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+          },
+          {
+            "title": "You Do Not Need 30 Years of Federal Service to Build a Pension. Here Is the $495,000 Dividend Portfolio That Pays Like One",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/not-30-years-federal-build-121520636.html"
+          },
+          {
+            "title": "How Much Do You Really Need Invested to Replace a $40,000 Salary at 62 and Bridge the Five Years Until Social Security at 67?",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/much-really-invested-replace-40-153210297.html"
+          }
+        ],
+        "板塊歸屬": "XLP"
+      }
+    ],
+    "XLV": [
+      {
+        "美股代號": "JNJ",
+        "Growth": 51.36878856372375,
+        "品質因子": 82.85819140344285,
+        "Valuation": 53.57555877507841,
+        "Momentum": 49.82794913117292,
+        "SmartMoney": 70.9891520172449,
+        "綜合因子得分": 57.29625052872159,
+        "今日成交量倍數": "0.21x",
+        "泡沫風控評分": 12.985739775244195,
+        "ticker_news": [
+          {
+            "title": "BAYRY's Kerendia Label Expansion Application Gets Priority Review",
+            "link": "https://finance.yahoo.com/sectors/healthcare/articles/bayrys-kerendia-label-expansion-application-170000821.html"
+          },
+          {
+            "title": "A Dividend Portfolio That Beats the Median Household Income in 47 of the 50 States on $1.1 Million Invested",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/dividend-portfolio-beats-median-household-155740277.html"
+          },
+          {
+            "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+          }
+        ],
+        "板塊歸屬": "XLV"
+      }
+    ],
+    "XLY": [
+      {
+        "美股代號": "EBAY",
+        "Growth": 62.85986019774447,
+        "品質因子": 41.83889127938564,
+        "Valuation": 45.618035798461925,
+        "Momentum": 60.57236938104581,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 55.38961839753592,
+        "今日成交量倍數": "0.28x",
+        "泡沫風控評分": 31.919296470435807,
+        "ticker_news": [
+          {
+            "title": "Should Ryan Cohen be taken seriously as an eBay investor?",
+            "link": "https://finance.yahoo.com/video/should-ryan-cohen-be-taken-seriously-as-an-ebay-investor-140931702.html"
+          },
+          {
+            "title": "GameStop Raises Economic Exposure to eBay",
+            "link": "https://finance.yahoo.com/markets/options/articles/gamestop-raises-economic-exposure-ebay-125602744.html"
+          },
+          {
+            "title": "1 S&P 500 Stock on Our 買入 List and 2 Facing Headwinds",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/1-p-500-stock-buy-025255384.html"
+          }
+        ],
+        "板塊歸屬": "XLY"
+      },
+      {
+        "美股代號": "AMZN",
+        "Growth": 53.44070919847192,
+        "品質因子": 49.30440752157475,
+        "Valuation": 50.85599616422613,
+        "Momentum": 52.18271236929696,
+        "SmartMoney": 70.9891520172449,
+        "綜合因子得分": 55.086374942879836,
+        "今日成交量倍數": "0.54x",
+        "泡沫風控評分": 18.457869669884133,
+        "ticker_news": [
+          {
+            "title": "Is Walmart stock beginning to crack under stretched consumers?",
+            "link": "https://finance.yahoo.com/video/is-walmart-stock-beginning-to-crack-under-stretched-consumers-142748591.html"
+          },
+          {
+            "title": "How Google's reinvented AI search could be an extinction-level event",
+            "link": "https://finance.yahoo.com/video/how-googles-reinvented-ai-search-could-be-an-extinction-level-event-181831719.html"
+          },
+          {
+            "title": "Sector Update: Tech Stocks Advance Thursday Afternoon",
+            "link": "https://finance.yahoo.com/sectors/technology/articles/sector-tech-stocks-advance-thursday-175009312.html"
+          }
+        ],
+        "板塊歸屬": "XLY"
+      },
+      {
+        "美股代號": "MCD",
+        "Growth": 43.951328947336805,
+        "品質因子": 79.37080288717912,
+        "Valuation": 59.351610904768116,
+        "Momentum": 42.68465670792486,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 48.48082640050258,
+        "今日成交量倍數": "0.43x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "Walmart Flags Higher Fuel Costs Eroding Retailer’s 財報表現",
+            "link": "https://finance.yahoo.com/economy/articles/walmart-flags-higher-fuel-costs-133726853.html"
+          },
+          {
+            "title": "Why The McDonald's (MCD) Investment Story Is Shifting As Analysts Reset 成長 And Valuation",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/why-mcdonalds-mcd-investment-story-161238887.html"
+          },
+          {
+            "title": "If Treasury Yields Jump Above 4.75%, Here’s What Happens to SDY",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/treasury-yields-jump-above-4-154543895.html"
+          }
+        ],
+        "板塊歸屬": "XLY"
+      },
+      {
+        "美股代號": "HD",
+        "Growth": 43.91115182248702,
+        "品質因子": 58.55303532694165,
+        "Valuation": 61.34047649917845,
+        "Momentum": 42.00987284236572,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 46.41316938759017,
+        "今日成交量倍數": "0.41x",
+        "泡沫風控評分": 0.0,
+        "ticker_news": [
+          {
+            "title": "Mortgage rates climb higher as House passes home affordability bill",
+            "link": "https://finance.yahoo.com/video/mortgage-rates-climb-higher-as-house-passes-home-affordability-bill-200931876.html"
+          },
+          {
+            "title": "Walmart Flags Higher Fuel Costs Eroding Retailer’s 財報表現",
+            "link": "https://finance.yahoo.com/economy/articles/walmart-flags-higher-fuel-costs-133726853.html"
+          }
+        ],
+        "板塊歸屬": "XLY"
+      },
+      {
+        "美股代號": "TSLA",
+        "Growth": 47.362813747233595,
+        "品質因子": 38.167325326788855,
+        "Valuation": 48.119216928628674,
+        "Momentum": 48.75665923724375,
+        "SmartMoney": 42.379261769279466,
+        "綜合因子得分": 46.11983379913805,
+        "今日成交量倍數": "0.58x",
+        "泡沫風控評分": 10.653772019706857,
+        "ticker_news": [
+          {
+            "title": "SpaceX IPO plans include unusually large voting share for Elon Musk",
+            "link": "https://finance.yahoo.com/video/spacex-ipo-plans-include-unusually-large-voting-share-for-elon-musk-141744682.html"
+          },
+          {
+            "title": "Elon Musk's SpaceX Files for What Could be Largest IPO in History",
+            "link": "https://finance.yahoo.com/markets/stocks/articles/elon-musk-apos-spacex-files-171338008.html"
+          }
+        ],
+        "板塊歸屬": "XLY"
+      }
+    ]
+  },
+  "news_feed": [
+    {
+      "title": "Fed’s Long-Term Inflation Forecast Hits 19-Year High",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/economy/policy/articles/fed-long-term-inflation-forecast-162419907.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "Worried About a Recession? Here’s Why Selling When Economists Call It is Already Too Late",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/economy/articles/worried-recession-why-selling-economists-140158573.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "Three Dividend ETFs Outside the S&P 500 That Are Beating It and Paying Up to 3.4 Percent",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/three-dividend-etfs-outside-p-133555447.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "Exchange-Traded Funds, Equity Futures Lower Pre-Bell Thursday Amid Uncertainty Surrounding US-Iran Talks",
+      "publisher": "MT Newswires",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/exchange-traded-funds-equity-futures-131835522.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "MGK Holds 46 Percent in Just Five Stocks, And That Concentration Is Driving Most of Its Recent Gains",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/mgk-holds-46-percent-just-131512630.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "The “Don’t Fight Trump” Trade Is Working: S&P 500 Ignores Everything and Keeps Surging",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/don-t-fight-trump-trade-130809956.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "This Boring International ETF Might Be One Of The Smartest Value Bets Right Now",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/markets/world-indices/articles/boring-international-etf-might-one-125303252.html",
+      "related_ticker": "市場總覽"
+    },
+    {
+      "title": "Warren Buffett Just Dropped His Loudest Warning Yet: Berkshire’s Cash Position Hits All-Time High",
+      "publisher": "24/7 Wall St.",
+      "link": "https://finance.yahoo.com/markets/stocks/articles/warren-buffett-just-dropped-loudest-121704379.html",
+      "related_ticker": "市場總覽"
+    }
+  ],
+  "ticker_tape_data": [
+    {
+      "symbol": "NVDA",
+      "current_price": 219.97,
+      "change_pct": -1.56620575468743,
+      "pre_market": null,
+      "post_market": null
+    },
+    {
+      "symbol": "AAPL",
+      "current_price": 304.595,
+      "change_pct": 0.7758478081058817,
+      "pre_market": null,
+      "post_market": null
+    },
+    {
+      "symbol": "TSLA",
+      "current_price": 421.07,
+      "change_pct": 0.913099745961751,
+      "pre_market": null,
+      "post_market": null
+    },
+    {
+      "symbol": "AMD",
+      "current_price": 444.445,
+      "change_pct": -0.7004334420662208,
+      "pre_market": null,
+      "post_market": null
+    },
+    {
+      "symbol": "SPY",
+      "current_price": 742.72,
+      "change_pct": 0.19831365935919423,
+      "pre_market": null,
+      "post_market": null
+    },
+    {
+      "symbol": "XLE",
+      "current_price": 59.065,
+      "change_pct": -1.2290969899665543,
+      "pre_market": null,
+      "post_market": null
+    }
+  ]
+}

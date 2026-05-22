@@ -1,0 +1,548 @@
+name: Daily Market Analysis Pipeline
+
+# 觸發條件
+on:
+  schedule:
+    # 工作日 16:00 UTC (美東時間 12:00 PM, 北京時間 00:00)
+    # 或者盤後 20:00 UTC (美東時間 16:00 PM, 北京時間 04:00)
+    - cron: '0 20 * * 1-5'  # 美股盤後
+  
+  # 手動觸發
+  workflow_dispatch:
+    inputs:
+      regime_force:
+        description: 'Force market regime (bull/bear/volatile)'
+        required: false
+        default: ''
+
+# 環境設定
+env:
+  PYTHON_VERSION: "3.10"
+  TZ: "America/New_York"
+
+jobs:
+  market-analysis:
+    name: 🚀 Complete Market Analysis Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    permissions:
+      contents: write
+      actions: read
+    
+    steps:
+      # 1. 檢出代碼
+      - name: ✓ Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: main
+
+      # 2. 設置 Python 環境
+      - name: 🐍 Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      # 3. 安裝依賴
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          echo "✓ All dependencies installed successfully"
+
+      # 4. 準備數據目錄與模型
+      - name: 📁 Prepare Data & Model Directories
+        run: |
+          mkdir -p ./data_cache ./models ./reports
+          ls -la ./models 2>/dev/null || echo "Models directory created"
+          echo "✓ Directories prepared"
+
+      # 5. 拉取 SPY 歷史數據並訓練/更新 HMM 模型
+      - name: 🎯 Step 1: Train Market Regime HMM Model
+        run: |
+          python -c "
+          import logging
+          logging.basicConfig(level=logging.INFO)
+          from market_structure.regime_hmm import MarketRegimeHMM
+          import os
+          
+          print('🔄 Training Market Regime HMM...')
+          hmm = MarketRegimeHMM()
+          
+          # 檢查預訓練模型
+          model_path = './models/market_regime_hmm.pkl'
+          if os.path.exists(model_path):
+              hmm.load_model(model_path)
+              if not hmm.should_retrain(days_threshold=7):
+                  print('✓ Using cached HMM model (trained within 7 days)')
+              else:
+                  print('⚠️ Model outdated, retraining...')
+                  hmm.train(period='5y')
+                  hmm.save_model(model_path)
+          else:
+              print('⚠️ No cached model, training new HMM...')
+              hmm.train(period='5y')
+              hmm.save_model(model_path)
+          
+          # 獲取當前 Regime
+          regime, name, confidence = hmm.predict_current_regime()
+          print(f'✓ Current Regime: {name} (Confidence: {confidence:.1%})')
+          
+          # 保存 Regime 到環境變數文件
+          with open('.regime_env', 'w') as f:
+              f.write(f'MARKET_REGIME={regime}\n')
+              f.write(f'MARKET_REGIME_NAME={name}\n')
+              f.write(f'MARKET_CONFIDENCE={confidence}\n')
+          "
+
+      # 6. 獲取當前市場狀態
+      - name: 📊 Step 2: Fetch US Market Data (Indices & Sectors)
+        run: |
+          python -c "
+          import logging
+          logging.basicConfig(level=logging.INFO)
+          from data_provider.us_market import USMarketDataProvider
+          
+          print('📥 Fetching US market universe data...')
+          provider = USMarketDataProvider(look_back_days=252)
+          
+          # 獲取完整宇宙 (3 indices + 11 sector ETFs)
+          universe = provider.fetch_universe_data()
+          
+          print(f'✓ Universe Data Summary:')
+          for symbol, df in universe.items():
+              if df is not None:
+                  print(f'  {symbol}: {len(df)} records, Last Close: ${df[\"close\"].iloc[-1]:.2f}')
+          
+          # 保存宇宙數據
+          import pickle
+          with open('./data_cache/universe_data.pkl', 'wb') as f:
+              pickle.dump(universe, f)
+          print('✓ Universe data cached')
+          "
+
+      # 7. 計算 Alpha 因子評分
+      - name: 🧮 Step 3: Calculate Dynamic Alpha Factor Scores
+        env:
+          MARKET_REGIME: ${{ env.MARKET_REGIME || '0' }}
+        run: |
+          python -c "
+          import logging
+          import os
+          logging.basicConfig(level=logging.INFO)
+          from alpha_engine.dynamic_factor import DynamicAlphaScorer
+          import pandas as pd
+          import pickle
+          
+          print('🧮 Calculating Alpha Factor Scores...')
+          
+          # 加載 Universe 數據
+          try:
+              with open('./data_cache/universe_data.pkl', 'rb') as f:
+                  universe = pickle.load(f)
+          except:
+              print('⚠️ Universe data not found, using default universe')
+              universe = {}
+          
+          # 初始化評分器
+          scorer = DynamicAlphaScorer()
+          
+          # 獲取市場狀態
+          regime = int(os.getenv('MARKET_REGIME', '0'))
+          
+          # 評分前 30 支股票
+          sp500_sample = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JNJ', 'V',
+                          'WMT', 'MA', 'PG', 'COST', 'MCD', 'HD', 'NKE', 'ADBE', 'NFLX', 'CRM',
+                          'INTC', 'AMD', 'QCOM', 'CSCO', 'PYPL', 'IBM', 'ORCL', 'INTU', 'FISV', 'EBAY']
+          
+          print(f'Scoring {len(sp500_sample)} stocks with regime={regime}...')
+          df_scores = scorer.score_portfolio(sp500_sample, regime=regime, top_n=15)
+          
+          print('✓ Alpha Scores Calculated:')
+          print(df_scores.head(10))
+          
+          # 保存結果
+          df_scores.to_csv('./reports/alpha_scores.csv', index=False)
+          print('✓ Scores saved to alpha_scores.csv')
+          "
+
+      # 8. 檢測機構吸籌信號
+      - name: 💰 Step 4: Detect Smart Money Volume Structure
+        run: |
+          python -c "
+          import logging
+          logging.basicConfig(level=logging.INFO)
+          from smart_money.volume_structure import SmartMoneyDetector
+          import pandas as pd
+          
+          print('💰 Detecting Smart Money Signals...')
+          
+          detector = SmartMoneyDetector()
+          
+          test_portfolio = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JNJ', 'V']
+          
+          df_signals = detector.detect_portfolio_smart_money(test_portfolio)
+          
+          print('✓ Smart Money Detection Results:')
+          print(df_signals[df_signals['SmartMoney']])
+          
+          # 保存結果
+          df_signals.to_csv('./reports/smart_money_signals.csv', index=False)
+          print('✓ Signals saved to smart_money_signals.csv')
+          "
+
+      # 9. 檢測泡沫股
+      - name: 🚨 Step 5: Detect Bubble Stocks
+        run: |
+          python -c "
+          import logging
+          logging.basicConfig(level=logging.INFO)
+          from bubble_detection.engine import BubbleDetector
+          import pandas as pd
+          
+          print('🚨 Detecting Bubble Stocks...')
+          
+          detector = BubbleDetector()
+          
+          test_portfolio = ['TSLA', 'NFLX', 'AMD', 'NVDA', 'SOFI', 'UPST', 'COIN', 'RIOT', 'MSTR', 'ROKU']
+          
+          df_bubbles = detector.detect_portfolio_bubbles(test_portfolio)
+          
+          print('✓ Bubble Detection Results:')
+          print(df_bubbles[df_bubbles['IsBubble']])
+          
+          # 保存結果
+          df_bubbles.to_csv('./reports/bubble_alerts.csv', index=False)
+          print('✓ Bubble alerts saved to bubble_alerts.csv')
+          "
+
+      # 10. 生成綜合分析報告
+      - name: 📈 Step 6: Generate Comprehensive Analysis Report
+        run: |
+          python -c "
+          import logging
+          import os
+          from datetime import datetime
+          import pandas as pd
+          logging.basicConfig(level=logging.INFO)
+          
+          print('📈 Generating Analysis Report...')
+          
+          # 讀取各部分結果
+          try:
+              df_alpha = pd.read_csv('./reports/alpha_scores.csv')
+              df_smart = pd.read_csv('./reports/smart_money_signals.csv')
+              df_bubble = pd.read_csv('./reports/bubble_alerts.csv')
+          except:
+              print('⚠️ Some report files missing')
+              df_alpha = pd.DataFrame()
+              df_smart = pd.DataFrame()
+              df_bubble = pd.DataFrame()
+          
+          # 生成 HTML 報告
+          regime_name = os.getenv('MARKET_REGIME_NAME', 'Unknown')
+          timestamp = datetime.now().isoformat()
+          
+          html_report = f'''
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Market Analysis Report - {timestamp}</title>
+              <style>
+                  body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                  h1 {{ color: #333; }}
+                  .section {{ margin: 20px 0; padding: 10px; border-left: 4px solid #3498db; }}
+                  table {{ border-collapse: collapse; width: 100%; }}
+                  th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                  th {{ background-color: #3498db; color: white; }}
+              </style>
+          </head>
+          <body>
+              <h1>📊 Market Structure Analysis Report</h1>
+              <p><strong>Generated:</strong> {timestamp}</p>
+              <p><strong>Market Regime:</strong> {regime_name}</p>
+              
+              <div class=\"section\">
+                  <h2>🎯 Top Alpha Picks</h2>
+                  {df_alpha.head(10).to_html(index=False) if not df_alpha.empty else '<p>No data</p>'}
+              </div>
+              
+              <div class=\"section\">
+                  <h2>💰 Smart Money Signals</h2>
+                  {df_smart[df_smart['SmartMoney']].to_html(index=False) if not df_smart.empty else '<p>No signals detected</p>'}
+              </div>
+              
+              <div class=\"section\">
+                  <h2>🚨 Bubble Alerts</h2>
+                  {df_bubble[df_bubble['IsBubble']].to_html(index=False) if not df_bubble.empty else '<p>No bubbles detected</p>'}
+              </div>
+          </body>
+          </html>
+          '''
+          
+          with open('./reports/daily_report.html', 'w') as f:
+              f.write(html_report)
+          
+          print('✓ HTML report generated: daily_report.html')
+          "
+
+      # 11. 推送通知
+      - name: 📢 Step 7: Send Notifications
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import logging
+          import os
+          import pandas as pd
+          from datetime import datetime
+          logging.basicConfig(level=logging.INFO)
+          
+          from notification.manager import NotificationManager
+          
+          print('📢 Sending Analysis Notifications...')
+          
+          manager = NotificationManager()
+          
+          # 讀取分析結果
+          try:
+              df_alpha = pd.read_csv('./reports/alpha_scores.csv')
+              df_smart = pd.read_csv('./reports/smart_money_signals.csv')
+              df_bubble = pd.read_csv('./reports/bubble_alerts.csv')
+          except:
+              df_alpha = pd.DataFrame()
+              df_smart = pd.DataFrame()
+              df_bubble = pd.DataFrame()
+          
+          regime_name = os.getenv('MARKET_REGIME_NAME', 'Unknown')
+          
+          # 構建消息
+          message = f'''
+          <b>📊 Daily Market Analysis Report</b>
+          <i>{datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}</i>
+          
+          <b>Market Regime:</b> {regime_name}
+          
+          <b>🎯 Top 5 Alpha Picks:</b>
+          '''
+          
+          if not df_alpha.empty:
+              for idx, row in df_alpha.head(5).iterrows():
+                  message += f\"\\n  • {row['Ticker']}: {row['Alpha_Score']:.1f}\"
+          
+          message += f\"\"\"
+          
+          <b>💰 Smart Money Signals:</b> {df_smart['SmartMoney'].sum()} detected
+          
+          <b>🚨 Bubble Alerts:</b> {df_bubble['IsBubble'].sum()} risks
+          
+          View full report: <a href=\"https://github.com/\">Link</a>
+          \"\"\"
+          
+          # 發送到所有配置的渠道
+          result = manager.send(
+              message,
+              title='Daily Market Analysis',
+              channels=['discord', 'telegram'],
+              async_mode=False
+          )
+          
+          print(f'✓ Notifications sent: {result}')
+          "
+
+      # 12. 提交報告到 Git (可選)
+      - name: 📤 Step 8: Commit Reports to Repository
+        if: always()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A ./reports/
+          git diff --quiet && git diff --staged --quiet || git commit -m "📊 Daily market analysis report - $(date +'%Y-%m-%d')"
+          git push || echo "⚠️  Push skipped (no changes or permission issue)"
+
+      # 13. 上傳工件
+      - name: 📁 Upload Report Artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: market-analysis-reports
+          path: ./reports/
+          retention-days: 30
+
+      # 14. 執行狀態
+      - name: ✅ Pipeline Status
+        if: always()
+        run: |
+          echo "✅ Market Analysis Pipeline Completed"
+          echo "📊 Reports saved to ./reports/"
+          ls -lh ./reports/
+          ANSPIRE_API_KEYS: ${{ secrets.ANSPIRE_API_KEYS }}
+          AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          
+          # 通知渠道 (可選)
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          
+          # 自選股配置
+          STOCK_LIST: ${{ secrets.STOCK_LIST }}
+        run: |
+          python -c "
+          import os
+          import sys
+          
+          # 檢查必要配置
+          models = ['ANSPIRE_API_KEYS', 'AIHUBMIX_KEY', 'OPENAI_API_KEY']
+          has_model = any(os.getenv(m) for m in models)
+          
+          if not has_model:
+              print('❌ Error: At least one AI model API key required')
+              sys.exit(1)
+          
+          print('✓ Configuration validated')
+          print(f'  - AI Model: {\"configured\" if has_model else \"missing\"}')
+          print(f'  - Stocks: {os.getenv(\"STOCK_LIST\", \"not set\")}')
+          "
+
+      # 5. 驗證是否為交易日
+      - name: Check Trading Day
+        id: trading_check
+        run: |
+          python -c "
+          from datetime import datetime, timedelta
+          import json
+          
+          # A股交易日檢查 (簡化版)
+          today = datetime.now()
+          weekday = today.weekday()
+          
+          # 週一到週五視為交易日 (簡化, 實際應檢查節假日)
+          is_trading_day = weekday < 5
+          
+          print(f'Today: {today.strftime(\"%Y-%m-%d %A\")}')
+          print(f'Is trading day: {is_trading_day}')
+          print(f'::set-output name=is_trading_day::{is_trading_day}')
+          "
+
+      # 6. 執行市場分析
+      - name: Run Market Analysis
+        if: steps.trading_check.outputs.is_trading_day == 'true'
+        env:
+          # 傳遞所有必要的環境變量
+          ANSPIRE_API_KEYS: ${{ secrets.ANSPIRE_API_KEYS }}
+          AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STOCK_LIST: ${{ secrets.STOCK_LIST }}
+        run: |
+          echo "📊 Starting market analysis..."
+          python market_structure/analysis_scheduler.py \
+            --stocks "$STOCK_LIST" \
+            --mode daily \
+            --notify
+          echo "✓ Market analysis completed"
+
+      # 7. 發送分析結果通知
+      - name: Send Notifications
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+        run: |
+          python -c "
+          from notification.manager import NotificationManager
+          from datetime import datetime
+          
+          manager = NotificationManager()
+          
+          status = '✅ Success' if True else '❌ Failed'
+          message = f'''
+          📊 Daily Market Analysis Report
+          Time: {datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}
+          Status: {status}
+          
+          Analysis completed and results are ready.
+          '''
+          
+          manager.broadcast(
+              message,
+              title='Market Analysis Update'
+          )
+          "
+
+      # 8. 上傳日誌 (可選)
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: analysis-logs
+          path: logs/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # 9. 報告執行狀態
+      - name: Report Job Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Job completed successfully"
+            exit 0
+          else
+            echo "❌ Job failed with status: ${{ job.status }}"
+            exit 1
+          fi
+
+
+# 備用工作流: 美股盤後分析 (美股交易日 16:00 UTC = 00:00 北京時間+1)
+market-review:
+  name: US Market Review
+  runs-on: ubuntu-latest
+  if: github.event_name == 'workflow_dispatch'
+  
+  steps:
+    - uses: actions/checkout@v4
+    
+    - uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+    
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run US Market Review
+      env:
+        STOCK_LIST: ${{ secrets.STOCK_LIST }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        python market_structure/analysis_scheduler.py \
+          --market us \
+          --mode review \
+          --notify
+
+    - name: Send Results
+      env:
+        DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      run: |
+        python -c "
+        from notification.manager import NotificationManager
+        manager = NotificationManager()
+        manager.broadcast('🇺🇸 US Market Review completed')
+        "

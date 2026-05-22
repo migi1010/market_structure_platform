@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: miji-quant-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app -k uvicorn.workers.UvicornWorker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ALLOWED_ORIGINS
+        value: https://frontend-kuan-s-projects1.vercel.app
+      - key: CORS_WHITELIST
+        value: https://frontend-kuan-s-projects1.vercel.app
+      - key: REQUEST_TIMEOUT_SECONDS
+        value: 90
+  - type: cron
+    name: miji-quant-cache-refresh
+    runtime: python
+    rootDir: backend
+    schedule: "5 21 * * 1-5"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m quant_engine.data_pipeline.scheduler
+    plan: free

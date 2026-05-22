@@ -1,0 +1,17 @@
+# Frontend build & dependencies
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Python caching & environments
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
+env/
+.pytest_cache/
+
+# Data backups (optional, but prevents massive files)
+# reports/*.json
