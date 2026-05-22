@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Institutional-grade Market Structure Platform Theme ─── */
+:root {
+  --theme-bg: #0B0E14;
+  --theme-panel: #151922;
+  --theme-panel-secondary: #1B2130;
+  --theme-border: #2A2F3D;
+  --theme-text: #F8FAFC;
+  --theme-text-secondary: #94A3B8;
+  --theme-cyan: #06B6D4;
+  --theme-green: #10B981;
+  --theme-red: #EF4444;
+  --theme-yellow: #F59E0B;
+  --theme-purple: #8B5CF6;
+}
+
+html {
+  background-color: var(--theme-bg) !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--theme-bg) !important;
+  color: var(--theme-text);
+  min-height: 100vh;
+}
+
+#__next {
+  background-color: var(--theme-bg) !important;
+  min-height: 100vh;
+}
+
+/* Marquee animation */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-45%); }
+}
+.tape-scroll {
+  animation: marquee 50s linear infinite;
+}
+.tape-scroll:hover {
+  animation-play-state: paused;
+}
