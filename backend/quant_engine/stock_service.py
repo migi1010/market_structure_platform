@@ -3,10 +3,26 @@
 from typing import Any, Dict, List
 
 from quant_engine.bubble_engine import analyze_bubble
-from quant_engine.data_pipeline import get_news, get_quote, safe_float
+from quant_engine.data_pipeline import get_history, get_news, get_quote, safe_float
 from quant_engine.earnings_quality_engine import analyze_earnings_quality
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.smart_money_engine import analyze_smart_money
+
+COMMON_METADATA: dict[str, dict[str, str]] = {
+    "AAPL": {"company_name": "Apple Inc.", "sector": "Technology"},
+    "NVDA": {"company_name": "NVIDIA Corporation", "sector": "Technology"},
+    "MSFT": {"company_name": "Microsoft Corporation", "sector": "Technology"},
+    "AMZN": {"company_name": "Amazon.com Inc.", "sector": "Consumer Discretionary"},
+    "META": {"company_name": "Meta Platforms Inc.", "sector": "Communication Services"},
+    "TSLA": {"company_name": "Tesla Inc.", "sector": "Consumer Discretionary"},
+    "PLTR": {"company_name": "Palantir Technologies Inc.", "sector": "Technology"},
+    "AMD": {"company_name": "Advanced Micro Devices Inc.", "sector": "Technology"},
+    "AVGO": {"company_name": "Broadcom Inc.", "sector": "Technology"},
+    "NOW": {"company_name": "ServiceNow Inc.", "sector": "Technology"},
+    "SPY": {"company_name": "SPDR S&P 500 ETF Trust", "sector": "ETF"},
+    "QQQ": {"company_name": "Invesco QQQ Trust", "sector": "ETF"},
+    "SMH": {"company_name": "VanEck Semiconductor ETF", "sector": "ETF"},
+}
 
 
 def _nullable_float(value: Any) -> float | None:
@@ -14,7 +30,179 @@ def _nullable_float(value: Any) -> float | None:
     return parsed if parsed > 0 else None
 
 
-def _analyst_consensus(symbol: str, price: float) -> Dict[str, Any]:
+def _number_or_none(value: Any) -> float | None:
+    parsed = safe_float(value)
+    return parsed if parsed != 0.0 else None
+
+
+def _safe_engine(name: str, task: Any, fallback: Any) -> Any:
+    try:
+        result = task()
+        return result if result is not None else fallback
+    except Exception:
+        return fallback
+
+
+def _history_snapshot(symbol: str) -> Dict[str, float | None]:
+    try:
+        history = get_history(symbol, "10d")
+        if history is None or history.empty or "Close" not in history:
+            history = get_history(symbol, "3mo")
+        if history is None or history.empty or "Close" not in history:
+            return {"price": None, "change": None, "change_percent": None}
+        close = history["Close"].dropna().astype(float)
+        if close.empty:
+            return {"price": None, "change": None, "change_percent": None}
+        latest = float(close.iloc[-1])
+        previous = float(close.iloc[-2]) if len(close) > 1 else latest
+        change = latest - previous
+        change_percent = (change / previous * 100.0) if previous > 0 else None
+        return {"price": latest, "change": change, "change_percent": change_percent}
+    except Exception:
+        return {"price": None, "change": None, "change_percent": None}
+
+
+def _fallback_bubble(symbol: str, quote: Dict[str, Any], price: float | None) -> Dict[str, Any]:
+    return {
+        "ticker": symbol,
+        "company_name": _company_name(symbol, quote),
+        "price": price,
+        "sector": _sector(symbol, quote),
+        "bubble_analysis_data": {
+            "revenue": 0.0,
+            "net_income": 0.0,
+            "gross_margin": 0.0,
+            "operating_cash_flow": 0.0,
+            "free_cash_flow": 0.0,
+            "total_assets": 0.0,
+            "total_liabilities": 0.0,
+            "debt_ratio": 0.0,
+            "pe_ratio": safe_float(quote.get("trailingPE") or quote.get("forwardPE")),
+            "ps_ratio": safe_float(quote.get("priceToSalesTrailing12Months")),
+            "bubble_index": 50.0,
+            "classification": "Calibrating",
+            "valuation_heat": 0.0,
+            "revenue_divergence": 0.0,
+            "fcf_quality": 0.0,
+            "dilution_risk": 0.0,
+            "distribution_signal": 0.0,
+            "retail_speculation": 0.0,
+            "accrual_ratio": 0.0,
+            "net_income_quality": 0.0,
+            "ai_summary": "Bubble intelligence is calibrating with cached institutional fundamentals.",
+        },
+    }
+
+
+def _company_name(symbol: str, quote: Dict[str, Any]) -> str:
+    raw = quote.get("longName") or quote.get("shortName") or quote.get("displayName")
+    if isinstance(raw, str) and raw.strip() and raw.strip().upper() not in {"UNKNOWN", "N/A"}:
+        return raw.strip()
+    return COMMON_METADATA.get(symbol, {}).get("company_name", symbol)
+
+
+def _sector(symbol: str, quote: Dict[str, Any]) -> str:
+    raw = quote.get("sector") or quote.get("industry")
+    if isinstance(raw, str) and raw.strip() and raw.strip().upper() not in {"UNKNOWN", "N/A"}:
+        return raw.strip()
+    return COMMON_METADATA.get(symbol, {}).get("sector", "US Equity")
+
+
+def _resolve_price_snapshot(symbol: str, quote: Dict[str, Any], bubble: Dict[str, Any]) -> Dict[str, Any]:
+    history = _history_snapshot(symbol)
+    price = (
+        _nullable_float(quote.get("currentPrice"))
+        or _nullable_float(quote.get("regularMarketPrice"))
+        or _nullable_float(quote.get("regularMarketPreviousClose"))
+        or _nullable_float(quote.get("previousClose"))
+        or _nullable_float(bubble.get("price"))
+        or history["price"]
+    )
+    change = _number_or_none(quote.get("regularMarketChange")) or history["change"]
+    change_percent = _number_or_none(quote.get("regularMarketChangePercent")) or history["change_percent"]
+    previous = _nullable_float(quote.get("previousClose") or quote.get("regularMarketPreviousClose"))
+    if change_percent is None and price is not None and previous is not None and previous > 0:
+        change_percent = (price - previous) / previous * 100.0
+    if change is None and price is not None and previous is not None:
+        change = price - previous
+    return {
+        "price": round(float(price), 4) if price is not None and price > 0 else None,
+        "change": round(float(change), 4) if change is not None else None,
+        "change_percent": round(float(change_percent), 4) if change_percent is not None else None,
+        "source": "live_or_cached" if price is not None else "unavailable",
+    }
+
+
+def _fallback_smart_money() -> Dict[str, Any]:
+    return {
+        "smart_money_score": 50.0,
+        "accumulation_detection": 50.0,
+        "abnormal_volume": 50.0,
+        "institutional_footprint": 50.0,
+        "price_volume_divergence": 0.0,
+        "stealth_accumulation": 50.0,
+        "dark_pool_style_logic": 50.0,
+        "summary": "Smart money model is calibrating with cached volume structure.",
+    }
+
+
+def _fallback_earnings() -> Dict[str, Any]:
+    return {
+        "earnings_quality_score": 50.0,
+        "fcf_conversion": 0.0,
+        "accrual_ratio": 0.0,
+        "sbc_dilution": 0.0,
+        "debt_quality": 50.0,
+        "capex_distortion": 0.0,
+        "amortization_distortion": 0.0,
+        "operating_cashflow_quality": 50.0,
+        "adjusted_net_income": None,
+        "summary": "Earnings quality engine is calibrating with cached fundamentals.",
+    }
+
+
+def fallback_stock_payload(symbol: str) -> Dict[str, Any]:
+    ticker = symbol.strip().upper()
+    metadata = COMMON_METADATA.get(ticker, {"company_name": ticker, "sector": "US Equity"})
+    analyst = {
+        "available": False,
+        "high": None,
+        "average": None,
+        "low": None,
+        "average_target": None,
+        "implied_upside": None,
+        "buy": None,
+        "hold": None,
+        "sell": None,
+    }
+    return {
+        "ticker": ticker,
+        "company_name": metadata["company_name"],
+        "price": None,
+        "change": None,
+        "change_percent": None,
+        "market_cap": None,
+        "sector": metadata["sector"],
+        "quote_status": "unavailable",
+        "bubble_analysis_data": _fallback_bubble(ticker, {}, None)["bubble_analysis_data"],
+        "earnings_quality": _fallback_earnings(),
+        "smart_money": _fallback_smart_money(),
+        "analyst_targets": analyst,
+        "analyst_consensus": analyst,
+        "hmm_prediction": {
+            "available": False,
+            "predicted_trend": "Calibrating model...",
+            "bull_probability": None,
+            "bear_probability": None,
+            "regime_state": "Awaiting regime confirmation...",
+            "confidence": None,
+            "message": "Using fallback market regime...",
+        },
+        "news": [],
+    }
+
+
+def _analyst_consensus(symbol: str, price: float | None) -> Dict[str, Any]:
     info = get_quote(symbol)
     buy = hold = sell = 0
     opinions = int(safe_float(info.get("numberOfAnalystOpinions")))
@@ -39,7 +227,7 @@ def _analyst_consensus(symbol: str, price: float) -> Dict[str, Any]:
     has_target = average is not None or high is not None or low is not None
     has_ratings = opinions > 0 and (buy + hold + sell) > 0
     available = has_target or has_ratings
-    implied = round(((average - price) / price * 100.0), 2) if price > 0 and average is not None else None
+    implied = round(((average - price) / price * 100.0), 2) if price is not None and price > 0 and average is not None else None
 
     return {
         "available": available,
@@ -82,33 +270,44 @@ def _news(symbol: str) -> List[Dict[str, Any]]:
 def analyze_stock(symbol: str) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
     quote = get_quote(ticker)
-    bubble = analyze_bubble(ticker)
-    earnings = analyze_earnings_quality(ticker)
-    smart = analyze_smart_money(ticker)
-    regime = detect_market_regime()
-    price = safe_float(quote.get("currentPrice") or quote.get("regularMarketPrice") or bubble.get("price"))
+    provisional = _resolve_price_snapshot(ticker, quote, {})
+    bubble = _safe_engine("bubble", lambda: analyze_bubble(ticker), _fallback_bubble(ticker, quote, provisional["price"]))
+    snapshot = _resolve_price_snapshot(ticker, quote, bubble)
+    earnings = _safe_engine("earnings_quality", lambda: analyze_earnings_quality(ticker), _fallback_earnings())
+    smart = _safe_engine("smart_money", lambda: analyze_smart_money(ticker), _fallback_smart_money())
+    regime = _safe_engine("market_regime", detect_market_regime, {"name": "Calibrating", "confidence": 50.0, "fallback": True})
+    price = snapshot["price"]
     analyst = _analyst_consensus(ticker, price)
-    trend = "Bullish" if smart["smart_money_score"] >= 60 and regime["name"] in {"Bull Market", "Momentum Mania"} else "Bearish" if regime["name"] in {"Bear Market", "Risk-off"} else "Neutral"
-    bull_probability = min(0.92, max(0.08, 0.5 + (smart["smart_money_score"] - 50.0) / 150.0))
+    smart_score = safe_float(smart.get("smart_money_score"), 50.0)
+    regime_name = str(regime.get("name") or "Calibrating")
+    regime_confidence = safe_float(regime.get("confidence"), 50.0)
+    trend = "Bullish" if smart_score >= 60 and regime_name in {"Bull Market", "Momentum Mania"} else "Bearish" if regime_name in {"Bear Market", "Risk-off"} else "Calibrating model..."
+    model_available = trend in {"Bullish", "Bearish"} and not bool(regime.get("fallback"))
+    bull_probability = min(0.92, max(0.08, 0.5 + (smart_score - 50.0) / 150.0)) if model_available else None
+    bubble_data = bubble.get("bubble_analysis_data") or _fallback_bubble(ticker, quote, price)["bubble_analysis_data"]
 
     return {
         "ticker": ticker,
-        "company_name": quote.get("longName") or quote.get("shortName") or ticker,
+        "company_name": _company_name(ticker, quote),
         "price": price,
-        "change_percent": safe_float(quote.get("regularMarketChangePercent")),
-        "market_cap": safe_float(quote.get("marketCap")),
-        "sector": quote.get("sector") or "Unknown",
-        "bubble_analysis_data": bubble["bubble_analysis_data"],
+        "change": snapshot["change"],
+        "change_percent": snapshot["change_percent"],
+        "market_cap": _number_or_none(quote.get("marketCap")),
+        "sector": _sector(ticker, quote),
+        "quote_status": snapshot["source"],
+        "bubble_analysis_data": bubble_data,
         "earnings_quality": earnings,
         "smart_money": smart,
         "analyst_targets": analyst,
         "analyst_consensus": analyst,
         "hmm_prediction": {
+            "available": model_available,
             "predicted_trend": trend,
-            "bull_probability": round(bull_probability, 4),
-            "bear_probability": round(1.0 - bull_probability, 4),
-            "regime_state": regime["name"],
-            "confidence": round(min(0.95, max(0.45, regime["confidence"] / 100.0)), 3),
+            "bull_probability": round(bull_probability, 4) if bull_probability is not None else None,
+            "bear_probability": round(1.0 - bull_probability, 4) if bull_probability is not None else None,
+            "regime_state": regime_name if model_available else "Awaiting regime confirmation...",
+            "confidence": round(min(0.95, max(0.45, regime_confidence / 100.0)), 3) if model_available else None,
+            "message": "Using fallback market regime..." if bool(regime.get("fallback")) else "Awaiting regime confirmation...",
         },
         "news": _news(ticker),
     }

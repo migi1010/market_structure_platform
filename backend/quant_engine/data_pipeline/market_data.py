@@ -131,13 +131,19 @@ def get_quote(symbol: str) -> Dict[str, Any]:
     cached = _get_cached(cache_key)
     if isinstance(cached, dict):
         return cached
+    stale = _get_cached(cache_key, allow_expired=True)
     with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, dict):
             return cached
+        stale = _get_cached(cache_key, allow_expired=True)
         quote = fetch_quote_with_fallbacks(normalized) or {}
-        _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
-        return quote
+        if quote:
+            _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
+            return quote
+        if isinstance(stale, dict) and stale:
+            return stale
+        return {"symbol": normalized, "shortName": normalized, "longName": normalized, "sector": "US Equity"}
 
 
 def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
@@ -146,15 +152,26 @@ def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
     cached = _get_cached(cache_key)
     if isinstance(cached, pd.DataFrame):
         return cached
+    stale = _get_cached(cache_key, allow_expired=True)
     with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, pd.DataFrame):
             return cached
-        df = fetch_yfinance_history(normalized, period)
+        stale = _get_cached(cache_key, allow_expired=True)
+        try:
+            df = fetch_yfinance_history(normalized, period)
+        except Exception:
+            if isinstance(stale, pd.DataFrame):
+                return stale
+            return pd.DataFrame()
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
         result = df.dropna()
-        _set_cached(cache_key, result, get_settings().history_ttl_seconds, "pickle")
+        if not result.empty:
+            _set_cached(cache_key, result, get_settings().history_ttl_seconds, "pickle")
+            return result
+        if isinstance(stale, pd.DataFrame):
+            return stale
         return result
 
 

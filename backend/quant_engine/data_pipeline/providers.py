@@ -41,7 +41,52 @@ def _request_json(url: str, params: Dict[str, Any] | None = None) -> Any:
 
 
 def fetch_yfinance_quote(symbol: str) -> Dict[str, Any]:
-    return yf.Ticker(symbol).info or {}
+    ticker = yf.Ticker(symbol)
+    info: Dict[str, Any] = {}
+    try:
+        info.update(ticker.info or {})
+    except Exception as exc:
+        logger.warning("yfinance info failed symbol=%s error=%s", symbol, exc)
+    try:
+        fast_info = ticker.fast_info
+        if fast_info:
+            def fast_value(*names: str) -> Any:
+                for name in names:
+                    value = getattr(fast_info, name, None)
+                    if value is not None:
+                        return value
+                    getter = getattr(fast_info, "get", None)
+                    if callable(getter):
+                        value = getter(name)
+                        if value is not None:
+                            return value
+                return None
+
+            info.setdefault("currentPrice", safe_float(fast_value("last_price", "lastPrice")))
+            info.setdefault("regularMarketPrice", safe_float(fast_value("last_price", "lastPrice")))
+            info.setdefault("previousClose", safe_float(fast_value("previous_close", "previousClose")))
+            info.setdefault("marketCap", safe_float(fast_value("market_cap", "marketCap")))
+            info.setdefault("currency", fast_value("currency"))
+    except Exception as exc:
+        logger.warning("yfinance fast_info failed symbol=%s error=%s", symbol, exc)
+    if not info:
+        try:
+            history = ticker.history(period="5d", auto_adjust=True)
+            if history is not None and not history.empty and "Close" in history:
+                close = history["Close"].dropna()
+                if not close.empty:
+                    latest = float(close.iloc[-1])
+                    previous = float(close.iloc[-2]) if len(close) > 1 else latest
+                    info.update({
+                        "currentPrice": latest,
+                        "regularMarketPrice": latest,
+                        "previousClose": previous,
+                        "regularMarketChange": latest - previous,
+                        "regularMarketChangePercent": ((latest - previous) / previous * 100.0) if previous > 0 else 0.0,
+                    })
+        except Exception as exc:
+            logger.warning("yfinance quote history failed symbol=%s error=%s", symbol, exc)
+    return info
 
 
 def fetch_fmp_quote(symbol: str) -> Dict[str, Any]:

@@ -20,7 +20,7 @@ from quant_engine.qlib_engine import run_alpha_ranking
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.smart_money_engine import analyze_smart_money
-from quant_engine.stock_service import analyze_stock
+from quant_engine.stock_service import analyze_stock, fallback_stock_payload
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -285,7 +285,7 @@ async def unhandled_exception_handler(_, exc: Exception):
 @app.get("/stock/{ticker}")
 def get_stock(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: analyze_stock(symbol)))
+    return _guard(lambda: _fast_cached_response(_cache_key("stock_v2", symbol), settings.quote_ttl_seconds, lambda: analyze_stock(symbol), lambda: fallback_stock_payload(symbol)))
 
 
 @app.get("/alpha/top")
