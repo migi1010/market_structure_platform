@@ -80,6 +80,12 @@ class AlphaRow:
     company_name: str
     sector: str
     alpha_score: float
+    base_alpha_score: float
+    universe_context_score: float
+    universe_adjustment: float
+    universe_percentile: float
+    rank_in_universe: int
+    universe: str
     quality: float
     growth: float
     smart_money: float
@@ -276,7 +282,7 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
     raw_alpha, factor_completeness = partial_weighted_score(factor_values, neutral=46.0)
     bubble_penalty = max(0.0, metrics["bubble_risk"] - 60.0) * (0.32 if regime == "Momentum Mania" else 0.22)
     liquidity_weight = min(1.0, max(0.72, metrics["market_cap"] / 25_000_000_000.0)) if metrics["market_cap"] > 0 else 0.82
-    alpha_score = bounded_score(raw_alpha * liquidity_weight + 50.0 * (1.0 - liquidity_weight) - bubble_penalty)
+    base_alpha_score = bounded_score(raw_alpha * liquidity_weight + 50.0 * (1.0 - liquidity_weight) - bubble_penalty)
     confidence_score = bounded_score(metrics.get("data_completeness", 0.0) * 0.55 + factor_completeness * 0.30 + min(metrics["market_cap"], 50_000_000_000.0) / 50_000_000_000.0 * 15.0)
     bullish_factors = []
     risk_factors = []
@@ -292,15 +298,15 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         risk_factors.append("Bubble risk is elevated and reduces alpha conviction.")
     if confidence_score < 55:
         risk_factors.append("Partial data coverage lowers model confidence.")
-    if alpha_score > 88 and metrics["bubble_risk"] < 40 and smart_money > 70 and earnings_quality > 70 and sector_alignment > 55:
+    if base_alpha_score > 88 and metrics["bubble_risk"] < 40 and smart_money > 70 and earnings_quality > 70 and sector_alignment > 55:
         action = "Strong Buy"
-    elif alpha_score > 78 and metrics["bubble_risk"] < 55:
+    elif base_alpha_score > 78 and metrics["bubble_risk"] < 55:
         action = "Accumulation"
     elif metrics["bubble_risk"] >= 70:
         action = "Bubble Risk"
-    elif alpha_score < 45:
+    elif base_alpha_score < 45:
         action = "Avoid"
-    elif alpha_score > 62:
+    elif base_alpha_score > 62:
         action = "Watchlist"
     else:
         action = "Hold"
@@ -309,7 +315,13 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         ticker=metrics["ticker"],
         company_name=metrics["company_name"],
         sector=metrics["sector"],
-        alpha_score=alpha_score,
+        alpha_score=base_alpha_score,
+        base_alpha_score=base_alpha_score,
+        universe_context_score=base_alpha_score,
+        universe_adjustment=0.0,
+        universe_percentile=0.0,
+        rank_in_universe=0,
+        universe="",
         quality=quality,
         growth=growth,
         smart_money=smart_money,
@@ -329,6 +341,94 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         bullish_factors=bullish_factors,
         risk_factors=risk_factors,
     )
+
+
+def _percentile_rank(values: List[float], value: float) -> float:
+    if not values:
+        return 50.0
+    if len(values) == 1:
+        return 100.0
+    lower_or_equal = sum(1 for item in values if item <= value)
+    return bounded_score((lower_or_equal - 1) / (len(values) - 1) * 100.0)
+
+
+def _apply_universe_context(rows: List[AlphaRow], universe_key: str) -> None:
+    if not rows:
+        return
+
+    base_scores = [row.base_alpha_score for row in rows]
+    market_structures = [row.market_structure for row in rows]
+    smart_money_values = [row.smart_money for row in rows]
+    theme_values = [row.theme_alignment or 0.0 for row in rows]
+    sectors: Dict[str, List[float]] = {}
+    for row in rows:
+        sectors.setdefault(row.sector, []).append(row.base_alpha_score)
+
+    theme_universes = {
+        "ai_infrastructure",
+        "semiconductor",
+        "memory_cycle",
+        "glass_substrate",
+        "electric_grid",
+        "cable_copper",
+        "nuclear_energy",
+        "energy",
+        "defense",
+        "industrial_automation",
+        "shipping",
+        "commodities",
+        "traditional_industry",
+        "healthcare_innovation",
+        "financial_rotation",
+    }
+    is_theme_universe = universe_key in theme_universes
+
+    for row in rows:
+        base_percentile = _percentile_rank(base_scores, row.base_alpha_score)
+        relative_strength_percentile = _percentile_rank(market_structures, row.market_structure)
+        smart_money_percentile = _percentile_rank(smart_money_values, row.smart_money)
+        theme_percentile = _percentile_rank(theme_values, row.theme_alignment or 0.0)
+        sector_percentile = _percentile_rank(sectors.get(row.sector, []), row.base_alpha_score)
+        liquidity_score = bounded_score(42.0 + min(max(row.confidence_score, 0.0), 100.0) * 0.58)
+        theme_weight = 0.16 if is_theme_universe else 0.08
+        universe_context = bounded_score(
+            base_percentile * 0.34
+            + relative_strength_percentile * 0.22
+            + sector_percentile * 0.14
+            + smart_money_percentile * 0.14
+            + theme_percentile * theme_weight
+            + liquidity_score * (0.16 - min(theme_weight - 0.08, 0.08))
+        )
+        blended = bounded_score(row.base_alpha_score * 0.85 + universe_context * 0.15)
+        lower = max(0.0, row.base_alpha_score - 8.0)
+        upper = min(100.0, row.base_alpha_score + 8.0)
+        final_score = min(upper, max(lower, blended))
+        row.universe = universe_key.upper()
+        row.universe_context_score = round(universe_context, 2)
+        row.universe_adjustment = round(final_score - row.base_alpha_score, 2)
+        row.alpha_score = round(final_score, 2)
+
+    rows.sort(key=lambda item: item.alpha_score, reverse=True)
+    total = len(rows)
+    for index, row in enumerate(rows, start=1):
+        row.rank_in_universe = index
+        if total == 1:
+            row.universe_percentile = 100.0
+        else:
+            row.universe_percentile = round((total - index) / (total - 1) * 100.0, 2)
+
+        if row.alpha_score > 88 and row.bubble_risk < 40 and row.smart_money > 70 and row.earnings_quality > 70 and row.sector_alignment > 55:
+            row.suggested_action = "Strong Buy"
+        elif row.alpha_score > 78 and row.bubble_risk < 55:
+            row.suggested_action = "Accumulation"
+        elif row.bubble_risk >= 70:
+            row.suggested_action = "Bubble Risk"
+        elif row.alpha_score < 45:
+            row.suggested_action = "Avoid"
+        elif row.alpha_score > 62:
+            row.suggested_action = "Watchlist"
+        else:
+            row.suggested_action = "Hold"
 
 
 def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = None) -> Dict[str, Any]:
@@ -356,7 +456,7 @@ def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = No
         except Exception:
             continue
 
-    rows.sort(key=lambda item: item.alpha_score, reverse=True)
+    _apply_universe_context(rows, universe_key)
     top = rows[:10]
     recommendations = [
         row for row in rows

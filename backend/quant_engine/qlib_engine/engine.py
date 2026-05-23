@@ -17,7 +17,7 @@ except Exception:
 
 
 def run_alpha_ranking(universe: str = "sp500") -> Dict[str, Any]:
-    normalized = "nasdaq100" if universe.lower() == "nasdaq100" else "sp500"
+    normalized = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     result = run_alpha_pipeline(normalized, qlib_available=QLIB_AVAILABLE)
     result["qlib_engine"] = {
         **(result.get("qlib_engine") or {}),

@@ -22,6 +22,7 @@ from quant_engine.regime_engine import detect_market_regime
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.smart_money_engine import analyze_smart_money
 from quant_engine.stock_service import analyze_stock, fallback_stock_payload
+from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -328,7 +329,8 @@ def _fallback_theme_top() -> dict:
 
 
 def _fallback_alpha(universe: str) -> dict:
-    symbols = ["NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "V"]
+    universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
+    symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
     rows = []
     for index, symbol in enumerate(symbols):
         quote: dict[str, Any] = {}
@@ -359,6 +361,12 @@ def _fallback_alpha(universe: str) -> dict:
             "company_name": str(quote.get("longName") or quote.get("shortName") or symbol),
             "sector": str(quote.get("sector") or "Partial Data"),
             "alpha_score": alpha_score,
+            "base_alpha_score": alpha_score,
+            "universe_context_score": alpha_score,
+            "universe_adjustment": 0.0,
+            "universe_percentile": 0.0,
+            "rank_in_universe": index + 1,
+            "universe": universe.upper(),
             "quality": quality,
             "growth": momentum,
             "smart_money": smart_money,
@@ -379,6 +387,11 @@ def _fallback_alpha(universe: str) -> dict:
             "risk_factors": ["Live alpha engine delayed; confidence reduced until background cache completes."],
         }
         rows.append(row)
+    rows.sort(key=lambda item: safe_float(item.get("alpha_score")), reverse=True)
+    total = len(rows)
+    for rank, row in enumerate(rows, start=1):
+        row["rank_in_universe"] = rank
+        row["universe_percentile"] = round((total - rank) / max(total - 1, 1) * 100.0, 2) if total > 1 else 100.0
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "universe": universe.upper(),
@@ -428,7 +441,7 @@ def get_provider_debug(ticker: str) -> dict:
 @app.get("/alpha/top")
 def get_alpha_top(universe: str = Query("sp500")) -> dict:
     normalized = universe.strip().lower()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("alpha_v3", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("alpha_v4", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
 
 
 @app.get("/backtest/top-alpha")
