@@ -2,7 +2,7 @@
 
 import logging
 import time
-from concurrent.futures import TimeoutError, ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError, ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Any, Callable
 
@@ -35,7 +35,7 @@ configure_logging()
 logger = logging.getLogger("miji.api")
 settings = get_settings()
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
-HEAVY_ENDPOINT_TIMEOUT_SECONDS = 15.0
+CACHE_MISS_WAIT_SECONDS = 4.0
 
 
 @asynccontextmanager
@@ -118,9 +118,19 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
         _schedule_cache_refresh(cache_key, ttl_seconds, task)
         return stale
     future = BACKGROUND_EXECUTOR.submit(task)
+
+    def store_result_when_ready(completed: Any) -> None:
+        try:
+            result = completed.result()
+            set_cached_value(cache_key, result, ttl_seconds, "json")
+            logger.info("deferred cache fill complete key=%s", cache_key)
+        except Exception as exc:
+            logger.warning("deferred cache fill failed key=%s error=%s", cache_key, exc)
+
+    future.add_done_callback(store_result_when_ready)
     started = time.perf_counter()
     try:
-        result = future.result(timeout=HEAVY_ENDPOINT_TIMEOUT_SECONDS)
+        result = future.result(timeout=CACHE_MISS_WAIT_SECONDS)
         set_cached_value(cache_key, result, ttl_seconds, "json")
         logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
         return result
@@ -383,6 +393,7 @@ def get_earnings_quality(ticker: str) -> dict:
 
 @app.api_route("/warmup", methods=["GET", "POST"])
 def warmup() -> dict:
+    started = time.perf_counter()
     tasks: dict[str, Callable[[], Any]] = {
         "sector_rotation": get_sector_rotation,
         "market_regime": get_market_regime,
@@ -396,25 +407,23 @@ def warmup() -> dict:
     for symbol in ["NVDA", "AAPL", "MSFT", "SPY", "QQQ", "SMH"]:
         tasks[f"stock_{symbol}"] = lambda symbol=symbol: get_stock(symbol)
 
-    warmed: list[str] = []
-    failed: dict[str, str] = {}
-    started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        future_map = {executor.submit(task): name for name, task in tasks.items()}
-        for future in as_completed(future_map):
-            name = future_map[future]
+    scheduled: list[str] = []
+    for name, task in tasks.items():
+        scheduled.append(name)
+
+        def run(name: str = name, task: Callable[[], Any] = task) -> None:
             try:
-                future.result()
-                warmed.append(name)
+                task()
+                logger.info("warmup task complete name=%s", name)
             except Exception as exc:
-                logger.warning("warmup failed task=%s error=%s", name, exc)
-                failed[name] = str(exc)
+                logger.warning("warmup task failed name=%s error=%s", name, exc)
+
+        BACKGROUND_EXECUTOR.submit(run)
 
     return {
-        "status": "ok",
-        "warmed": sorted(warmed),
-        "failed": failed,
-        "duration_seconds": round(time.perf_counter() - started, 2),
+        "status": "scheduled",
+        "tasks": sorted(scheduled),
+        "duration_seconds": round(time.perf_counter() - started, 3),
     }
 
 
