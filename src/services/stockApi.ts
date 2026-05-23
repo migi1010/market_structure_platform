@@ -6,8 +6,10 @@ import type {
   SectorRotation,
   StockAnalysis,
   ThemeCapitalFlowResponse,
+  ThemeDetailResponse,
   ThemeNarrativeResponse,
   ThemeRotationResponse,
+  ThemeStocksResponse,
   ThemeSupplyChainResponse,
   ThemeTopResponse,
 } from "@/types/stock";
@@ -292,8 +294,85 @@ const FALLBACK_SECTORS: SectorRotation[] = [
   companies: [],
 }));
 
+const FALLBACK_THEME_STOCKS: Record<string, Array<{ ticker: string; company_name: string; role: string }>> = {
+  "AI INFRASTRUCTURE": [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "GPU / AI accelerator" },
+    { ticker: "AVGO", company_name: "Broadcom Inc.", role: "Networking silicon" },
+    { ticker: "VRT", company_name: "Vertiv Holdings Co.", role: "Power and cooling" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "GPU / AI accelerator" },
+    { ticker: "ETN", company_name: "Eaton Corporation plc", role: "Electrical infrastructure" },
+    { ticker: "ANET", company_name: "Arista Networks Inc.", role: "AI networking" },
+  ],
+  SEMICONDUCTOR: [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "AI accelerator" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "GPU / CPU" },
+    { ticker: "TSM", company_name: "Taiwan Semiconductor Manufacturing Company", role: "Foundry" },
+    { ticker: "ASML", company_name: "ASML Holding N.V.", role: "Lithography" },
+    { ticker: "AMAT", company_name: "Applied Materials Inc.", role: "Equipment" },
+    { ticker: "LRCX", company_name: "Lam Research Corporation", role: "Equipment" },
+    { ticker: "MU", company_name: "Micron Technology Inc.", role: "Memory" },
+  ],
+  HBM: [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "HBM demand driver" },
+    { ticker: "MU", company_name: "Micron Technology Inc.", role: "HBM memory" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "AI accelerator" },
+    { ticker: "TSM", company_name: "Taiwan Semiconductor Manufacturing Company", role: "Advanced packaging" },
+    { ticker: "AVGO", company_name: "Broadcom Inc.", role: "Custom silicon" },
+  ],
+  "GLASS SUBSTRATE": [
+    { ticker: "INTC", company_name: "Intel Corporation", role: "Advanced substrate" },
+    { ticker: "AMAT", company_name: "Applied Materials Inc.", role: "Equipment" },
+    { ticker: "TSM", company_name: "Taiwan Semiconductor Manufacturing Company", role: "Foundry" },
+    { ticker: "AMKR", company_name: "Amkor Technology Inc.", role: "Packaging" },
+  ],
+  CYBERSECURITY: [
+    { ticker: "CRWD", company_name: "CrowdStrike Holdings Inc.", role: "Endpoint security" },
+    { ticker: "PANW", company_name: "Palo Alto Networks Inc.", role: "Platform security" },
+    { ticker: "ZS", company_name: "Zscaler Inc.", role: "Zero trust" },
+    { ticker: "FTNT", company_name: "Fortinet Inc.", role: "Network security" },
+    { ticker: "OKTA", company_name: "Okta Inc.", role: "Identity" },
+  ],
+  "ELECTRIC GRID": [
+    { ticker: "ETN", company_name: "Eaton Corporation plc", role: "Electrical equipment" },
+    { ticker: "GE", company_name: "GE Aerospace", role: "Power infrastructure" },
+    { ticker: "PWR", company_name: "Quanta Services Inc.", role: "Grid services" },
+    { ticker: "HUBB", company_name: "Hubbell Incorporated", role: "Grid equipment" },
+    { ticker: "FCX", company_name: "Freeport-McMoRan Inc.", role: "Copper supply" },
+  ],
+  "NUCLEAR ENERGY": [
+    { ticker: "CEG", company_name: "Constellation Energy Corporation", role: "Nuclear generation" },
+    { ticker: "VST", company_name: "Vistra Corp.", role: "Power generation" },
+    { ticker: "BWXT", company_name: "BWX Technologies Inc.", role: "Nuclear equipment" },
+    { ticker: "CCJ", company_name: "Cameco Corporation", role: "Uranium" },
+    { ticker: "SMR", company_name: "NuScale Power Corporation", role: "Small modular reactor" },
+  ],
+  SHIPPING: [
+    { ticker: "ZIM", company_name: "ZIM Integrated Shipping Services", role: "Container shipping" },
+    { ticker: "MATX", company_name: "Matson Inc.", role: "Ocean transport" },
+    { ticker: "DAC", company_name: "Danaos Corporation", role: "Containership leasing" },
+    { ticker: "SBLK", company_name: "Star Bulk Carriers Corp.", role: "Dry bulk" },
+    { ticker: "GNK", company_name: "Genco Shipping & Trading Limited", role: "Dry bulk" },
+  ],
+};
+
+function fallbackThemeStocks(theme: string): ThemeStocksResponse {
+  const key = theme.trim().toUpperCase().replace(/-/g, " ");
+  const related = FALLBACK_THEME_STOCKS[key] ?? [];
+  return {
+    generated_at: new Date().toISOString(),
+    theme,
+    theme_id: key.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    related_stocks: related,
+    top_alpha_stocks: related.slice(0, 5),
+    summary: related.length > 0 ? `${theme} related stocks include ${related.slice(0, 3).map((item) => item.ticker).join(", ")}.` : "Theme stock universe calibrating.",
+    fallback: true,
+  };
+}
+
 function fallbackThemeTop(): ThemeTopResponse {
   const themes = ["AI Infrastructure", "Semiconductor", "Electric Grid", "Nuclear Energy", "Energy", "Defense", "Healthcare", "Financials"].map((theme) => ({
+    related_stocks: fallbackThemeStocks(theme).related_stocks,
+    top_alpha_stocks: fallbackThemeStocks(theme).top_alpha_stocks,
     theme,
     category: "Calibrating",
     description: "Live theme signal is calibrating.",
@@ -470,6 +549,34 @@ export async function fetchThemeNarrative(): Promise<ThemeNarrativeResponse> {
     generated_at: new Date().toISOString(),
     narratives: [],
   });
+}
+
+export async function fetchThemeStocks(theme: string): Promise<ThemeStocksResponse> {
+  const fallback = fallbackThemeStocks(theme);
+  return fetchCachedJson<ThemeStocksResponse>(
+    `miji:theme-stocks:${theme}`,
+    `${API_URL}/theme/${encodeURIComponent(theme)}/stocks`,
+    fallback,
+  );
+}
+
+export async function fetchThemeDetail(theme: string): Promise<ThemeDetailResponse> {
+  const stocks = fallbackThemeStocks(theme);
+  return fetchCachedJson<ThemeDetailResponse>(
+    `miji:theme-detail:${theme}`,
+    `${API_URL}/theme/${encodeURIComponent(theme)}/detail`,
+    {
+      ...stocks,
+      theme_score: null,
+      confidence: "Partial Data",
+      status: "Calibrating",
+      supply_chain: {},
+      capital_flow: null,
+      bubble_risk: null,
+      explainability: [],
+      risks: [],
+    },
+  );
 }
 
 export const defaultWatchlist = ["NVDA", "AAPL", "MSFT", "TSLA", "META", "PLTR", "SPY", "QQQ"];

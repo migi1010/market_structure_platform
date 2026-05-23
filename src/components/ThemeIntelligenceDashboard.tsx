@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   fetchThemeCapitalFlow,
+  fetchThemeDetail,
   fetchThemeEmerging,
   fetchThemeRotation,
   fetchThemeSupplyChain,
@@ -24,6 +25,8 @@ import {
 import type {
   EmergingThemeResponse,
   ThemeCapitalFlowResponse,
+  ThemeDetailResponse,
+  ThemeLeader,
   ThemeRotationResponse,
   ThemeScore,
   ThemeSupplyChainResponse,
@@ -40,6 +43,47 @@ const warmupMessages = [
   "Loading Macro Regime...",
   "Theme Intelligence Online",
 ];
+
+const THEME_STOCK_FALLBACKS: Record<string, ThemeLeader[]> = {
+  "AI INFRASTRUCTURE": [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "GPU / AI accelerator" },
+    { ticker: "AVGO", company_name: "Broadcom Inc.", role: "Networking silicon" },
+    { ticker: "VRT", company_name: "Vertiv Holdings Co.", role: "Power and cooling" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "GPU / AI accelerator" },
+  ],
+  SEMICONDUCTOR: [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "AI accelerator" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "GPU / CPU" },
+    { ticker: "TSM", company_name: "Taiwan Semiconductor Manufacturing Company", role: "Foundry" },
+    { ticker: "ASML", company_name: "ASML Holding N.V.", role: "Lithography" },
+  ],
+  HBM: [
+    { ticker: "NVDA", company_name: "NVIDIA Corporation", role: "HBM demand driver" },
+    { ticker: "MU", company_name: "Micron Technology Inc.", role: "HBM memory" },
+    { ticker: "AMD", company_name: "Advanced Micro Devices Inc.", role: "AI accelerator" },
+    { ticker: "TSM", company_name: "Taiwan Semiconductor Manufacturing Company", role: "Advanced packaging" },
+  ],
+  CYBERSECURITY: [
+    { ticker: "CRWD", company_name: "CrowdStrike Holdings Inc.", role: "Endpoint security" },
+    { ticker: "PANW", company_name: "Palo Alto Networks Inc.", role: "Platform security" },
+    { ticker: "ZS", company_name: "Zscaler Inc.", role: "Zero trust" },
+  ],
+  "ELECTRIC GRID": [
+    { ticker: "ETN", company_name: "Eaton Corporation plc", role: "Electrical equipment" },
+    { ticker: "PWR", company_name: "Quanta Services Inc.", role: "Grid services" },
+    { ticker: "HUBB", company_name: "Hubbell Incorporated", role: "Grid equipment" },
+  ],
+  "NUCLEAR ENERGY": [
+    { ticker: "CEG", company_name: "Constellation Energy Corporation", role: "Nuclear generation" },
+    { ticker: "VST", company_name: "Vistra Corp.", role: "Power generation" },
+    { ticker: "BWXT", company_name: "BWX Technologies Inc.", role: "Nuclear equipment" },
+  ],
+  SHIPPING: [
+    { ticker: "ZIM", company_name: "ZIM Integrated Shipping Services", role: "Container shipping" },
+    { ticker: "MATX", company_name: "Matson Inc.", role: "Ocean transport" },
+    { ticker: "DAC", company_name: "Danaos Corporation", role: "Containership leasing" },
+  ],
+};
 
 function scoreTone(score: number | undefined): string {
   const value = score ?? 0;
@@ -58,6 +102,18 @@ function barTone(score: number | undefined): string {
 function pct(value: number | undefined): string {
   const numeric = value ?? 0;
   return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(1)}%`;
+}
+
+function relatedStocksForTheme(theme: ThemeScore): ThemeLeader[] {
+  const explicit = theme.related_stocks ?? theme.top_alpha_stocks ?? [];
+  if (explicit.length > 0) return explicit;
+  const fallback = THEME_STOCK_FALLBACKS[(theme.theme ?? "").toUpperCase()] ?? [];
+  if (fallback.length > 0) return fallback;
+  return theme.leaders ?? [];
+}
+
+function formatOptionalScore(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(0) : "--";
 }
 
 function ShimmerBlock({ className = "" }: { className?: string }) {
@@ -142,11 +198,27 @@ function WarmupExperience({ progress, messageIndex }: { progress: number; messag
   );
 }
 
-function ThemeRow({ theme, onTickerSelect }: { theme: ThemeScore; onTickerSelect: (ticker: string) => void }) {
+function ThemeRow({
+  theme,
+  onTickerSelect,
+  onThemeSelect,
+}: {
+  theme: ThemeScore;
+  onTickerSelect: (ticker: string) => void;
+  onThemeSelect: (theme: string) => void;
+}) {
   const score = theme?.theme_strength_score ?? 0;
-  const leaders = theme?.leaders ?? [];
+  const leaders = relatedStocksForTheme(theme);
   return (
-    <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onThemeSelect(theme.theme)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onThemeSelect(theme.theme);
+      }}
+      className="w-full cursor-pointer rounded-2xl border border-[#2B313C] bg-[#111318] p-4 text-left transition-colors hover:border-amber-400/20 hover:bg-[#151922]"
+    >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-wide text-[#E6EDF3]">{theme?.theme ?? "Theme"}</p>
@@ -172,17 +244,23 @@ function ThemeRow({ theme, onTickerSelect }: { theme: ThemeScore; onTickerSelect
         </div>
       </div>
       {leaders.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#6E7681]">Top Related</p>
+          <div className="flex flex-wrap gap-2">
           {leaders.slice(0, 4).map((leader) => (
             <button
               key={`${theme.theme}-${leader.ticker}`}
               type="button"
-              onClick={() => onTickerSelect(leader.ticker)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onTickerSelect(leader.ticker);
+              }}
               className="rounded-lg border border-[#2B313C] bg-[#0A0C10] px-2 py-1 font-mono text-[11px] font-semibold text-[#C9D1D9]"
             >
               {leader.ticker}
             </button>
           ))}
+          </div>
         </div>
       )}
     </div>
@@ -202,6 +280,129 @@ function MetricCard({ label, value, sublabel, icon }: { label: string; value: st
   );
 }
 
+function ThemeDetailPanel({
+  detail,
+  loading,
+  onTickerSelect,
+}: {
+  detail: ThemeDetailResponse | null;
+  loading: boolean;
+  onTickerSelect: (ticker: string) => void;
+}) {
+  if (loading) {
+    return (
+      <section className={`${cardClass} mb-4`}>
+        <div className="grid gap-4 md:grid-cols-3">
+          <ShimmerBlock className="h-24" />
+          <ShimmerBlock className="h-24" />
+          <ShimmerBlock className="h-24" />
+        </div>
+        <ShimmerBlock className="mt-4 h-28" />
+      </section>
+    );
+  }
+  if (!detail) return null;
+  const related = detail.related_stocks ?? [];
+  const alpha = detail.top_alpha_stocks ?? related;
+  const chainRoles = Object.entries(detail.supply_chain ?? {}).slice(0, 4);
+  return (
+    <section className={`${cardClass} mb-4`}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Theme Detail / 主題拆解</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-wide text-[#E6EDF3]">{detail.theme}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#9BA7B4]">{detail.description ?? detail.summary}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-right text-xs">
+          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
+            <p className="text-[#6E7681]">Score</p>
+            <p className={`font-mono text-lg font-semibold ${scoreTone(detail.theme_score ?? undefined)}`}>{formatOptionalScore(detail.theme_score)}</p>
+          </div>
+          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
+            <p className="text-[#6E7681]">Confidence</p>
+            <p className="font-semibold text-[#C9D1D9]">{detail.confidence ?? "Partial"}</p>
+          </div>
+          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
+            <p className="text-[#6E7681]">Status</p>
+            <p className="font-semibold text-amber-200">{detail.status ?? "Watchlist"}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Related Stocks / 受惠股</p>
+          <div className="grid gap-2 md:grid-cols-2">
+            {related.slice(0, 8).map((stock) => (
+              <button
+                key={`${detail.theme}-${stock.ticker}`}
+                type="button"
+                onClick={() => onTickerSelect(stock.ticker)}
+                className="rounded-xl border border-[#2B313C] bg-[#111318] p-3 text-left"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{stock.ticker}</p>
+                    <p className="truncate text-xs text-[#9BA7B4]">{stock.company_name ?? stock.role ?? "Theme exposure"}</p>
+                    <p className="mt-1 text-[11px] text-[#6E7681]">{stock.role ?? "related stock"}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-semibold text-[#C9D1D9]">{typeof stock.price === "number" ? `$${stock.price.toFixed(2)}` : "--"}</p>
+                    <p className={(stock.change_percent ?? 0) >= 0 ? "font-mono text-[11px] text-emerald-300" : "font-mono text-[11px] text-rose-300"}>
+                      {typeof stock.change_percent === "number" ? pct(stock.change_percent) : "price pending"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
+                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">Alpha {formatOptionalScore(stock.alpha_score)}</span>
+                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">SM {formatOptionalScore(stock.smart_money)}</span>
+                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">Bubble {formatOptionalScore(stock.bubble_risk)}</span>
+                </div>
+              </button>
+            ))}
+            {related.length === 0 && <EmptyState detail="Theme stock universe is calibrating. Related tickers will appear once backend mapping returns." />}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Top Alpha Stocks</p>
+            <div className="flex flex-wrap gap-2">
+              {alpha.slice(0, 6).map((stock) => (
+                <button key={`alpha-${stock.ticker}`} type="button" onClick={() => onTickerSelect(stock.ticker)} className="rounded-lg border border-[#2B313C] bg-[#0A0C10] px-2.5 py-1.5 font-mono text-xs font-semibold text-[#C9D1D9]">
+                  {stock.ticker} {formatOptionalScore(stock.alpha_score)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Supply Chain Map</p>
+            <div className="space-y-2">
+              {chainRoles.map(([role, stocks]) => (
+                <div key={role} className="flex items-start justify-between gap-3 text-xs">
+                  <span className="capitalize text-[#9BA7B4]">{role.replaceAll("_", " ")}</span>
+                  <span className="max-w-[70%] text-right font-mono text-[#C9D1D9]">{stocks.slice(0, 4).map((stock) => stock.ticker).join(" · ")}</span>
+                </div>
+              ))}
+              {chainRoles.length === 0 && <p className="text-sm text-[#9BA7B4]">Supply chain map calibrating...</p>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
+              <p className="text-[11px] text-[#6E7681]">Capital Flow</p>
+              <p className={`font-mono text-lg font-semibold ${scoreTone(detail.capital_flow ?? undefined)}`}>{formatOptionalScore(detail.capital_flow)}</p>
+            </div>
+            <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
+              <p className="text-[11px] text-[#6E7681]">Bubble Risk</p>
+              <p className={`font-mono text-lg font-semibold ${scoreTone(100 - (detail.bubble_risk ?? 50))}`}>{formatOptionalScore(detail.bubble_risk)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticker: string) => void }) {
   const [top, setTop] = useState<ThemeTopResponse | null>(null);
   const [emerging, setEmerging] = useState<EmergingThemeResponse | null>(null);
@@ -212,6 +413,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   const [error, setError] = useState("");
   const [bootIndex, setBootIndex] = useState(0);
   const [bootProgress, setBootProgress] = useState(8);
+  const [selectedTheme, setSelectedTheme] = useState<string>("");
+  const [themeDetail, setThemeDetail] = useState<ThemeDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +465,22 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
     return () => window.clearInterval(interval);
   }, [loading]);
 
+  useEffect(() => {
+    if (!selectedTheme) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    fetchThemeDetail(selectedTheme)
+      .then((value) => {
+        if (!cancelled) setThemeDetail(value);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTheme]);
+
   const topThemes = top?.themes ?? [];
   const emergingThemes = emerging?.emerging_themes ?? [];
   const flowItems = flow?.capital_flow ?? topThemes;
@@ -305,6 +525,8 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
         <MetricCard label="Inflation" value={regime?.inflation_regime ?? "Warming"} sublabel={`Inflation score ${(regime?.inflation_score ?? 0).toFixed(0)} from oil, gold and yields`} icon={<RadioTower size={17} />} />
       </div>
 
+      <ThemeDetailPanel detail={themeDetail} loading={detailLoading} onTickerSelect={onTickerSelect} />
+
       <div className="miji-card-grid grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <section className={cardClass}>
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -316,7 +538,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {topThemes.slice(0, 8).map((theme) => (
-              <ThemeRow key={theme.theme} theme={theme} onTickerSelect={onTickerSelect} />
+              <ThemeRow key={theme.theme} theme={theme} onTickerSelect={onTickerSelect} onThemeSelect={setSelectedTheme} />
             ))}
             {loading && topThemes.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-36" />)}
             {!loading && topThemes.length === 0 && (

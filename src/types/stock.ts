@@ -152,6 +152,12 @@ export interface ThemeLeader {
   market_cap?: number;
   price?: number;
   role?: string;
+  alpha_score?: number | null;
+  smart_money?: number | null;
+  bubble_risk?: number | null;
+  confidence_score?: number;
+  confidence_label?: string;
+  quote_status?: string;
 }
 
 export interface ThemeScore {
@@ -181,6 +187,8 @@ export interface ThemeScore {
   supply_chain_acceleration: number;
   macro_alignment: number;
   leaders: ThemeLeader[];
+  related_stocks?: ThemeLeader[];
+  top_alpha_stocks?: ThemeLeader[];
   etfs: string[];
   macro_tags: string[];
   explainability: string[];
@@ -256,4 +264,28 @@ export interface ThemeNarrativeResponse {
     narrative_bubble_risk: number;
     summary: string;
   }>;
+}
+
+export interface ThemeStocksResponse {
+  generated_at: string;
+  theme: string;
+  theme_id: string;
+  category?: string;
+  description?: string;
+  related_stocks: ThemeLeader[];
+  top_alpha_stocks: ThemeLeader[];
+  summary: string;
+  fallback?: boolean;
+}
+
+export interface ThemeDetailResponse extends ThemeStocksResponse {
+  theme_score?: number | null;
+  confidence?: string | null;
+  confidence_score?: number | null;
+  status?: string | null;
+  supply_chain: Record<string, ThemeLeader[]>;
+  capital_flow?: number | null;
+  bubble_risk?: number | null;
+  explainability?: string[];
+  risks?: string[];
 }
