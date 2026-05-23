@@ -51,6 +51,10 @@ class AlphaRow:
     market_structure: float
     bubble_risk: float
     sector_alignment: float
+    theme_alignment: float
+    theme_strength: float
+    theme_capital_flow: float
+    theme_explanation: List[str]
     suggested_action: str
     factor_importance: Dict[str, float]
 
@@ -157,17 +161,33 @@ def _series_metrics(symbol: str) -> Dict[str, Any]:
 
 
 def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str) -> AlphaRow:
+    try:
+        from theme_engine import theme_alignment_for_symbol
+
+        theme_signal = theme_alignment_for_symbol(metrics["ticker"], metrics["sector"])
+    except Exception:
+        theme_signal = {
+            "theme_alignment": 50.0,
+            "theme_strength": 50.0,
+            "theme_capital_flow": 50.0,
+            "explanation": ["Theme engine unavailable; stock-level alpha factors remain active."],
+        }
+
+    theme_alignment = safe_float(theme_signal.get("theme_alignment"))
+    theme_strength = safe_float(theme_signal.get("theme_strength"))
+    theme_capital_flow = safe_float(theme_signal.get("theme_capital_flow"))
+    theme_explanation = list(theme_signal.get("explanation") or [])
     quality = bounded_score(50.0 + metrics["gross_margin"] * 80.0 + metrics["net_income_margin"] * 120.0 - metrics["debt_to_equity"] * 18.0)
     growth = bounded_score(50.0 + metrics["revenue_growth"] * 130.0 + metrics["ret_3m"] * 80.0)
     smart_money = bounded_score(50.0 + (metrics["relative_volume"] - 1.0) * 22.0 + metrics["ret_1m"] * 90.0 + metrics["acceleration"] * 110.0)
     valuation = bounded_score(78.0 - max(0.0, metrics["pe"] - 18.0) * 0.9 - max(0.0, metrics["ps"] - 4.0) * 3.0 + max(0.0, metrics["free_cash_flow"]) / 2_000_000_000.0)
     earnings_quality = bounded_score(50.0 + (metrics["free_cash_flow"] / max(abs(metrics["operating_cash_flow"]), 1.0)) * 45.0 + metrics["net_income_margin"] * 70.0)
-    market_structure = bounded_score(50.0 + metrics["ret_6m"] * 75.0 - metrics["volatility"] * 25.0 + sector_alignment * 0.25)
+    market_structure = bounded_score(50.0 + metrics["ret_6m"] * 75.0 - metrics["volatility"] * 25.0 + sector_alignment * 0.17 + theme_alignment * 0.12)
 
     if regime == "Bear Market":
-        weights = {"quality": 0.25, "growth": 0.14, "smart_money": 0.17, "valuation": 0.22, "earnings_quality": 0.15, "market_structure": 0.07}
+        weights = {"quality": 0.23, "growth": 0.13, "smart_money": 0.16, "valuation": 0.20, "earnings_quality": 0.14, "market_structure": 0.07, "theme": 0.07}
     else:
-        weights = {"quality": 0.20, "growth": 0.22, "smart_money": 0.20, "valuation": 0.13, "earnings_quality": 0.15, "market_structure": 0.10}
+        weights = {"quality": 0.18, "growth": 0.20, "smart_money": 0.18, "valuation": 0.12, "earnings_quality": 0.14, "market_structure": 0.09, "theme": 0.09}
 
     alpha_score = bounded_score(
         quality * weights["quality"]
@@ -176,6 +196,7 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         + valuation * weights["valuation"]
         + earnings_quality * weights["earnings_quality"]
         + market_structure * weights["market_structure"]
+        + theme_alignment * weights["theme"]
         - max(0.0, metrics["bubble_risk"] - 55.0) * 0.25
     )
     if alpha_score > 88 and metrics["bubble_risk"] < 40 and smart_money > 70 and earnings_quality > 70 and sector_alignment > 55:
@@ -204,6 +225,10 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         market_structure=market_structure,
         bubble_risk=metrics["bubble_risk"],
         sector_alignment=sector_alignment,
+        theme_alignment=theme_alignment,
+        theme_strength=theme_strength,
+        theme_capital_flow=theme_capital_flow,
+        theme_explanation=theme_explanation,
         suggested_action=action,
         factor_importance=weights,
     )
@@ -254,7 +279,7 @@ def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = No
         "factor_importance": top[0].factor_importance if top else {},
         "top_alpha": [row.__dict__ for row in top],
         "recommendations": [row.__dict__ for row in recommendations],
-        "summary": f"{sector_text} currently show the strongest alignment. The ranking blends Qlib Alpha158-style factor construction with bubble risk, earnings quality, smart money, sector rotation, and market regime weighting.",
+        "summary": f"{sector_text} currently show the strongest alignment. The ranking blends Qlib Alpha158-style factor construction with bubble risk, earnings quality, smart money, sector rotation, market regime weighting, and universal theme intelligence.",
     }
 
 

@@ -20,7 +20,15 @@ from quant_engine.data_pipeline.providers import (
 )
 from settings import get_settings
 
-_LOCK = threading.Lock()
+_LOCKS_GUARD = threading.Lock()
+_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _lock_for(cache_key: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        if cache_key not in _LOCKS:
+            _LOCKS[cache_key] = threading.Lock()
+        return _LOCKS[cache_key]
 
 
 class SQLiteCache:
@@ -47,7 +55,7 @@ class SQLiteCache:
             )
             conn.commit()
 
-    def get(self, cache_key: str) -> tuple[str, bytes] | None:
+    def get(self, cache_key: str, allow_expired: bool = False) -> tuple[str, bytes] | None:
         now = int(time.time())
         with self._connect() as conn:
             row = conn.execute(
@@ -57,9 +65,7 @@ class SQLiteCache:
             if row is None:
                 return None
             content_type, payload, expires_at = row
-            if int(expires_at) < now:
-                conn.execute("DELETE FROM kv_cache WHERE cache_key = ?", (cache_key,))
-                conn.commit()
+            if int(expires_at) < now and not allow_expired:
                 return None
             return str(content_type), bytes(payload)
 
@@ -91,8 +97,8 @@ def initialize_cache() -> None:
     _cache()
 
 
-def _get_cached(cache_key: str) -> Any | None:
-    item = _cache().get(cache_key)
+def _get_cached(cache_key: str, allow_expired: bool = False) -> Any | None:
+    item = _cache().get(cache_key, allow_expired=allow_expired)
     if item is None:
         return None
     content_type, payload = item
@@ -111,13 +117,21 @@ def _set_cached(cache_key: str, value: Any, ttl_seconds: int, content_type: str 
     _cache().set(cache_key, content_type, payload, ttl_seconds)
 
 
+def get_cached_value(cache_key: str, allow_expired: bool = False) -> Any | None:
+    return _get_cached(cache_key, allow_expired=allow_expired)
+
+
+def set_cached_value(cache_key: str, value: Any, ttl_seconds: int, content_type: str = "json") -> None:
+    _set_cached(cache_key, value, ttl_seconds, content_type)
+
+
 def get_quote(symbol: str) -> Dict[str, Any]:
     normalized = symbol.strip().upper()
     cache_key = f"quote:{normalized}"
     cached = _get_cached(cache_key)
     if isinstance(cached, dict):
         return cached
-    with _LOCK:
+    with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, dict):
             return cached
@@ -132,7 +146,7 @@ def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
     cached = _get_cached(cache_key)
     if isinstance(cached, pd.DataFrame):
         return cached
-    with _LOCK:
+    with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, pd.DataFrame):
             return cached
@@ -150,7 +164,7 @@ def get_statements(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
     cached = _get_cached(cache_key)
     if isinstance(cached, tuple) and len(cached) == 3:
         return cached
-    with _LOCK:
+    with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, tuple) and len(cached) == 3:
             return cached
@@ -165,7 +179,7 @@ def get_news(symbol: str) -> List[Dict[str, Any]]:
     cached = _get_cached(cache_key)
     if isinstance(cached, list):
         return cached
-    with _LOCK:
+    with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if isinstance(cached, list):
             return cached

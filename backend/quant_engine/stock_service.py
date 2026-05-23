@@ -9,9 +9,14 @@ from quant_engine.regime_engine import detect_market_regime
 from quant_engine.smart_money_engine import analyze_smart_money
 
 
-def _analyst_consensus(symbol: str, price: float) -> Dict[str, float]:
+def _nullable_float(value: Any) -> float | None:
+    parsed = safe_float(value)
+    return parsed if parsed > 0 else None
+
+
+def _analyst_consensus(symbol: str, price: float) -> Dict[str, Any]:
     info = get_quote(symbol)
-    buy = hold = sell = 0.0
+    buy = hold = sell = 0
     opinions = int(safe_float(info.get("numberOfAnalystOpinions")))
     if opinions > 0:
         recommendation = str(info.get("recommendationKey") or "").lower()
@@ -28,17 +33,24 @@ def _analyst_consensus(symbol: str, price: float) -> Dict[str, float]:
             hold = max(0, round(opinions * 0.28))
             buy = max(0, opinions - sell - hold)
 
-    average = safe_float(info.get("targetMeanPrice"))
-    implied = ((average - price) / price * 100.0) if price > 0 and average > 0 else 0.0
+    high = _nullable_float(info.get("targetHighPrice"))
+    average = _nullable_float(info.get("targetMeanPrice"))
+    low = _nullable_float(info.get("targetLowPrice"))
+    has_target = average is not None or high is not None or low is not None
+    has_ratings = opinions > 0 and (buy + hold + sell) > 0
+    available = has_target or has_ratings
+    implied = round(((average - price) / price * 100.0), 2) if price > 0 and average is not None else None
+
     return {
-        "high": safe_float(info.get("targetHighPrice")),
+        "available": available,
+        "high": high,
         "average": average,
-        "low": safe_float(info.get("targetLowPrice")),
+        "low": low,
         "average_target": average,
-        "implied_upside": round(implied, 2),
-        "buy": float(buy),
-        "hold": float(hold),
-        "sell": float(sell),
+        "implied_upside": implied,
+        "buy": buy if has_ratings else None,
+        "hold": hold if has_ratings else None,
+        "sell": sell if has_ratings else None,
     }
 
 
