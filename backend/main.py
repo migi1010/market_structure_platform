@@ -27,7 +27,11 @@ from theme_engine import (
     analyze_all_narratives,
     get_emerging_themes,
     get_theme_capital_flow,
+    get_theme_detail,
+    get_theme_detail_static,
     get_theme_rotation,
+    get_theme_stocks,
+    get_theme_stocks_static,
     get_theme_supply_chain,
     get_top_themes,
 )
@@ -510,6 +514,18 @@ def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
     return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
+
+
+@app.get("/theme/{theme_id:path}/stocks")
+def get_theme_stocks_endpoint(theme_id: str) -> dict:
+    normalized = theme_id.strip().lower()
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "stocks", normalized), settings.theme_ttl_seconds, lambda: get_theme_stocks(theme_id), lambda: get_theme_stocks_static(theme_id)))
+
+
+@app.get("/theme/{theme_id:path}/detail")
+def get_theme_detail_endpoint(theme_id: str) -> dict:
+    normalized = theme_id.strip().lower()
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "detail", normalized), settings.theme_ttl_seconds, lambda: get_theme_detail(theme_id), lambda: get_theme_detail_static(theme_id)))
 
 
 @app.get("/smart-money/{ticker}")
