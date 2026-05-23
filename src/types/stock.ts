@@ -1,12 +1,24 @@
 import type { BubbleAnalysisData } from "./bubble";
 
 export interface AnalystTargets {
-  high: number;
-  average: number;
-  low: number;
-  buy: number;
-  hold: number;
-  sell: number;
+  available?: boolean;
+  high: number | null;
+  average: number | null;
+  low: number | null;
+  average_target?: number | null;
+  implied_upside?: number | null;
+  buy: number | null;
+  hold: number | null;
+  sell: number | null;
+}
+
+export interface AnalystConsensus {
+  available?: boolean;
+  average_target: number | null;
+  implied_upside: number | null;
+  buy: number | null;
+  hold: number | null;
+  sell: number | null;
 }
 
 export interface HmmPrediction {
@@ -36,8 +48,16 @@ export interface StockAnalysis {
   sector: string;
   bubble_analysis_data: BubbleAnalysisData;
   analyst_targets: AnalystTargets;
+  analyst_consensus?: AnalystConsensus;
   hmm_prediction: HmmPrediction;
   news: NewsItem[];
+}
+
+export interface MarketOverviewItem {
+  ticker: string;
+  price: number;
+  change: number;
+  change_percent: number;
 }
 
 export interface SearchResult {
@@ -64,4 +84,160 @@ export interface SectorRotation {
   relative_strength: number;
   flow: number;
   companies: SectorCompany[];
+  rotation_state?: string;
+  fallback?: boolean;
+  message?: string;
+}
+
+export interface AlphaQuantRow {
+  ticker: string;
+  company_name: string;
+  sector: string;
+  alpha_score: number;
+  quality: number;
+  growth: number;
+  smart_money: number;
+  valuation: number;
+  earnings_quality: number;
+  market_structure: number;
+  bubble_risk: number;
+  sector_alignment: number;
+  theme_alignment?: number;
+  theme_strength?: number;
+  theme_capital_flow?: number;
+  theme_explanation?: string[];
+  suggested_action: "Strong Buy" | "Accumulation" | "Watchlist" | "Hold" | "Bubble Risk" | "Avoid";
+  factor_importance: Record<string, number>;
+}
+
+export interface AlphaQuantResponse {
+  generated_at: string;
+  universe: string;
+  qlib_engine: {
+    available: boolean;
+    mode?: "qlib" | "fallback";
+    provider: string;
+    factor_set: string;
+    version?: string;
+    reason?: string;
+  };
+  market_regime: {
+    name: string;
+    confidence: number;
+  };
+  factor_importance: Record<string, number>;
+  top_alpha: AlphaQuantRow[];
+  recommendations: AlphaQuantRow[];
+  summary: string;
+}
+
+export interface ThemeLeader {
+  ticker: string;
+  momentum_3m?: number;
+  relative_volume?: number;
+  day_change_percent?: number;
+  change_percent?: number;
+  company_name?: string;
+  market_cap?: number;
+  price?: number;
+  role?: string;
+}
+
+export interface ThemeScore {
+  theme: string;
+  category: string;
+  description?: string;
+  theme_strength_score: number;
+  theme_capital_flow_score: number;
+  emerging_score: number;
+  overheating_score: number;
+  relative_momentum: number;
+  etf_relative_strength: number;
+  volume_expansion: number;
+  institutional_accumulation: number;
+  earnings_acceleration: number;
+  revenue_acceleration: number;
+  capex_trend: number;
+  smart_money_accumulation: number;
+  narrative_strength: number;
+  narrative_acceleration: number;
+  narrative_saturation: number;
+  narrative_bubble_risk: number;
+  breadth_participation: number;
+  leadership_concentration: number;
+  relative_strength_vs_spy: number;
+  options_activity: number;
+  supply_chain_acceleration: number;
+  macro_alignment: number;
+  leaders: ThemeLeader[];
+  etfs: string[];
+  macro_tags: string[];
+  explainability: string[];
+}
+
+export interface CrossAssetRegime {
+  generated_at?: string;
+  risk_on_off?: string;
+  risk_on_score?: number;
+  liquidity_regime?: string;
+  liquidity_score?: number;
+  volatility_regime?: string;
+  volatility_score?: number;
+  inflation_regime?: string;
+  inflation_score?: number;
+  AI_capex_regime?: string;
+  AI_capex_score?: number;
+}
+
+export interface ThemeTopResponse {
+  generated_at: string;
+  cross_asset_regime: CrossAssetRegime;
+  themes: ThemeScore[];
+  summary: string;
+}
+
+export interface EmergingThemeResponse {
+  generated_at: string;
+  emerging_themes: ThemeScore[];
+  summary: string;
+}
+
+export interface ThemeRotationResponse {
+  generated_at: string;
+  rotation_map: ThemeScore[];
+  strengthening: ThemeScore[];
+  weakening: ThemeScore[];
+  overheated_themes: ThemeScore[];
+  undervalued_themes: ThemeScore[];
+  summary: string;
+}
+
+export interface ThemeCapitalFlowResponse {
+  generated_at: string;
+  capital_flow: Array<Partial<ThemeScore> & { theme: string; category: string }>;
+  summary: string;
+}
+
+export interface ThemeSupplyChainResponse {
+  generated_at: string;
+  themes: Array<{
+    theme: string;
+    category: string;
+    generated_at: string;
+    supply_chain: Record<string, ThemeLeader[]>;
+    leaders: ThemeLeader[];
+    summary: string;
+  }>;
+}
+
+export interface ThemeNarrativeResponse {
+  generated_at: string;
+  narratives: Array<{
+    theme: string;
+    narrative_strength: number;
+    narrative_acceleration: number;
+    narrative_saturation: number;
+    narrative_bubble_risk: number;
+    summary: string;
+  }>;
 }
