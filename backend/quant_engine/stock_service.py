@@ -281,9 +281,11 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
     smart_score = safe_float(smart.get("smart_money_score"), 50.0)
     regime_name = str(regime.get("name") or "Calibrating")
     regime_confidence = safe_float(regime.get("confidence"), 50.0)
-    trend = "Bullish" if smart_score >= 60 and regime_name in {"Bull Market", "Momentum Mania"} else "Bearish" if regime_name in {"Bear Market", "Risk-off"} else "Calibrating model..."
-    model_available = trend in {"Bullish", "Bearish"} and not bool(regime.get("fallback"))
-    bull_probability = min(0.92, max(0.08, 0.5 + (smart_score - 50.0) / 150.0)) if model_available else None
+    bullish_regimes = {"Bull Expansion", "Bull Consolidation", "Risk-On Momentum", "Inflationary Expansion", "AI Speculative Mania"}
+    bearish_regimes = {"High Volatility", "Defensive Rotation", "Recession Risk", "Liquidity Stress"}
+    trend = "Bullish" if regime_name in bullish_regimes or smart_score >= 60 else "Bearish" if regime_name in bearish_regimes else "Low Confidence"
+    model_available = not bool(regime.get("fallback"))
+    bull_probability = min(0.92, max(0.08, 0.5 + (smart_score - 50.0) / 180.0 + (regime_confidence - 50.0) / 420.0)) if model_available else None
     bubble_data = bubble.get("bubble_analysis_data") or _fallback_bubble(ticker, quote, price)["bubble_analysis_data"]
 
     return {
@@ -306,7 +308,7 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
             "bull_probability": round(bull_probability, 4) if bull_probability is not None else None,
             "bear_probability": round(1.0 - bull_probability, 4) if bull_probability is not None else None,
             "regime_state": regime_name if model_available else "Awaiting regime confirmation...",
-            "confidence": round(min(0.95, max(0.45, regime_confidence / 100.0)), 3) if model_available else None,
+            "confidence": round(min(0.95, max(0.32, regime_confidence / 100.0)), 3) if model_available else None,
             "message": "Using fallback market regime..." if bool(regime.get("fallback")) else "Awaiting regime confirmation...",
         },
         "news": _news(ticker),

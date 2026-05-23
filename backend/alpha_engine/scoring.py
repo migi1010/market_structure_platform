@@ -15,6 +15,49 @@ def bounded_score(value: float) -> float:
     return round(float(min(100.0, max(0.0, value))), 2)
 
 
+def confidence_label(score: float) -> str:
+    if score >= 80:
+        return "High"
+    if score >= 55:
+        return "Medium"
+    if score >= 30:
+        return "Partial Data"
+    return "Low Confidence"
+
+
+def data_completeness(values: Dict[str, float | None]) -> float:
+    if not values:
+        return 0.0
+    available = 0
+    for value in values.values():
+        if value is None:
+            continue
+        try:
+            parsed = float(value)
+            if np.isfinite(parsed) and parsed != 0.0:
+                available += 1
+        except (TypeError, ValueError):
+            continue
+    return bounded_score(available / max(len(values), 1) * 100.0)
+
+
+def partial_weighted_score(factors: Dict[str, tuple[float | None, float]], neutral: float = 50.0) -> tuple[float, float]:
+    weighted = 0.0
+    used_weight = 0.0
+    total_weight = sum(weight for _, weight in factors.values()) or 1.0
+    for value, weight in factors.values():
+        if value is None:
+            continue
+        weighted += bounded_score(float(value)) * weight
+        used_weight += weight
+    if used_weight <= 0:
+        return bounded_score(neutral - 10.0), 0.0
+    raw = weighted / used_weight
+    completeness = used_weight / total_weight
+    penalty = (1.0 - completeness) * 12.0
+    return bounded_score(raw - penalty), bounded_score(completeness * 100.0)
+
+
 def calculate_bubble_index(
     pe_ratio: float = 0.0,
     ps_ratio: float = 0.0,
@@ -54,15 +97,15 @@ def calculate_bubble_index(
 
 
 def classify_bubble(score: float) -> str:
-    if score >= 85:
-        return "Extreme Mania"
-    if score >= 70:
-        return "Bubble Risk"
-    if score >= 50:
-        return "Overheated"
-    if score >= 30:
+    if score >= 81:
+        return "Extreme Bubble Risk"
+    if score >= 61:
         return "Speculative"
-    return "Healthy"
+    if score >= 41:
+        return "Neutral"
+    if score >= 21:
+        return "Healthy"
+    return "Undervalued"
 
 
 def explain_bubble(inputs: Dict[str, float], score: float) -> str:

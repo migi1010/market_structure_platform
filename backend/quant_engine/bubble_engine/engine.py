@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import numpy as np
 
-from alpha_engine.scoring import calculate_bubble_index, classify_bubble, explain_bubble
+from alpha_engine.scoring import bounded_score, calculate_bubble_index, classify_bubble, confidence_label, data_completeness, explain_bubble
 from quant_engine.data_pipeline import (
     get_history,
     get_quote,
@@ -66,9 +66,30 @@ def analyze_bubble(symbol: str) -> Dict[str, Any]:
         "volatility_change": volatility_change,
         "accrual_ratio": accrual_ratio,
     }
-    score = calculate_bubble_index(**inputs)
+    completeness = data_completeness({
+        "pe_ratio": inputs["pe_ratio"],
+        "ps_ratio": inputs["ps_ratio"],
+        "revenue_growth": revenue_growth,
+        "price_return": price_return,
+        "gross_margin": gross_margin,
+        "free_cash_flow": free_cash_flow,
+        "operating_cash_flow": operating_cash_flow,
+        "debt_ratio": debt_ratio,
+        "accrual_ratio": accrual_ratio,
+    })
+    raw_score = calculate_bubble_index(**inputs)
+    confidence_penalty = (100.0 - completeness) * 0.10
+    score = bounded_score(raw_score - confidence_penalty)
     fcf_quality = free_cash_flow / max(abs(operating_cash_flow), 1.0)
     net_income_quality = operating_cash_flow / max(abs(net_income), 1.0)
+    factor_breakdown = {
+        "valuation_expansion": bounded_score(max(0.0, inputs["pe_ratio"] - 22.0) * 1.35 + max(0.0, inputs["ps_ratio"] - 5.0) * 5.0),
+        "price_revenue_divergence": bounded_score(50.0 + (price_return - revenue_growth) * 180.0),
+        "cash_flow_deterioration": bounded_score(45.0 + max(0.0, -free_cash_flow / 1_000_000_000.0) * 8.0),
+        "debt_expansion": bounded_score(35.0 + max(0.0, debt_ratio - 0.55) * 70.0),
+        "volatility_acceleration": bounded_score(45.0 + max(0.0, volatility_change) * 170.0),
+        "accrual_quality": bounded_score(50.0 + max(0.0, accrual_ratio) * 120.0),
+    }
 
     return {
         "ticker": ticker,
@@ -88,6 +109,10 @@ def analyze_bubble(symbol: str) -> Dict[str, Any]:
             "ps_ratio": inputs["ps_ratio"],
             "bubble_index": score,
             "classification": classify_bubble(score),
+            "confidence_score": completeness,
+            "confidence_label": confidence_label(completeness),
+            "data_completeness": completeness,
+            "factor_breakdown": factor_breakdown,
             "valuation_heat": inputs["pe_ratio"] + inputs["ps_ratio"],
             "revenue_divergence": price_return - revenue_growth,
             "fcf_quality": fcf_quality,

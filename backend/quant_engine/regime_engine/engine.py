@@ -41,18 +41,28 @@ def detect_market_regime() -> Dict[str, Any]:
     except Exception:
         hmm_state = {"state": -1, "mean_return": float(returns.tail(60).mean()), "annualized_volatility": vol}
 
-    if ret_3m > 0.06 and qqq_ret > ret_3m and vol > 0.24:
-        name = "Momentum Mania"
+    if ret_3m > 0.10 and qqq_ret > ret_3m and vol > 0.24:
+        name = "AI Speculative Mania"
+    elif ret_3m > 0.06 and qqq_ret > ret_3m:
+        name = "Risk-On Momentum"
+    elif ret_3m > 0.03 and ret_6m > 0 and vol < 0.22:
+        name = "Bull Consolidation"
     elif ret_3m > 0.03 and ret_6m > 0:
-        name = "Bull Market"
+        name = "Bull Expansion"
     elif ret_3m < -0.05:
-        name = "Bear Market"
+        name = "Recession Risk"
     elif vol > 0.32:
         name = "High Volatility"
     elif ret_1m < -0.03 and vol > 0.24:
-        name = "Risk-off"
+        name = "Liquidity Stress"
+    elif ret_6m > 0.04 and vol > 0.26:
+        name = "Late Cycle"
+    elif qqq_ret < ret_3m - 0.02 and ret_3m > 0:
+        name = "Defensive Rotation"
+    elif ret_3m > 0 and vol > 0.24:
+        name = "Inflationary Expansion"
     else:
-        name = "Neutral Regime"
+        name = "Bull Consolidation"
 
     confidence = bounded_score(52.0 + abs(ret_3m) * 180.0 + max(0.0, vol - 0.18) * 65.0)
     return {

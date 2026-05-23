@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 
-from alpha_engine.scoring import bounded_score
+from alpha_engine.scoring import bounded_score, confidence_label
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
 
 from .theme_detector import ThemeDefinition
@@ -162,18 +162,25 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
 
     narrative = _narrative_proxy(theme, equity_metrics)
     macro_alignment = _macro_alignment(theme, macro_state)
+    relative_momentum_score = bounded_score(50.0 + relative_momentum * 95.0)
+    etf_relative_strength_score = bounded_score(50.0 + etf_relative_strength * 95.0)
+    volume_score = bounded_score(50.0 + (volume_expansion - 1.0) * 18.0)
+    earnings_score = bounded_score(50.0 + earnings_acceleration * 72.0)
+    revenue_score = bounded_score(50.0 + revenue_acceleration * 72.0)
+    breadth_score = bounded_score(breadth * 100.0)
+    leadership_balance_score = bounded_score(100.0 - min(100.0, leadership_concentration * 150.0))
     theme_strength_score = bounded_score(
-        (50.0 + relative_momentum * 210.0) * 0.16
-        + (50.0 + etf_relative_strength * 210.0) * 0.11
-        + (50.0 + (volume_expansion - 1.0) * 25.0) * 0.09
+        relative_momentum_score * 0.16
+        + etf_relative_strength_score * 0.11
+        + volume_score * 0.09
         + institutional_accumulation * 0.12
-        + (50.0 + earnings_acceleration * 110.0) * 0.08
-        + (50.0 + revenue_acceleration * 110.0) * 0.08
+        + earnings_score * 0.08
+        + revenue_score * 0.08
         + capex_trend * 0.07
         + smart_money_accumulation * 0.08
         + narrative["narrative_acceleration"] * 0.06
-        + (breadth * 100.0) * 0.06
-        + (100.0 - min(100.0, leadership_concentration * 175.0)) * 0.03
+        + breadth_score * 0.06
+        + leadership_balance_score * 0.03
         + options_activity * 0.03
         + supply_chain_acceleration * 0.03
         + macro_alignment * 0.10
@@ -181,18 +188,29 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
     capital_flow_score = bounded_score(
         smart_money_accumulation * 0.34
         + institutional_accumulation * 0.28
-        + (50.0 + relative_momentum * 180.0) * 0.18
-        + (breadth * 100.0) * 0.12
+        + relative_momentum_score * 0.18
+        + breadth_score * 0.12
         + options_activity * 0.08
     )
     emerging_score = bounded_score(
-        max(0.0, _avg([item["acceleration"] for item in equity_metrics]) * 260.0 + 48.0) * 0.32
+        bounded_score(_avg([item["acceleration"] for item in equity_metrics]) * 120.0 + 48.0) * 0.32
         + capital_flow_score * 0.28
         + narrative["narrative_acceleration"] * 0.18
         + supply_chain_acceleration * 0.12
         + macro_alignment * 0.10
     )
     overheating_score = bounded_score(valuation_heat * 0.38 + narrative["narrative_saturation"] * 0.22 + max(0.0, leadership_concentration * 100.0 - 35.0) * 0.28 + options_activity * 0.12)
+    theme_strength_score = bounded_score(theme_strength_score - max(0.0, overheating_score - 72.0) * 0.16)
+    capital_flow_score = bounded_score(capital_flow_score - max(0.0, overheating_score - 82.0) * 0.10)
+    data_completeness = bounded_score(
+        min(len([item for item in equity_metrics if item["price"] > 0]), max(len(theme.tickers[:8]), 1)) / max(len(theme.tickers[:8]), 1) * 36.0
+        + min(len(etf_metrics), max(len(theme.etf_symbols), 1)) / max(len(theme.etf_symbols), 1) * 22.0
+        + min(100.0, breadth * 100.0) * 0.18
+        + min(100.0, max(0.0, volume_expansion) * 50.0) * 0.12
+        + macro_alignment * 0.12
+    )
+    confidence_score = bounded_score(data_completeness - max(0.0, overheating_score - 82.0) * 0.10)
+    status = _theme_status(theme_strength_score, emerging_score, overheating_score, capital_flow_score)
 
     return {
         "theme": theme.name,
@@ -202,6 +220,10 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
         "theme_capital_flow_score": capital_flow_score,
         "emerging_score": emerging_score,
         "overheating_score": overheating_score,
+        "status": status,
+        "confidence_score": confidence_score,
+        "confidence_label": confidence_label(confidence_score),
+        "data_completeness": data_completeness,
         "relative_momentum": round(relative_momentum * 100.0, 2),
         "etf_relative_strength": round(etf_relative_strength * 100.0, 2),
         "volume_expansion": round(volume_expansion, 2),
@@ -232,7 +254,39 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
         "etfs": list(theme.etf_symbols),
         "macro_tags": list(theme.macro_alignment),
         "explainability": _explain_theme(theme.name, theme_strength_score, capital_flow_score, macro_alignment, narrative["narrative_acceleration"]),
+        "risks": _theme_risks(overheating_score, valuation_heat, narrative["narrative_saturation"], confidence_score),
     }
+
+
+def _theme_status(strength: float, emerging: float, overheating: float, flow: float) -> str:
+    if strength < 38 and flow < 42:
+        return "Weak"
+    if overheating >= 78 and strength >= 65:
+        return "Overheated"
+    if strength >= 82 and flow >= 70:
+        return "Leadership"
+    if emerging >= 68 and flow >= 58:
+        return "Emerging"
+    if strength >= 62 and flow >= 58:
+        return "Accumulating"
+    if strength < 48 and flow < 50:
+        return "Cooling"
+    return "Watchlist"
+
+
+def _theme_risks(overheating: float, valuation_heat: float, narrative_saturation: float, confidence: float) -> List[str]:
+    risks: List[str] = []
+    if overheating >= 72:
+        risks.append("Theme is showing overheating risk from valuation, narrative saturation, or leadership concentration.")
+    if valuation_heat >= 65:
+        risks.append("Valuation premium is elevated across the theme basket.")
+    if narrative_saturation >= 72:
+        risks.append("Narrative saturation is rising and may reduce forward alpha.")
+    if confidence < 55:
+        risks.append("Theme signal is based on partial data coverage.")
+    if not risks:
+        risks.append("No major theme-level risk concentration detected.")
+    return risks
 
 
 def _macro_alignment(theme: ThemeDefinition, macro: Dict[str, Any]) -> float:
