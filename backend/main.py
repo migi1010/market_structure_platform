@@ -2,7 +2,7 @@
 
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError, ThreadPoolExecutor, as_completed
 from contextlib import asynccontextmanager
 from typing import Any, Callable
 
@@ -34,6 +34,8 @@ from theme_engine import (
 configure_logging()
 logger = logging.getLogger("miji.api")
 settings = get_settings()
+BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+HEAVY_ENDPOINT_TIMEOUT_SECONDS = 15.0
 
 
 @asynccontextmanager
@@ -93,6 +95,162 @@ def _cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any]) 
         raise
 
 
+def _schedule_cache_refresh(cache_key: str, ttl_seconds: int, task: Callable[[], Any]) -> None:
+    def refresh() -> None:
+        try:
+            result = task()
+            set_cached_value(cache_key, result, ttl_seconds, "json")
+            logger.info("background cache refresh complete key=%s", cache_key)
+        except Exception as exc:
+            logger.warning("background cache refresh failed key=%s error=%s", cache_key, exc)
+
+    BACKGROUND_EXECUTOR.submit(refresh)
+
+
+def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any], fallback: Callable[[], Any]) -> Any:
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        logger.info("endpoint cache hit key=%s", cache_key)
+        return cached
+    stale = get_cached_value(cache_key, allow_expired=True)
+    if stale is not None:
+        logger.info("endpoint stale cache hit key=%s", cache_key)
+        _schedule_cache_refresh(cache_key, ttl_seconds, task)
+        return stale
+    future = BACKGROUND_EXECUTOR.submit(task)
+    started = time.perf_counter()
+    try:
+        result = future.result(timeout=HEAVY_ENDPOINT_TIMEOUT_SECONDS)
+        set_cached_value(cache_key, result, ttl_seconds, "json")
+        logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
+        return result
+    except TimeoutError:
+        logger.warning("endpoint timed out key=%s; serving fallback", cache_key)
+        return fallback()
+    except Exception as exc:
+        logger.warning("endpoint failed key=%s; serving fallback error=%s", cache_key, exc)
+        return fallback()
+
+
+def _fallback_sector_rotation() -> list[dict]:
+    sectors = [
+        "Technology", "Energy", "Healthcare", "Financials", "Industrials", "Utilities",
+        "Consumer Discretionary", "Consumer Staples", "Materials", "Real Estate", "Communication Services",
+    ]
+    return [
+        {
+            "sector": sector,
+            "score": 50.0,
+            "relative_strength": 50.0,
+            "flow": 50.0,
+            "rotation_state": "Calibrating",
+            "companies": [],
+            "fallback": True,
+            "message": "Using latest cached institutional intelligence while live sector data warms up.",
+        }
+        for sector in sectors
+    ]
+
+
+def _fallback_theme_top() -> dict:
+    themes = [
+        "AI Infrastructure", "Semiconductor", "Electric Grid", "Nuclear Energy", "Energy",
+        "Defense", "Healthcare", "Financials", "Shipping", "Commodities",
+    ]
+    rows = [
+        {
+            "theme": theme,
+            "category": "Universal Theme",
+            "description": "Live theme signal is calibrating.",
+            "theme_strength_score": 50.0,
+            "theme_capital_flow_score": 50.0,
+            "emerging_score": 45.0,
+            "overheating_score": 35.0,
+            "relative_momentum": 0.0,
+            "etf_relative_strength": 0.0,
+            "volume_expansion": 1.0,
+            "institutional_accumulation": 50.0,
+            "earnings_acceleration": 0.0,
+            "revenue_acceleration": 0.0,
+            "capex_trend": 50.0,
+            "smart_money_accumulation": 50.0,
+            "narrative_strength": 45.0,
+            "narrative_acceleration": 45.0,
+            "narrative_saturation": 35.0,
+            "narrative_bubble_risk": 30.0,
+            "breadth_participation": 50.0,
+            "leadership_concentration": 0.0,
+            "relative_strength_vs_spy": 0.0,
+            "options_activity": 50.0,
+            "supply_chain_acceleration": 50.0,
+            "macro_alignment": 50.0,
+            "leaders": [],
+            "etfs": [],
+            "macro_tags": [],
+            "explainability": ["Theme engine calibrating; showing neutral institutional fallback."],
+            "status": "Calibrating",
+            "fallback": True,
+        }
+        for theme in themes
+    ]
+    return {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "cross_asset_regime": {
+            "risk_on_off": "Calibrating",
+            "risk_on_score": 50.0,
+            "liquidity_regime": "Calibrating",
+            "liquidity_score": 50.0,
+            "volatility_regime": "Calibrating",
+            "volatility_score": 50.0,
+            "inflation_regime": "Calibrating",
+            "inflation_score": 50.0,
+            "AI_capex_regime": "Calibrating",
+            "AI_capex_score": 50.0,
+        },
+        "themes": rows,
+        "summary": "Using latest cached institutional intelligence while live theme data warms up.",
+        "fallback": True,
+    }
+
+
+def _fallback_alpha(universe: str) -> dict:
+    symbols = ["NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "V"]
+    rows = [
+        {
+            "ticker": symbol,
+            "company_name": symbol,
+            "sector": "Calibrating",
+            "alpha_score": 50.0,
+            "quality": 50.0,
+            "growth": 50.0,
+            "smart_money": 50.0,
+            "valuation": 50.0,
+            "earnings_quality": 50.0,
+            "market_structure": 50.0,
+            "bubble_risk": 50.0,
+            "sector_alignment": 50.0,
+            "theme_alignment": 50.0,
+            "theme_strength": 50.0,
+            "theme_capital_flow": 50.0,
+            "theme_explanation": ["Alpha engine delayed; showing neutral fallback until cached intelligence is ready."],
+            "suggested_action": "Hold",
+            "factor_importance": {"quality": 0.2, "growth": 0.2, "smart_money": 0.2, "valuation": 0.15, "earnings_quality": 0.15, "market_structure": 0.1},
+        }
+        for symbol in symbols
+    ]
+    return {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "universe": universe.upper(),
+        "qlib_engine": {"available": False, "mode": "fallback", "provider": "Miji Quant", "factor_set": "Cached Alpha Fallback"},
+        "market_regime": {"name": "Calibrating", "confidence": 50.0},
+        "factor_importance": rows[0]["factor_importance"],
+        "top_alpha": rows,
+        "recommendations": rows[:5],
+        "summary": "Live engine delayed. Showing cached institutional intelligence fallback while Render warms up.",
+        "fallback": True,
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -121,8 +279,9 @@ def get_stock(ticker: str) -> dict:
 
 
 @app.get("/alpha/top")
-def get_alpha_top(universe: str = Query("sp500", pattern="^(sp500|nasdaq100)$")) -> dict:
-    return _guard(lambda: _cached_response(_cache_key("alpha_top", universe), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(universe)))
+def get_alpha_top(universe: str = Query("sp500")) -> dict:
+    normalized = universe.strip().lower()
+    return _guard(lambda: _fast_cached_response(_cache_key("alpha_top", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
 
 
 @app.get("/backtest/top-alpha")
@@ -141,7 +300,7 @@ def get_bubble(ticker: str) -> dict:
 
 @app.get("/market/regime")
 def get_market_regime() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("market_regime"), settings.market_regime_ttl_seconds, detect_market_regime))
+    return _guard(lambda: _fast_cached_response(_cache_key("market_regime"), settings.market_regime_ttl_seconds, detect_market_regime, lambda: {"name": "Calibrating", "confidence": 50.0, "fallback": True}))
 
 
 @app.get("/market/overview")
@@ -176,38 +335,38 @@ def get_market_overview() -> list[dict]:
 
 @app.get("/sector/rotation")
 def get_sector_rotation() -> list[dict]:
-    return _guard(lambda: _cached_response(_cache_key("sector_rotation"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation))
+    return _guard(lambda: _fast_cached_response(_cache_key("sector_rotation"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
 
 
 @app.get("/theme/top")
 def get_theme_top() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("theme_top"), settings.theme_ttl_seconds, get_top_themes))
+    return _guard(lambda: _fast_cached_response(_cache_key("theme_top"), settings.theme_ttl_seconds, get_top_themes, _fallback_theme_top))
 
 
 @app.get("/theme/emerging")
 def get_theme_emerging() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("theme_emerging"), settings.theme_ttl_seconds, get_emerging_themes))
+    return _guard(lambda: _fast_cached_response(_cache_key("theme_emerging"), settings.theme_ttl_seconds, get_emerging_themes, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "emerging_themes": _fallback_theme_top()["themes"][:6], "summary": "Theme engine calibrating. No active emerging signal confirmed yet.", "fallback": True}))
 
 
 @app.get("/theme/rotation")
 def get_theme_rotation_endpoint() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("theme_rotation"), settings.theme_ttl_seconds, get_theme_rotation))
+    return _guard(lambda: _fast_cached_response(_cache_key("theme_rotation"), settings.theme_ttl_seconds, get_theme_rotation, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "rotation_map": _fallback_theme_top()["themes"], "strengthening": [], "weakening": [], "overheated_themes": [], "undervalued_themes": [], "summary": "Theme rotation matrix is calibrating.", "fallback": True}))
 
 
 @app.get("/theme/capital-flow")
 def get_theme_capital_flow_endpoint() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("theme_capital_flow"), settings.theme_ttl_seconds, get_theme_capital_flow))
+    return _guard(lambda: _fast_cached_response(_cache_key("theme_capital_flow"), settings.theme_ttl_seconds, get_theme_capital_flow, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "capital_flow": _fallback_theme_top()["themes"][:8], "summary": "Capital flow temporarily unavailable. Using latest cached institutional intelligence.", "fallback": True}))
 
 
 @app.get("/theme/supply-chain")
 def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
     key = _cache_key("theme_supply_chain", theme or "all")
-    return _guard(lambda: _cached_response(key, settings.theme_ttl_seconds, lambda: get_theme_supply_chain(theme)))
+    return _guard(lambda: _fast_cached_response(key, settings.theme_ttl_seconds, lambda: get_theme_supply_chain(theme), lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "themes": [], "summary": "Supply chain map calibrating.", "fallback": True}))
 
 
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
-    return _guard(lambda: _cached_response(_cache_key("theme_narrative"), settings.theme_ttl_seconds, analyze_all_narratives))
+    return _guard(lambda: _fast_cached_response(_cache_key("theme_narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
 
 
 @app.get("/smart-money/{ticker}")
@@ -229,6 +388,10 @@ def warmup() -> dict:
         "market_regime": get_market_regime,
         "theme_top": get_theme_top,
         "theme_emerging": get_theme_emerging,
+        "theme_rotation": get_theme_rotation_endpoint,
+        "theme_capital_flow": get_theme_capital_flow_endpoint,
+        "alpha_top": lambda: get_alpha_top("sp500"),
+        "market_overview": get_market_overview,
     }
     for symbol in ["NVDA", "AAPL", "MSFT", "SPY", "QQQ", "SMH"]:
         tasks[f"stock_{symbol}"] = lambda symbol=symbol: get_stock(symbol)

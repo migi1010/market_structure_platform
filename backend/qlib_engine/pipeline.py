@@ -22,6 +22,43 @@ NASDAQ100_UNIVERSE = [
     "NFLX", "AMD", "ADBE", "PEP", "LIN", "CSCO", "TMUS", "INTU", "AMAT", "QCOM",
 ]
 
+UNIVERSE_PRESETS = {
+    "sp500": SP500_UNIVERSE,
+    "nasdaq100": NASDAQ100_UNIVERSE,
+    "dow30": ["AAPL", "MSFT", "NVDA", "AMZN", "JPM", "V", "WMT", "UNH", "HD", "PG", "JNJ", "KO", "MRK", "CRM", "MCD", "AXP", "IBM", "GS", "CAT", "DIS"],
+    "russell2000": ["IWM", "SMCI", "PLTR", "CELH", "ELF", "ONTO", "FIX", "AIT", "FN", "SPSC", "MMSI", "RMBS", "UFPI", "SSD", "WING", "EXLS", "HQY", "BOOT", "CRS", "BMI"],
+    "sox": ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MRVL", "MU", "INTC", "TXN", "ADI", "NXPI", "MCHP", "ON", "MPWR", "TER", "QRVO"],
+    "smh": ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "TXN", "LRCX", "MU", "ADI", "KLAC", "INTC", "MRVL", "NXPI", "MCHP", "ON", "MPWR", "TER", "QRVO"],
+    "soxx": ["NVDA", "AVGO", "AMD", "QCOM", "AMAT", "LRCX", "KLAC", "MU", "INTC", "TXN", "ADI", "MRVL", "NXPI", "MCHP", "ON", "MPWR", "TER", "QRVO", "SWKS", "ENTG"],
+    "xlk": ["MSFT", "AAPL", "NVDA", "AVGO", "ORCL", "CRM", "AMD", "ADBE", "CSCO", "ACN", "NOW", "INTU", "QCOM", "IBM", "TXN", "AMAT", "LRCX", "MU", "PANW", "ANET"],
+    "xle": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "WMB", "KMI", "HAL", "BKR", "DVN", "FANG", "HES", "TRGP", "OKE", "CTRA", "APA"],
+    "xlf": ["JPM", "BAC", "WFC", "GS", "MS", "V", "MA", "AXP", "C", "BLK", "SCHW", "PGR", "CB", "MMC", "AIG", "TRV", "CME", "ICE", "SPGI", "MCO"],
+    "xlv": ["LLY", "UNH", "JNJ", "MRK", "ABBV", "PFE", "TMO", "ABT", "DHR", "ISRG", "AMGN", "BSX", "GILD", "SYK", "MDT", "VRTX", "REGN", "CI", "CVS", "BMY"],
+    "xli": ["GE", "CAT", "RTX", "HON", "UPS", "UNP", "BA", "DE", "ETN", "LMT", "ADP", "PH", "TT", "ITW", "EMR", "WM", "MMM", "NOC", "GD", "PWR"],
+    "xlu": ["NEE", "SO", "DUK", "CEG", "SRE", "AEP", "D", "PEG", "EXC", "XEL", "ED", "EIX", "WEC", "AWK", "PCG", "ETR", "DTE", "PPL", "FE", "CMS"],
+    "xlb": ["LIN", "SHW", "APD", "ECL", "FCX", "NEM", "CTVA", "DD", "DOW", "NUE", "MLM", "VMC", "PPG", "IFF", "STLD", "BALL", "AVY", "CF", "MOS", "ALB"],
+    "xly": ["AMZN", "TSLA", "HD", "MCD", "LOW", "BKNG", "TJX", "NKE", "SBUX", "ORLY", "CMG", "AZO", "MAR", "HLT", "DHI", "LEN", "GM", "F", "ROST", "YUM"],
+    "xlp": ["WMT", "COST", "PG", "KO", "PEP", "PM", "MDLZ", "MO", "CL", "TGT", "KMB", "KDP", "GIS", "HSY", "SJM", "CAG", "KHC", "KR", "ADM", "TSN"],
+    "iwm": ["IWM", "SMCI", "PLTR", "CELH", "ELF", "ONTO", "FIX", "AIT", "FN", "SPSC", "MMSI", "RMBS", "UFPI", "SSD", "WING", "EXLS", "HQY", "BOOT", "CRS", "BMI"],
+    "dia": ["AAPL", "MSFT", "NVDA", "AMZN", "JPM", "V", "WMT", "UNH", "HD", "PG", "JNJ", "KO", "MRK", "CRM", "MCD", "AXP", "IBM", "GS", "CAT", "DIS"],
+    "arkk": ["TSLA", "COIN", "ROKU", "SQ", "HOOD", "CRSP", "SHOP", "PLTR", "PATH", "TWLO", "U", "DKNG", "TDOC", "BEAM", "PACB", "EXAS", "DNA", "NTLA", "EDIT", "SOFI"],
+    "ai_infrastructure": ["NVDA", "AMD", "AVGO", "ANET", "VRT", "ETN", "DELL", "SMCI", "PWR", "TT", "CARR", "TSM", "ASML", "AMAT", "LRCX"],
+    "semiconductor": ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MRVL", "MU", "INTC", "TXN", "ADI", "NXPI"],
+    "memory_cycle": ["MU", "WDC", "STX", "AMAT", "LRCX", "KLAC", "NVDA", "AMD", "TSM", "DELL", "HPQ"],
+    "glass_substrate": ["GLW", "AMAT", "INTC", "TSM", "KLAC", "ASML", "NVDA", "AMD"],
+    "electric_grid": ["ETN", "PWR", "HUBB", "NEE", "SO", "DUK", "AEP", "CEG", "VST", "FCX", "SCCO"],
+    "cable_copper": ["FCX", "SCCO", "TECK", "APH", "TEL", "GLW", "ETN", "PWR", "HUBB"],
+    "nuclear_energy": ["CEG", "VST", "NEE", "SMR", "CCJ", "BWXT", "DUK", "SO", "AEP"],
+    "energy": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "WMB", "KMI"],
+    "defense": ["LMT", "RTX", "NOC", "GD", "LHX", "BA", "HII", "TXT", "TDG", "GE"],
+    "industrial_automation": ["ROK", "EMR", "HON", "ETN", "ITW", "PH", "ABBNY", "AME", "DOV", "FTV"],
+    "shipping": ["ZIM", "DAC", "SBLK", "GNK", "MATX", "KEX", "UPS", "FDX", "XPO", "CHRW"],
+    "commodities": ["FCX", "XOM", "CVX", "NEM", "SCCO", "TECK", "ALB", "MOS", "CF", "NUE", "STLD"],
+    "traditional_industry": ["CAT", "DE", "EMR", "ITW", "DOW", "DD", "NUE", "STLD", "VMC", "MLM", "URI"],
+    "healthcare_innovation": ["LLY", "ISRG", "REGN", "VRTX", "TMO", "DHR", "BSX", "SYK", "ABT", "MRNA"],
+    "financial_rotation": ["JPM", "BAC", "GS", "MS", "V", "MA", "AXP", "BLK", "SCHW", "CME", "ICE"],
+}
+
 SECTOR_ETFS = {
     "Technology": "XLK",
     "Communication Services": "XLC",
@@ -236,7 +273,8 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
 
 def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = None) -> Dict[str, Any]:
     qlib_status = _try_init_qlib(qlib_available)
-    symbols = sorted(set(SP500_UNIVERSE if universe.lower() == "sp500" else NASDAQ100_UNIVERSE))
+    universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
+    symbols = sorted(set(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))
 
     sector_scores: Dict[str, float] = {}
     for sector, etf in SECTOR_ETFS.items():
@@ -273,7 +311,7 @@ def run_alpha_pipeline(universe: str = "sp500", qlib_available: bool | None = No
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "universe": universe.upper(),
+        "universe": universe_key.upper(),
         "qlib_engine": qlib_status,
         "market_regime": {"name": regime, "confidence": bounded_score(50.0 + abs(spy["ret_3m"]) * 180.0)},
         "factor_importance": top[0].factor_importance if top else {},

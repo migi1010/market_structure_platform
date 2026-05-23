@@ -11,7 +11,6 @@ import numpy as np
 from alpha_engine.scoring import bounded_score
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
 
-from .narrative_engine import analyze_theme_narrative
 from .theme_detector import ThemeDefinition
 
 
@@ -161,7 +160,7 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
     valuation_heat = _avg([item["valuation_heat"] for item in equity_metrics], 45.0)
     supply_chain_acceleration = bounded_score(50.0 + _avg([item["acceleration"] for item in equity_metrics]) * 220.0 + revenue_acceleration * 70.0)
 
-    narrative = analyze_theme_narrative(theme)
+    narrative = _narrative_proxy(theme, equity_metrics)
     macro_alignment = _macro_alignment(theme, macro_state)
     theme_strength_score = bounded_score(
         (50.0 + relative_momentum * 210.0) * 0.16
@@ -262,6 +261,23 @@ def _macro_alignment(theme: ThemeDefinition, macro: Dict[str, Any]) -> float:
         elif tag in {"fiscal", "capex", "rates"}:
             scores.append(55.0)
     return bounded_score(_avg(scores, 50.0))
+
+
+def _narrative_proxy(theme: ThemeDefinition, equity_metrics: List[Dict[str, Any]]) -> Dict[str, float]:
+    acceleration = _avg([item["acceleration"] for item in equity_metrics])
+    volume = _avg([item["relative_volume"] for item in equity_metrics], 1.0)
+    revenue = _avg([item["revenue_growth"] for item in equity_metrics])
+    momentum = _avg([item["ret_3m"] for item in equity_metrics])
+    keyword_depth = min(len(theme.narrative_keywords), 8)
+    narrative_acceleration = bounded_score(45.0 + max(0.0, acceleration) * 260.0 + max(0.0, volume - 1.0) * 18.0 + max(0.0, revenue) * 42.0)
+    narrative_strength = bounded_score(42.0 + max(0.0, momentum) * 120.0 + keyword_depth * 2.5 + max(0.0, volume - 1.0) * 12.0)
+    narrative_saturation = bounded_score(max(28.0, narrative_strength - 8.0) + max(0.0, momentum) * 55.0)
+    return {
+        "narrative_strength": narrative_strength,
+        "narrative_acceleration": narrative_acceleration,
+        "narrative_saturation": narrative_saturation,
+        "narrative_bubble_risk": bounded_score(narrative_saturation * 0.62 + max(0.0, narrative_acceleration - 72.0) * 0.35),
+    }
 
 
 def _explain_theme(theme: str, strength: float, flow: float, macro: float, narrative: float) -> List[str]:

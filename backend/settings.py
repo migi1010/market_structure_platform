@@ -60,7 +60,7 @@ class Settings:
     theme_ttl_seconds: int = int(os.getenv("THEME_TTL_SECONDS", "900"))
     market_regime_ttl_seconds: int = int(os.getenv("MARKET_REGIME_TTL_SECONDS", "900"))
     market_overview_ttl_seconds: int = int(os.getenv("MARKET_OVERVIEW_TTL_SECONDS", "300"))
-    provider_timeout_seconds: float = float(os.getenv("PROVIDER_TIMEOUT_SECONDS", "12"))
+    provider_timeout_seconds: float = float(os.getenv("PROVIDER_TIMEOUT_SECONDS", "10"))
     provider_retry_count: int = int(os.getenv("PROVIDER_RETRY_COUNT", "3"))
     provider_retry_backoff_seconds: float = float(os.getenv("PROVIDER_RETRY_BACKOFF_SECONDS", "1.25"))
     enable_scheduler: bool = _env_bool("ENABLE_SCHEDULER", False)
