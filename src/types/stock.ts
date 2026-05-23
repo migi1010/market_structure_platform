@@ -101,6 +101,12 @@ export interface AlphaQuantRow {
   company_name: string;
   sector: string;
   alpha_score: number;
+  base_alpha_score?: number;
+  universe_context_score?: number;
+  universe_adjustment?: number;
+  universe_percentile?: number;
+  rank_in_universe?: number;
+  universe?: string;
   quality: number;
   growth: number;
   smart_money: number;

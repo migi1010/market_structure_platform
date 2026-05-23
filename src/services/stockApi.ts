@@ -250,12 +250,26 @@ function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnaly
 }
 
 function fallbackAlpha(universe: string): AlphaQuantResponse {
-  const symbols = ["NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "V"];
-  const rows = symbols.map((symbol) => ({
+  const alphaFallbackUniverses: Record<string, string[]> = {
+    sp500: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "V"],
+    nasdaq100: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "GOOGL", "COST", "TSLA", "AMD"],
+    sox: ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MU"],
+    smh: ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "TXN", "LRCX", "MU"],
+    soxx: ["NVDA", "AVGO", "AMD", "QCOM", "AMAT", "LRCX", "KLAC", "MU", "INTC", "TXN"],
+  };
+  const normalizedUniverse = universe.trim().toLowerCase().replace(/[ /-]+/g, "_");
+  const symbols = alphaFallbackUniverses[normalizedUniverse] ?? alphaFallbackUniverses.sp500;
+  const rows = symbols.map((symbol, index) => ({
     ticker: symbol,
     company_name: symbol,
     sector: "Calibrating",
     alpha_score: 50,
+    base_alpha_score: 50,
+    universe_context_score: 50,
+    universe_adjustment: 0,
+    universe_percentile: symbols.length > 1 ? ((symbols.length - index - 1) / (symbols.length - 1)) * 100 : 100,
+    rank_in_universe: index + 1,
+    universe: universe.toUpperCase(),
     quality: 50,
     growth: 50,
     smart_money: 50,
@@ -498,7 +512,7 @@ export async function warmupQuantEngine(): Promise<void> {
 }
 
 export async function fetchAlphaQuant(universe = "sp500"): Promise<AlphaQuantResponse> {
-  return fetchCachedJson<AlphaQuantResponse>(`miji:alpha:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
+  return fetchCachedJson<AlphaQuantResponse>(`miji:alpha:v2:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
 }
 
 export async function fetchThemeTop(): Promise<ThemeTopResponse> {

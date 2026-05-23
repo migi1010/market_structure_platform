@@ -93,7 +93,21 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         <div className="text-right">
           <p className={`font-mono text-3xl font-semibold ${scoreColor(row?.alpha_score ?? 0)}`}>{(row?.alpha_score ?? 0).toFixed(1)}</p>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Alpha Score</p>
+          <p className="mt-1 text-[10px] font-medium text-[#9BA7B4]">
+            Rank in {row?.universe ?? "Universe"}: <span className="font-mono text-[#C9D1D9]">#{row?.rank_in_universe ?? "--"}</span>
+          </p>
+          <p className="text-[10px] font-medium text-[#9BA7B4]">
+            Percentile: <span className="font-mono text-[#C9D1D9]">{typeof row?.universe_percentile === "number" ? `${row.universe_percentile.toFixed(0)}%` : "--"}</span>
+          </p>
         </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-[#9BA7B4]">
+        <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
+          Base <b className="font-mono text-[#C9D1D9]">{typeof row?.base_alpha_score === "number" ? row.base_alpha_score.toFixed(1) : "--"}</b>
+        </span>
+        <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
+          Adj <b className="font-mono text-[#C9D1D9]">{typeof row?.universe_adjustment === "number" ? `${row.universe_adjustment >= 0 ? "+" : ""}${row.universe_adjustment.toFixed(1)}` : "--"}</b>
+        </span>
       </div>
       <div className="miji-factor-grid mt-4 grid gap-3 md:grid-cols-3">
         <FactorBar label="Smart Money" value={row?.smart_money ?? 0} />
