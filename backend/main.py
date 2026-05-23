@@ -94,7 +94,7 @@ def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
         return True
     lowered_key = cache_key.lower()
     if ":stock:" in lowered_key and isinstance(result, dict):
-        return _finite_positive(result.get("price")) or result.get("quote_status") == "cached"
+        return _finite_positive(result.get("price"))
     if ":bubble:" in lowered_key and isinstance(result, dict):
         data = result.get("bubble_analysis_data") or result
         return data.get("bubble_index") is not None

@@ -35,6 +35,22 @@ def _number_or_none(value: Any) -> float | None:
     return parsed if parsed != 0.0 else None
 
 
+def _first_positive(*values: Any) -> float | None:
+    for value in values:
+        parsed = _nullable_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _first_number(*values: Any) -> float | None:
+    for value in values:
+        parsed = _number_or_none(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def _safe_engine(name: str, task: Any, fallback: Any) -> Any:
     try:
         result = task()
@@ -115,27 +131,52 @@ def _sector(symbol: str, quote: Dict[str, Any]) -> str:
 
 def _resolve_price_snapshot(symbol: str, quote: Dict[str, Any], bubble: Dict[str, Any]) -> Dict[str, Any]:
     history = _history_snapshot(symbol)
-    price = (
-        _nullable_float(quote.get("currentPrice"))
-        or _nullable_float(quote.get("regularMarketPrice"))
-        or _nullable_float(quote.get("regularMarketPreviousClose"))
-        or _nullable_float(quote.get("previousClose"))
-        or _nullable_float(bubble.get("price"))
-        or history["price"]
+    price = _first_positive(
+        quote.get("currentPrice"),
+        quote.get("regularMarketPrice"),
+        quote.get("price"),
+        quote.get("last_price"),
+        quote.get("lastPrice"),
+        quote.get("close"),
+        bubble.get("price"),
+        history["price"],
     )
-    change = _number_or_none(quote.get("regularMarketChange")) or history["change"]
-    change_percent = _number_or_none(quote.get("regularMarketChangePercent")) or history["change_percent"]
-    previous = _nullable_float(quote.get("previousClose") or quote.get("regularMarketPreviousClose"))
+    previous = _first_positive(
+        quote.get("previousClose"),
+        quote.get("regularMarketPreviousClose"),
+        quote.get("previous_close"),
+        quote.get("previousClosePrice"),
+    )
+    change = _first_number(
+        quote.get("regularMarketChange"),
+        quote.get("change"),
+        quote.get("priceChange"),
+        history["change"],
+    )
+    change_percent = _first_number(
+        quote.get("regularMarketChangePercent"),
+        quote.get("change_percent"),
+        quote.get("changePercent"),
+        quote.get("percentChange"),
+        history["change_percent"],
+    )
     if change_percent is None and price is not None and previous is not None and previous > 0:
         change_percent = (price - previous) / previous * 100.0
     if change is None and price is not None and previous is not None:
         change = price - previous
+    quote_status = str(quote.get("quoteStatus") or quote.get("quote_status") or "").strip().lower()
+    if not quote_status:
+        quote_status = "live" if price is not None else "unavailable"
     return {
         "price": round(float(price), 4) if price is not None and price > 0 else None,
         "change": round(float(change), 4) if change is not None else None,
         "change_percent": round(float(change_percent), 4) if change_percent is not None else None,
-        "source": str(quote.get("quoteStatus") or "live") if price is not None else "unavailable",
+        "source": quote_status if price is not None else "unavailable",
     }
+
+
+def _resolve_market_cap(quote: Dict[str, Any]) -> float | None:
+    return _first_positive(quote.get("marketCap"), quote.get("market_cap"))
 
 
 def _fallback_smart_money() -> Dict[str, Any]:
@@ -332,7 +373,7 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
         "price": price,
         "change": snapshot["change"],
         "change_percent": snapshot["change_percent"],
-        "market_cap": _number_or_none(quote.get("marketCap")),
+        "market_cap": _resolve_market_cap(quote),
         "sector": _sector(ticker, quote),
         "quote_status": snapshot["source"],
         "bubble_analysis_data": bubble_data,

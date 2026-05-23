@@ -23,7 +23,7 @@ from quant_engine.data_pipeline.providers import (
 )
 from settings import get_settings
 
-CACHE_SCHEMA_VERSION = "stock_v3"
+CACHE_SCHEMA_VERSION = "stock_v4"
 _LOCKS_GUARD = threading.Lock()
 _LOCKS: dict[str, threading.Lock] = {}
 
