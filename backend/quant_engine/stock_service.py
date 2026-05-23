@@ -69,27 +69,32 @@ def _fallback_bubble(symbol: str, quote: Dict[str, Any], price: float | None) ->
         "price": price,
         "sector": _sector(symbol, quote),
         "bubble_analysis_data": {
-            "revenue": 0.0,
-            "net_income": 0.0,
-            "gross_margin": 0.0,
-            "operating_cash_flow": 0.0,
-            "free_cash_flow": 0.0,
-            "total_assets": 0.0,
-            "total_liabilities": 0.0,
-            "debt_ratio": 0.0,
-            "pe_ratio": safe_float(quote.get("trailingPE") or quote.get("forwardPE")),
-            "ps_ratio": safe_float(quote.get("priceToSalesTrailing12Months")),
-            "bubble_index": 50.0,
+            "available": False,
+            "status": "calibrating",
+            "revenue": None,
+            "net_income": None,
+            "gross_margin": None,
+            "operating_cash_flow": None,
+            "free_cash_flow": None,
+            "total_assets": None,
+            "total_liabilities": None,
+            "debt_ratio": None,
+            "pe_ratio": _number_or_none(quote.get("trailingPE") or quote.get("forwardPE")),
+            "ps_ratio": _number_or_none(quote.get("priceToSalesTrailing12Months")),
+            "bubble_index": None,
             "classification": "Calibrating",
-            "valuation_heat": 0.0,
-            "revenue_divergence": 0.0,
-            "fcf_quality": 0.0,
-            "dilution_risk": 0.0,
-            "distribution_signal": 0.0,
-            "retail_speculation": 0.0,
-            "accrual_ratio": 0.0,
-            "net_income_quality": 0.0,
-            "ai_summary": "Bubble intelligence is calibrating with cached institutional fundamentals.",
+            "confidence": "unavailable",
+            "confidence_score": None,
+            "confidence_label": "Unavailable",
+            "valuation_heat": None,
+            "revenue_divergence": None,
+            "fcf_quality": None,
+            "dilution_risk": None,
+            "distribution_signal": None,
+            "retail_speculation": None,
+            "accrual_ratio": None,
+            "net_income_quality": None,
+            "ai_summary": "Bubble intelligence is calibrating. Live fundamentals are temporarily unavailable.",
         },
     }
 
@@ -129,36 +134,61 @@ def _resolve_price_snapshot(symbol: str, quote: Dict[str, Any], bubble: Dict[str
         "price": round(float(price), 4) if price is not None and price > 0 else None,
         "change": round(float(change), 4) if change is not None else None,
         "change_percent": round(float(change_percent), 4) if change_percent is not None else None,
-        "source": "live_or_cached" if price is not None else "unavailable",
+        "source": str(quote.get("quoteStatus") or "live") if price is not None else "unavailable",
     }
 
 
 def _fallback_smart_money() -> Dict[str, Any]:
     return {
-        "smart_money_score": 50.0,
-        "accumulation_detection": 50.0,
-        "abnormal_volume": 50.0,
-        "institutional_footprint": 50.0,
-        "price_volume_divergence": 0.0,
-        "stealth_accumulation": 50.0,
-        "dark_pool_style_logic": 50.0,
-        "summary": "Smart money model is calibrating with cached volume structure.",
+        "available": False,
+        "status": "calibrating",
+        "smart_money_score": None,
+        "score": None,
+        "confidence": "unavailable",
+        "confidence_score": None,
+        "confidence_label": "Unavailable",
+        "accumulation_detection": None,
+        "abnormal_volume": None,
+        "institutional_footprint": None,
+        "price_volume_divergence": None,
+        "stealth_accumulation": None,
+        "dark_pool_style_logic": None,
+        "summary": "Smart money model is calibrating. Live volume structure is temporarily unavailable.",
     }
 
 
 def _fallback_earnings() -> Dict[str, Any]:
     return {
-        "earnings_quality_score": 50.0,
-        "fcf_conversion": 0.0,
-        "accrual_ratio": 0.0,
-        "sbc_dilution": 0.0,
-        "debt_quality": 50.0,
-        "capex_distortion": 0.0,
-        "amortization_distortion": 0.0,
-        "operating_cashflow_quality": 50.0,
+        "available": False,
+        "status": "calibrating",
+        "earnings_quality_score": None,
+        "quality_score": None,
+        "confidence": "unavailable",
+        "confidence_score": None,
+        "confidence_label": "Unavailable",
+        "fcf_conversion": None,
+        "accrual_ratio": None,
+        "sbc_dilution": None,
+        "debt_quality": None,
+        "capex_distortion": None,
+        "amortization_distortion": None,
+        "operating_cashflow_quality": None,
         "adjusted_net_income": None,
-        "summary": "Earnings quality engine is calibrating with cached fundamentals.",
+        "summary": "Earnings quality engine is calibrating. Live fundamentals are temporarily unavailable.",
     }
+
+
+def _looks_like_empty_bubble(data: Dict[str, Any]) -> bool:
+    financial_keys = ["revenue", "net_income", "operating_cash_flow", "free_cash_flow", "total_assets", "total_liabilities"]
+    values = [data.get(key) for key in financial_keys]
+    score = data.get("bubble_index")
+    return all(value in (None, 0, 0.0) for value in values) and score in (None, 50, 50.0)
+
+
+def _looks_like_empty_score(data: Dict[str, Any], score_key: str) -> bool:
+    score = data.get(score_key)
+    confidence = data.get("confidence_score")
+    return score in (50, 50.0, None) and confidence in (None, 0, 0.0)
 
 
 def fallback_stock_payload(symbol: str) -> Dict[str, Any]:
@@ -278,15 +308,23 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
     regime = _safe_engine("market_regime", detect_market_regime, {"name": "Calibrating", "confidence": 50.0, "fallback": True})
     price = snapshot["price"]
     analyst = _analyst_consensus(ticker, price)
-    smart_score = safe_float(smart.get("smart_money_score"), 50.0)
+    smart_raw = smart.get("smart_money_score")
+    smart_score = safe_float(smart_raw, 50.0) if smart_raw is not None else None
     regime_name = str(regime.get("name") or "Calibrating")
     regime_confidence = safe_float(regime.get("confidence"), 50.0)
     bullish_regimes = {"Bull Expansion", "Bull Consolidation", "Risk-On Momentum", "Inflationary Expansion", "AI Speculative Mania"}
     bearish_regimes = {"High Volatility", "Defensive Rotation", "Recession Risk", "Liquidity Stress"}
-    trend = "Bullish" if regime_name in bullish_regimes or smart_score >= 60 else "Bearish" if regime_name in bearish_regimes else "Low Confidence"
+    trend = "Bullish" if regime_name in bullish_regimes or (smart_score is not None and smart_score >= 60) else "Bearish" if regime_name in bearish_regimes else "Low Confidence"
     model_available = not bool(regime.get("fallback"))
-    bull_probability = min(0.92, max(0.08, 0.5 + (smart_score - 50.0) / 180.0 + (regime_confidence - 50.0) / 420.0)) if model_available else None
+    smart_component = ((smart_score - 50.0) / 180.0) if smart_score is not None else 0.0
+    bull_probability = min(0.92, max(0.08, 0.5 + smart_component + (regime_confidence - 50.0) / 420.0)) if model_available else None
     bubble_data = bubble.get("bubble_analysis_data") or _fallback_bubble(ticker, quote, price)["bubble_analysis_data"]
+    if _looks_like_empty_bubble(bubble_data):
+        bubble_data = _fallback_bubble(ticker, quote, price)["bubble_analysis_data"]
+    if _looks_like_empty_score(earnings, "earnings_quality_score"):
+        earnings = _fallback_earnings()
+    if _looks_like_empty_score(smart, "smart_money_score"):
+        smart = _fallback_smart_money()
 
     return {
         "ticker": ticker,

@@ -77,6 +77,43 @@ def analyze_bubble(symbol: str) -> Dict[str, Any]:
         "debt_ratio": debt_ratio,
         "accrual_ratio": accrual_ratio,
     })
+    if completeness < 20 and price_return == 0.0 and inputs["pe_ratio"] == 0.0 and inputs["ps_ratio"] == 0.0:
+        return {
+            "ticker": ticker,
+            "company_name": info.get("longName") or info.get("shortName") or ticker,
+            "price": None,
+            "sector": info.get("sector") or "Unknown",
+            "bubble_analysis_data": {
+                "available": False,
+                "status": "calibrating",
+                "revenue": None,
+                "net_income": None,
+                "gross_margin": None,
+                "operating_cash_flow": None,
+                "free_cash_flow": None,
+                "total_assets": None,
+                "total_liabilities": None,
+                "debt_ratio": None,
+                "pe_ratio": None,
+                "ps_ratio": None,
+                "bubble_index": None,
+                "classification": "Calibrating",
+                "confidence": "unavailable",
+                "confidence_score": None,
+                "confidence_label": "Unavailable",
+                "data_completeness": completeness,
+                "factor_breakdown": {},
+                "valuation_heat": None,
+                "revenue_divergence": None,
+                "fcf_quality": None,
+                "dilution_risk": None,
+                "distribution_signal": None,
+                "retail_speculation": None,
+                "accrual_ratio": None,
+                "net_income_quality": None,
+                "ai_summary": "Bubble risk is unavailable because valuation, price history, and financial statement coverage are insufficient.",
+            },
+        }
     raw_score = calculate_bubble_index(**inputs)
     confidence_penalty = (100.0 - completeness) * 0.10
     score = bounded_score(raw_score - confidence_penalty)

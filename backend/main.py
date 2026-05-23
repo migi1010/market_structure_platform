@@ -15,7 +15,7 @@ from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
 from quant_engine.bubble_engine import analyze_bubble
-from quant_engine.data_pipeline import get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
+from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
 from quant_engine.earnings_quality_engine import analyze_earnings_quality
 from quant_engine.qlib_engine import run_alpha_ranking
 from quant_engine.regime_engine import detect_market_regime
@@ -77,6 +77,36 @@ def _cache_key(namespace: str, *parts: Any) -> str:
     return f"endpoint:{namespace}:{suffix}" if suffix else f"endpoint:{namespace}"
 
 
+def _schema_cache_key(namespace: str, *parts: Any) -> str:
+    return _cache_key(CACHE_SCHEMA_VERSION, namespace, *parts)
+
+
+def _finite_positive(value: Any) -> bool:
+    try:
+        parsed = float(value)
+        return parsed > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
+    if not isinstance(result, (dict, list)):
+        return True
+    lowered_key = cache_key.lower()
+    if ":stock:" in lowered_key and isinstance(result, dict):
+        return _finite_positive(result.get("price")) or result.get("quote_status") == "cached"
+    if ":bubble:" in lowered_key and isinstance(result, dict):
+        data = result.get("bubble_analysis_data") or result
+        return data.get("bubble_index") is not None
+    if ":smart_money:" in lowered_key and isinstance(result, dict):
+        return result.get("smart_money_score") is not None
+    if ":earnings_quality:" in lowered_key and isinstance(result, dict):
+        return result.get("earnings_quality_score") is not None
+    if ":market_overview" in lowered_key and isinstance(result, list):
+        return any(_finite_positive(item.get("price")) for item in result if isinstance(item, dict))
+    return True
+
+
 def _cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any]) -> Any:
     cached = get_cached_value(cache_key)
     if cached is not None:
@@ -85,7 +115,10 @@ def _cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any]) 
     started = time.perf_counter()
     try:
         result = task()
-        set_cached_value(cache_key, result, ttl_seconds, "json")
+        if _cacheable_endpoint_result(cache_key, result):
+            set_cached_value(cache_key, result, ttl_seconds, "json")
+        else:
+            logger.warning("skipping endpoint cache write for low-quality result key=%s", cache_key)
         logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
         return result
     except Exception:
@@ -100,7 +133,10 @@ def _schedule_cache_refresh(cache_key: str, ttl_seconds: int, task: Callable[[],
     def refresh() -> None:
         try:
             result = task()
-            set_cached_value(cache_key, result, ttl_seconds, "json")
+            if _cacheable_endpoint_result(cache_key, result):
+                set_cached_value(cache_key, result, ttl_seconds, "json")
+            else:
+                logger.warning("skipping background cache write for low-quality result key=%s", cache_key)
             logger.info("background cache refresh complete key=%s", cache_key)
         except Exception as exc:
             logger.warning("background cache refresh failed key=%s error=%s", cache_key, exc)
@@ -123,7 +159,10 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
     def store_result_when_ready(completed: Any) -> None:
         try:
             result = completed.result()
-            set_cached_value(cache_key, result, ttl_seconds, "json")
+            if _cacheable_endpoint_result(cache_key, result):
+                set_cached_value(cache_key, result, ttl_seconds, "json")
+            else:
+                logger.warning("skipping deferred cache write for low-quality result key=%s", cache_key)
             logger.info("deferred cache fill complete key=%s", cache_key)
         except Exception as exc:
             logger.warning("deferred cache fill failed key=%s error=%s", cache_key, exc)
@@ -132,7 +171,10 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
     started = time.perf_counter()
     try:
         result = future.result(timeout=CACHE_MISS_WAIT_SECONDS)
-        set_cached_value(cache_key, result, ttl_seconds, "json")
+        if _cacheable_endpoint_result(cache_key, result):
+            set_cached_value(cache_key, result, ttl_seconds, "json")
+        else:
+            logger.warning("skipping endpoint cache write for low-quality result key=%s", cache_key)
         logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
         return result
     except TimeoutError:
@@ -370,13 +412,19 @@ async def unhandled_exception_handler(_, exc: Exception):
 @app.get("/stock/{ticker}")
 def get_stock(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _fast_cached_response(_cache_key("stock_v3", symbol), settings.quote_ttl_seconds, lambda: analyze_stock(symbol), lambda: fallback_stock_payload(symbol)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: analyze_stock(symbol), lambda: fallback_stock_payload(symbol)))
+
+
+@app.get("/debug/provider/{ticker}")
+def get_provider_debug(ticker: str) -> dict:
+    symbol = ticker.strip().upper()
+    return _guard(lambda: debug_provider(symbol))
 
 
 @app.get("/alpha/top")
 def get_alpha_top(universe: str = Query("sp500")) -> dict:
     normalized = universe.strip().lower()
-    return _guard(lambda: _fast_cached_response(_cache_key("alpha_top_v2", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("alpha_v3", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
 
 
 @app.get("/backtest/top-alpha")
@@ -390,12 +438,12 @@ def backtest_top_alpha(
 @app.get("/bubble/{ticker}")
 def get_bubble(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_cache_key("bubble_v2", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_bubble(symbol)))
+    return _guard(lambda: _cached_response(_schema_cache_key("bubble", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_bubble(symbol)))
 
 
 @app.get("/market/regime")
 def get_market_regime() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("market_regime_v2"), settings.market_regime_ttl_seconds, detect_market_regime, lambda: {"name": "Calibrating", "confidence": 38.0, "confidence_label": "Low Confidence", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("market_regime"), settings.market_regime_ttl_seconds, detect_market_regime, lambda: {"name": "Calibrating", "confidence": 38.0, "confidence_label": "Low Confidence", "fallback": True}))
 
 
 @app.get("/market/overview")
@@ -425,55 +473,55 @@ def get_market_overview() -> list[dict]:
             })
         return tape
 
-    return _guard(lambda: _cached_response(_cache_key("market_overview"), settings.market_overview_ttl_seconds, build))
+    return _guard(lambda: _cached_response(_schema_cache_key("market_overview"), settings.market_overview_ttl_seconds, build))
 
 
 @app.get("/sector/rotation")
 def get_sector_rotation() -> list[dict]:
-    return _guard(lambda: _fast_cached_response(_cache_key("sector_rotation_v2"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("sector_rotation"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
 
 
 @app.get("/theme/top")
 def get_theme_top() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("theme_top_v3"), settings.theme_ttl_seconds, get_top_themes, _fallback_theme_top))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "top"), settings.theme_ttl_seconds, get_top_themes, _fallback_theme_top))
 
 
 @app.get("/theme/emerging")
 def get_theme_emerging() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("theme_emerging_v3"), settings.theme_ttl_seconds, get_emerging_themes, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "emerging_themes": _fallback_theme_top()["themes"][:6], "summary": "Theme engine calibrating. No active emerging signal confirmed yet.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "emerging"), settings.theme_ttl_seconds, get_emerging_themes, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "emerging_themes": _fallback_theme_top()["themes"][:6], "summary": "Theme engine calibrating. No active emerging signal confirmed yet.", "fallback": True}))
 
 
 @app.get("/theme/rotation")
 def get_theme_rotation_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("theme_rotation_v3"), settings.theme_ttl_seconds, get_theme_rotation, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "rotation_map": _fallback_theme_top()["themes"], "strengthening": [], "weakening": [], "overheated_themes": [], "undervalued_themes": [], "summary": "Theme rotation matrix is calibrating.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "rotation"), settings.theme_ttl_seconds, get_theme_rotation, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "rotation_map": _fallback_theme_top()["themes"], "strengthening": [], "weakening": [], "overheated_themes": [], "undervalued_themes": [], "summary": "Theme rotation matrix is calibrating.", "fallback": True}))
 
 
 @app.get("/theme/capital-flow")
 def get_theme_capital_flow_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("theme_capital_flow_v3"), settings.theme_ttl_seconds, get_theme_capital_flow, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "capital_flow": _fallback_theme_top()["themes"][:8], "summary": "Capital flow temporarily unavailable. Using latest cached institutional intelligence.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "capital_flow"), settings.theme_ttl_seconds, get_theme_capital_flow, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "capital_flow": _fallback_theme_top()["themes"][:8], "summary": "Capital flow temporarily unavailable. Using latest cached institutional intelligence.", "fallback": True}))
 
 
 @app.get("/theme/supply-chain")
 def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
-    key = _cache_key("theme_supply_chain_v3", theme or "all")
+    key = _schema_cache_key("theme_v3", "supply_chain", theme or "all")
     return _guard(lambda: _fast_cached_response(key, settings.theme_ttl_seconds, lambda: get_theme_supply_chain(theme), lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "themes": [], "summary": "Supply chain map calibrating.", "fallback": True}))
 
 
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_cache_key("theme_narrative_v3"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
 
 
 @app.get("/smart-money/{ticker}")
 def get_smart_money(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_cache_key("smart_money_v2", symbol), settings.quote_ttl_seconds, lambda: analyze_smart_money(symbol)))
+    return _guard(lambda: _cached_response(_schema_cache_key("smart_money", symbol), settings.quote_ttl_seconds, lambda: analyze_smart_money(symbol)))
 
 
 @app.get("/earnings-quality/{ticker}")
 def get_earnings_quality(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_cache_key("earnings_quality_v2", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_earnings_quality(symbol)))
+    return _guard(lambda: _cached_response(_schema_cache_key("earnings_quality", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_earnings_quality(symbol)))
 
 
 @app.api_route("/warmup", methods=["GET", "POST"])

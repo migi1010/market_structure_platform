@@ -31,6 +31,13 @@ def analyze_earnings_quality(symbol: str) -> Dict[str, Any]:
     sbc_dilution = sbc / max(revenue, 1.0) if revenue != 0 and sbc != 0 else None
 
     adjusted_net_income = net_income - max(0.0, sbc) + max(0.0, depreciation * 0.35)
+    gross_margin = info.get("grossMargins")
+    profit_margin = info.get("profitMargins")
+    margin_proxy = (
+        bounded_score(45.0 + safe_float(profit_margin) * 130.0 + safe_float(gross_margin) * 45.0)
+        if gross_margin is not None or profit_margin is not None
+        else None
+    )
     factor_scores = {
         "fcf_conversion": (bounded_score(35.0 + min(1.8, fcf_conversion) * 34.0) if fcf_conversion is not None else None, 0.18),
         "ocf_net_income": (bounded_score(40.0 + min(2.0, operating_cashflow_quality) * 28.0) if operating_cashflow_quality is not None else None, 0.16),
@@ -39,9 +46,36 @@ def analyze_earnings_quality(symbol: str) -> Dict[str, Any]:
         "debt_quality": (bounded_score(45.0 + max(-1.0, min(1.0, debt_quality)) * 38.0) if debt_quality is not None else None, 0.12),
         "capex_efficiency": (bounded_score(72.0 - max(0.0, capex_distortion - 0.45) * 42.0) if capex_distortion is not None else None, 0.10),
         "amortization_quality": (bounded_score(70.0 - max(0.0, amortization_distortion - 0.35) * 28.0) if amortization_distortion is not None else None, 0.08),
-        "margin_proxy": (bounded_score(45.0 + safe_float(info.get("profitMargins")) * 130.0 + safe_float(info.get("grossMargins")) * 45.0), 0.12),
+        "margin_proxy": (margin_proxy, 0.12),
     }
     quality_score, completeness = partial_weighted_score(factor_scores, neutral=48.0)
+    if completeness < 18 and revenue == 0 and net_income == 0 and operating_cash_flow == 0:
+        return {
+            "ticker": ticker,
+            "available": False,
+            "status": "calibrating",
+            "quality_score": None,
+            "earnings_quality_score": None,
+            "confidence": "unavailable",
+            "confidence_score": None,
+            "confidence_label": "Unavailable",
+            "data_completeness": completeness,
+            "data_status": "Unavailable",
+            "adjusted_net_income": None,
+            "net_income": None,
+            "free_cash_flow": None,
+            "operating_cash_flow": None,
+            "fcf_conversion": None,
+            "accrual_ratio": None,
+            "sbc_dilution": None,
+            "debt_quality": None,
+            "capex_distortion": None,
+            "amortization_distortion": None,
+            "operating_cashflow_quality": None,
+            "bullish_factors": [],
+            "risk_factors": ["Live financial statements are unavailable; score withheld instead of using a neutral fallback."],
+            "summary": "Earnings quality is temporarily unavailable because financial statement coverage is insufficient.",
+        }
     bullish_factors = []
     risk_factors = []
     if fcf_conversion is not None and fcf_conversion >= 1.0:

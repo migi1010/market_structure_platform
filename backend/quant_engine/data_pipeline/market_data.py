@@ -16,10 +16,14 @@ from quant_engine.data_pipeline.providers import (
     fetch_yfinance_history,
     fetch_yfinance_news,
     fetch_yfinance_statements,
+    finite_float,
+    provider_diagnostics,
+    robust_quote_fetch,
     safe_float,
 )
 from settings import get_settings
 
+CACHE_SCHEMA_VERSION = "stock_v3"
 _LOCKS_GUARD = threading.Lock()
 _LOCKS: dict[str, threading.Lock] = {}
 
@@ -125,30 +129,43 @@ def set_cached_value(cache_key: str, value: Any, ttl_seconds: int, content_type:
     _set_cached(cache_key, value, ttl_seconds, content_type)
 
 
+def _quote_has_price(quote: Dict[str, Any] | None) -> bool:
+    if not isinstance(quote, dict):
+        return False
+    price = finite_float(quote.get("currentPrice") or quote.get("regularMarketPrice"))
+    return price is not None and price > 0
+
+
+def _statements_available(statements: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | Any) -> bool:
+    if not isinstance(statements, tuple) or len(statements) != 3:
+        return False
+    return any(frame is not None and not getattr(frame, "empty", True) for frame in statements)
+
+
 def get_quote(symbol: str) -> Dict[str, Any]:
     normalized = symbol.strip().upper()
-    cache_key = f"quote:{normalized}"
+    cache_key = f"quote_v3:{normalized}"
     cached = _get_cached(cache_key)
-    if isinstance(cached, dict):
+    if _quote_has_price(cached):
         return cached
     stale = _get_cached(cache_key, allow_expired=True)
     with _lock_for(cache_key):
         cached = _get_cached(cache_key)
-        if isinstance(cached, dict):
+        if _quote_has_price(cached):
             return cached
         stale = _get_cached(cache_key, allow_expired=True)
-        quote = fetch_quote_with_fallbacks(normalized) or {}
-        if quote:
+        quote = robust_quote_fetch(normalized, stale if isinstance(stale, dict) else None) or {}
+        if _quote_has_price(quote):
             _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
             return quote
-        if isinstance(stale, dict) and stale:
+        if _quote_has_price(stale):
             return stale
-        return {"symbol": normalized, "shortName": normalized, "longName": normalized, "sector": "US Equity"}
+        return quote if isinstance(quote, dict) else {"symbol": normalized, "quoteStatus": "unavailable"}
 
 
 def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
     normalized = symbol.strip().upper()
-    cache_key = f"history:{normalized}:{period}"
+    cache_key = f"history_v3:{normalized}:{period}"
     cached = _get_cached(cache_key)
     if isinstance(cached, pd.DataFrame):
         return cached
@@ -177,22 +194,34 @@ def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
 
 def get_statements(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     normalized = symbol.strip().upper()
-    cache_key = f"statements:{normalized}"
+    cache_key = f"financials_v3:{normalized}"
     cached = _get_cached(cache_key)
-    if isinstance(cached, tuple) and len(cached) == 3:
+    if _statements_available(cached):
         return cached
+    stale = _get_cached(cache_key, allow_expired=True)
     with _lock_for(cache_key):
         cached = _get_cached(cache_key)
-        if isinstance(cached, tuple) and len(cached) == 3:
+        if _statements_available(cached):
             return cached
-        statements = fetch_yfinance_statements(normalized)
-        _set_cached(cache_key, statements, get_settings().statement_ttl_seconds, "pickle")
+        stale = _get_cached(cache_key, allow_expired=True)
+        try:
+            statements = fetch_yfinance_statements(normalized)
+        except Exception:
+            if _statements_available(stale):
+                return stale
+            empty = pd.DataFrame()
+            return empty, empty, empty
+        if _statements_available(statements):
+            _set_cached(cache_key, statements, get_settings().statement_ttl_seconds, "pickle")
+            return statements
+        if _statements_available(stale):
+            return stale
         return statements
 
 
 def get_news(symbol: str) -> List[Dict[str, Any]]:
     normalized = symbol.strip().upper()
-    cache_key = f"news:{normalized}"
+    cache_key = f"news_v3:{normalized}"
     cached = _get_cached(cache_key)
     if isinstance(cached, list):
         return cached
@@ -233,3 +262,7 @@ def statement_value(statement: pd.DataFrame, names: List[str], offset: int = 0) 
 
 def previous_statement_value(statement: pd.DataFrame, names: List[str]) -> float:
     return statement_value(statement, names, offset=1)
+
+
+def debug_provider(symbol: str) -> Dict[str, Any]:
+    return provider_diagnostics(symbol, get_settings().environment)
