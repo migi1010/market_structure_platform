@@ -30,6 +30,39 @@ const POPULAR_SYMBOLS: SearchResult[] = [
   { symbol: "NOW", name: "ServiceNow, Inc.", exchange: "NYSE", type: "Equity" },
 ];
 
+const STOCK_METADATA: Record<string, { name: string; sector: string }> = {
+  AAPL: { name: "Apple Inc.", sector: "Technology" },
+  NVDA: { name: "NVIDIA Corporation", sector: "Technology" },
+  MSFT: { name: "Microsoft Corporation", sector: "Technology" },
+  AMZN: { name: "Amazon.com Inc.", sector: "Consumer Discretionary" },
+  META: { name: "Meta Platforms Inc.", sector: "Communication Services" },
+  TSLA: { name: "Tesla Inc.", sector: "Consumer Discretionary" },
+  PLTR: { name: "Palantir Technologies Inc.", sector: "Technology" },
+  AMD: { name: "Advanced Micro Devices Inc.", sector: "Technology" },
+  AVGO: { name: "Broadcom Inc.", sector: "Technology" },
+  NOW: { name: "ServiceNow Inc.", sector: "Technology" },
+  SPY: { name: "SPDR S&P 500 ETF Trust", sector: "ETF" },
+  QQQ: { name: "Invesco QQQ Trust", sector: "ETF" },
+  SMH: { name: "VanEck Semiconductor ETF", sector: "ETF" },
+};
+
+const UNIVERSAL_SEARCH: SearchResult[] = [
+  { symbol: "HBM", name: "High Bandwidth Memory / 高頻寬記憶體", exchange: "Theme", type: "Theme" },
+  { symbol: "NUCLEAR", name: "Nuclear Energy / 核能", exchange: "Theme", type: "Theme" },
+  { symbol: "COPPER", name: "Cable / Copper / 電纜銅材", exchange: "Theme", type: "Theme" },
+  { symbol: "GRID", name: "Electric Grid / 電網基建", exchange: "Theme", type: "Theme" },
+  { symbol: "DEFENSE AI", name: "Defense AI / 國防 AI", exchange: "Theme", type: "Theme" },
+  { symbol: "ROBOTICS", name: "Robotics / 機器人", exchange: "Theme", type: "Theme" },
+  { symbol: "CYBERSECURITY", name: "Cybersecurity / 資安", exchange: "Theme", type: "Theme" },
+  { symbol: "SEMICONDUCTOR", name: "Semiconductor / 半導體", exchange: "Sector", type: "Sector" },
+  { symbol: "UTILITIES", name: "Utilities / 公用事業", exchange: "Sector", type: "Sector" },
+  { symbol: "ENERGY", name: "Energy / 能源", exchange: "Sector", type: "Sector" },
+  { symbol: "FINANCIALS", name: "Financials / 金融", exchange: "Sector", type: "Sector" },
+  { symbol: "SMH", name: "VanEck Semiconductor ETF", exchange: "ETF", type: "ETF" },
+  { symbol: "SOXX", name: "iShares Semiconductor ETF", exchange: "ETF", type: "ETF" },
+  { symbol: "QQQ", name: "Invesco QQQ Trust", exchange: "ETF", type: "ETF" },
+];
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -103,6 +136,115 @@ async function fetchCachedJson<T>(cacheKey: string, url: string, fallback: T): P
     if (cached) return cached;
     return fallback;
   }
+}
+
+function validNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value !== 0 ? value : null;
+}
+
+function stockMetadata(symbol: string): { name: string; sector: string } {
+  return STOCK_METADATA[symbol] ?? { name: symbol, sector: "US Equity" };
+}
+
+function fallbackStock(symbol: string): StockAnalysis {
+  const metadata = stockMetadata(symbol);
+  return {
+    ticker: symbol,
+    company_name: metadata.name,
+    price: null,
+    change: null,
+    change_percent: null,
+    market_cap: null,
+    sector: metadata.sector,
+    quote_status: "unavailable",
+    bubble_analysis_data: {
+      revenue: 0,
+      net_income: 0,
+      gross_margin: 0,
+      operating_cash_flow: 0,
+      free_cash_flow: 0,
+      total_assets: 0,
+      total_liabilities: 0,
+      debt_ratio: 0,
+      pe_ratio: 0,
+      ps_ratio: 0,
+      bubble_index: 50,
+      classification: "Neutral Watch",
+      valuation_heat: 0,
+      revenue_divergence: 0,
+      fcf_quality: 0,
+      dilution_risk: 0,
+      distribution_signal: 0,
+      retail_speculation: 0,
+      accrual_ratio: 0,
+      net_income_quality: 0,
+      ai_summary: "Bubble intelligence is calibrating with cached institutional fundamentals.",
+    },
+    analyst_targets: {
+      available: false,
+      high: null,
+      average: null,
+      low: null,
+      average_target: null,
+      implied_upside: null,
+      buy: null,
+      hold: null,
+      sell: null,
+    },
+    analyst_consensus: {
+      available: false,
+      average_target: null,
+      implied_upside: null,
+      buy: null,
+      hold: null,
+      sell: null,
+    },
+    hmm_prediction: {
+      available: false,
+      predicted_trend: "Calibrating model...",
+      bull_probability: null,
+      bear_probability: null,
+      regime_state: "Awaiting regime confirmation...",
+      confidence: null,
+      message: "Using fallback market regime...",
+    },
+    news: [],
+  };
+}
+
+function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnalysis {
+  const fallback = fallbackStock(symbol);
+  const company = data?.company_name && data.company_name !== "Unknown" ? data.company_name : fallback.company_name;
+  const sector = data?.sector && data.sector !== "Unknown" ? data.sector : fallback.sector;
+  const price = validNumber(data?.price);
+  const changePercent = validNumber(data?.change_percent);
+  const change = validNumber(data?.change);
+  const hmm = data?.hmm_prediction ?? fallback.hmm_prediction;
+  const trend = typeof hmm?.predicted_trend === "string" ? hmm.predicted_trend : "";
+  const hmmAvailable = hmm?.available !== false && trend !== "Neutral" && !trend.toLowerCase().includes("calibrating") && validNumber(hmm?.confidence) !== null && validNumber(hmm?.bull_probability) !== null;
+  return {
+    ...fallback,
+    ...data,
+    ticker: (data?.ticker ?? symbol).trim().toUpperCase(),
+    company_name: company,
+    sector,
+    price,
+    change,
+    change_percent: changePercent,
+    market_cap: validNumber(data?.market_cap),
+    quote_status: price !== null ? data?.quote_status ?? "live_or_cached" : "unavailable",
+    hmm_prediction: {
+      ...fallback.hmm_prediction,
+      ...hmm,
+      available: hmmAvailable,
+      predicted_trend: hmmAvailable ? hmm.predicted_trend : "Calibrating model...",
+      bull_probability: hmmAvailable ? hmm.bull_probability : null,
+      bear_probability: hmmAvailable ? hmm.bear_probability : null,
+      confidence: hmmAvailable ? hmm.confidence : null,
+      regime_state: hmmAvailable ? hmm.regime_state : "Awaiting regime confirmation...",
+      message: hmmAvailable ? hmm.message : "Using fallback market regime...",
+    },
+  };
 }
 
 function fallbackAlpha(universe: string): AlphaQuantResponse {
@@ -203,13 +345,18 @@ function fallbackThemeTop(): ThemeTopResponse {
 
 export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis> {
   const symbol = ticker.trim().toUpperCase();
+  const cacheKey = `miji:stock:${symbol}`;
+  const cached = readLocalCache<StockAnalysis>(cacheKey);
+  const fallback = cached ? normalizeStockAnalysis(cached, symbol) : fallbackStock(symbol);
   try {
     const response = await fetchWithRetry(`${API_URL}/stock/${encodeURIComponent(symbol)}`, {
       cache: "no-store",
     });
-    return readJson<StockAnalysis>(response);
+    const data = normalizeStockAnalysis(await readJson<StockAnalysis>(response), symbol);
+    writeLocalCache(cacheKey, data);
+    return data;
   } catch {
-    throw new Error("Connecting to quant engine...");
+    return fallback;
   }
 }
 
@@ -221,22 +368,27 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
     const haystack = `${item.symbol} ${item.name}`.toUpperCase();
     return haystack.includes(normalized);
   });
+  const universalMatches = UNIVERSAL_SEARCH.filter((item) => {
+    const haystack = `${item.symbol} ${item.name} ${item.type}`.toUpperCase();
+    return haystack.includes(normalized);
+  });
 
-  if (normalized.length <= 1) return localMatches.slice(0, 8);
+  if (normalized.length <= 1) return [...localMatches, ...universalMatches].slice(0, 8);
 
   try {
     const response = await fetchWithRetry(`${API_URL}/search?q=${encodeURIComponent(normalized)}`, {
       cache: "no-store",
     });
     const remote = await readJson<SearchResult[]>(response);
-    const merged = [...localMatches, ...remote].reduce<SearchResult[]>((acc, item) => {
+    const merged = [...localMatches, ...universalMatches, ...remote].reduce<SearchResult[]>((acc, item) => {
       if (!acc.some((existing) => existing.symbol === item.symbol)) acc.push(item);
       return acc;
     }, []);
     return merged.slice(0, 8);
   } catch {
-    return localMatches.length > 0
-      ? localMatches.slice(0, 8)
+    const fallback = [...localMatches, ...universalMatches];
+    return fallback.length > 0
+      ? fallback.slice(0, 8)
       : [{ symbol: normalized, name: normalized, exchange: "US", type: "Equity" }];
   }
 }

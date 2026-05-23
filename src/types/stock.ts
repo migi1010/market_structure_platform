@@ -22,11 +22,13 @@ export interface AnalystConsensus {
 }
 
 export interface HmmPrediction {
+  available?: boolean;
   predicted_trend: string;
-  bull_probability: number;
-  bear_probability: number;
+  bull_probability: number | null;
+  bear_probability: number | null;
   regime_state: string;
-  confidence: number;
+  confidence: number | null;
+  message?: string;
 }
 
 export interface NewsItem {
@@ -42,10 +44,12 @@ export interface NewsItem {
 export interface StockAnalysis {
   ticker: string;
   company_name: string;
-  price: number;
-  change_percent: number;
-  market_cap: number;
+  price: number | null;
+  change?: number | null;
+  change_percent: number | null;
+  market_cap: number | null;
   sector: string;
+  quote_status?: "live_or_cached" | "unavailable" | string;
   bubble_analysis_data: BubbleAnalysisData;
   analyst_targets: AnalystTargets;
   analyst_consensus?: AnalystConsensus;
@@ -85,6 +89,9 @@ export interface SectorRotation {
   flow: number;
   companies: SectorCompany[];
   rotation_state?: string;
+  confidence_score?: number;
+  confidence_label?: string;
+  explanation?: string[];
   fallback?: boolean;
   message?: string;
 }
@@ -106,6 +113,10 @@ export interface AlphaQuantRow {
   theme_strength?: number;
   theme_capital_flow?: number;
   theme_explanation?: string[];
+  confidence_score?: number;
+  confidence_label?: string;
+  bullish_factors?: string[];
+  risk_factors?: string[];
   suggested_action: "Strong Buy" | "Accumulation" | "Watchlist" | "Hold" | "Bubble Risk" | "Avoid";
   factor_importance: Record<string, number>;
 }
@@ -173,6 +184,11 @@ export interface ThemeScore {
   etfs: string[];
   macro_tags: string[];
   explainability: string[];
+  risks?: string[];
+  status?: "Emerging" | "Accumulating" | "Leadership" | "Overheated" | "Cooling" | "Weak" | "Watchlist" | string;
+  confidence_score?: number;
+  confidence_label?: string;
+  data_completeness?: number;
 }
 
 export interface CrossAssetRegime {
