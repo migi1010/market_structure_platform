@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from typing import Any, Dict
@@ -22,6 +22,11 @@ def run_alpha_ranking(universe: str = "sp500") -> Dict[str, Any]:
     result["qlib_engine"] = {
         **(result.get("qlib_engine") or {}),
         "available": QLIB_AVAILABLE,
-        "mode": "qlib" if QLIB_AVAILABLE else "fallback",
+        # Use "live_pipeline" (not "fallback") so that _payload_flagged_fallback() in
+        # main.py does not treat a successful Alpha158-compatible pipeline run as a
+        # fallback payload and block it from being written to the endpoint cache.
+        # The true fallback path (_fallback_alpha in main.py) retains fallback:True.
+        "mode": "qlib" if QLIB_AVAILABLE else "live_pipeline",
     }
     return result
+

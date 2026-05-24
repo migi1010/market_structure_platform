@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import math
@@ -39,7 +39,7 @@ configure_logging()
 logger = logging.getLogger("miji.api")
 settings = get_settings()
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
-CACHE_MISS_WAIT_SECONDS = 4.0
+CACHE_MISS_WAIT_SECONDS = 12.0
 LIFECYCLE_STATES = {"cold_start", "warming", "partial_live", "live", "degraded", "recovery"}
 UNCACHEABLE_LIFECYCLES = {"cold_start", "warming", "partial_live", "degraded"}
 
