@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { BrainCircuit, Briefcase, LineChart, Loader2, Menu, Radar, Settings, Trash2, X } from "lucide-react";
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { uiText } from "@/lib/i18n";
-import { StatusBar, Style } from "@capacitor/status-bar";
+
 import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
 import type { SearchResult, StockAnalysis } from "@/types/stock";
 import AppErrorBoundary from "./AppErrorBoundary";
@@ -216,7 +216,6 @@ function DashboardApp() {
 
   useEffect(() => {
     setTimestamp(new Date().toLocaleString("en-US", { hour12: false }));
-    StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
     void warmupQuantEngine();
   }, []);
 
