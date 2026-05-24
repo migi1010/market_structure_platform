@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import math
 from typing import Any, Dict, List
 
 from quant_engine.bubble_engine import analyze_bubble
@@ -27,12 +28,12 @@ COMMON_METADATA: dict[str, dict[str, str]] = {
 
 def _nullable_float(value: Any) -> float | None:
     parsed = safe_float(value)
-    return parsed if parsed > 0 else None
+    return parsed if math.isfinite(parsed) and parsed > 0 else None
 
 
 def _number_or_none(value: Any) -> float | None:
     parsed = safe_float(value)
-    return parsed if parsed != 0.0 else None
+    return parsed if math.isfinite(parsed) and parsed != 0.0 else None
 
 
 def _first_positive(*values: Any) -> float | None:
@@ -171,12 +172,34 @@ def _resolve_price_snapshot(symbol: str, quote: Dict[str, Any], bubble: Dict[str
         "price": round(float(price), 4) if price is not None and price > 0 else None,
         "change": round(float(change), 4) if change is not None else None,
         "change_percent": round(float(change_percent), 4) if change_percent is not None else None,
+        "previous_close": round(float(previous), 4) if previous is not None and previous > 0 else None,
         "source": quote_status if price is not None else "unavailable",
     }
 
 
 def _resolve_market_cap(quote: Dict[str, Any]) -> float | None:
     return _first_positive(quote.get("marketCap"), quote.get("market_cap"))
+
+
+def _normalized_quote(symbol: str, quote: Dict[str, Any], snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    price = snapshot.get("price")
+    change = snapshot.get("change")
+    change_percent = snapshot.get("change_percent")
+    market_cap = _resolve_market_cap(quote)
+    status = str(snapshot.get("source") or "unavailable").strip().lower()
+    return {
+        "ticker": symbol,
+        "price": price if isinstance(price, (int, float)) and math.isfinite(float(price)) and price > 0 else None,
+        "change": change if isinstance(change, (int, float)) and math.isfinite(float(change)) else None,
+        "change_percent": change_percent if isinstance(change_percent, (int, float)) and math.isfinite(float(change_percent)) else None,
+        "previous_close": snapshot.get("previous_close"),
+        "market_cap": market_cap,
+        "pe_ratio": _number_or_none(quote.get("trailingPE") or quote.get("forwardPE")),
+        "ps_ratio": _number_or_none(quote.get("priceToSalesTrailing12Months")),
+        "currency": quote.get("currency") or "USD",
+        "status": status,
+        "source": quote.get("quoteSource") or quote.get("source") or status,
+    }
 
 
 def _fallback_smart_money() -> Dict[str, Any]:
@@ -235,6 +258,19 @@ def _looks_like_empty_score(data: Dict[str, Any], score_key: str) -> bool:
 def fallback_stock_payload(symbol: str) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
     metadata = COMMON_METADATA.get(ticker, {"company_name": ticker, "sector": "US Equity"})
+    quote = {
+        "ticker": ticker,
+        "price": None,
+        "change": None,
+        "change_percent": None,
+        "previous_close": None,
+        "market_cap": None,
+        "pe_ratio": None,
+        "ps_ratio": None,
+        "currency": "USD",
+        "status": "unavailable",
+        "source": "fallback",
+    }
     analyst = {
         "available": False,
         "high": None,
@@ -255,6 +291,7 @@ def fallback_stock_payload(symbol: str) -> Dict[str, Any]:
         "market_cap": None,
         "sector": metadata["sector"],
         "quote_status": "unavailable",
+        "quote": quote,
         "bubble_analysis_data": _fallback_bubble(ticker, {}, None)["bubble_analysis_data"],
         "earnings_quality": _fallback_earnings(),
         "smart_money": _fallback_smart_money(),
@@ -273,8 +310,8 @@ def fallback_stock_payload(symbol: str) -> Dict[str, Any]:
     }
 
 
-def _analyst_consensus(symbol: str, price: float | None) -> Dict[str, Any]:
-    info = get_quote(symbol)
+def _analyst_consensus(symbol: str, price: float | None, quote: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    info = quote if isinstance(quote, dict) else get_quote(symbol)
     buy = hold = sell = 0
     opinions = int(safe_float(info.get("numberOfAnalystOpinions")))
     if opinions > 0:
@@ -338,17 +375,18 @@ def _news(symbol: str) -> List[Dict[str, Any]]:
     return items
 
 
-def analyze_stock(symbol: str) -> Dict[str, Any]:
+def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
     quote = get_quote(ticker)
     provisional = _resolve_price_snapshot(ticker, quote, {})
-    bubble = _safe_engine("bubble", lambda: analyze_bubble(ticker), _fallback_bubble(ticker, quote, provisional["price"]))
+    bubble = _safe_engine("bubble", lambda: analyze_bubble(ticker, quote=quote), _fallback_bubble(ticker, quote, provisional["price"]))
     snapshot = _resolve_price_snapshot(ticker, quote, bubble)
-    earnings = _safe_engine("earnings_quality", lambda: analyze_earnings_quality(ticker), _fallback_earnings())
-    smart = _safe_engine("smart_money", lambda: analyze_smart_money(ticker), _fallback_smart_money())
+    normalized_quote = _normalized_quote(ticker, quote, snapshot)
+    earnings = _safe_engine("earnings_quality", lambda: analyze_earnings_quality(ticker, quote=quote), _fallback_earnings())
+    smart = _safe_engine("smart_money", lambda: analyze_smart_money(ticker, quote=quote), _fallback_smart_money())
     regime = _safe_engine("market_regime", detect_market_regime, {"name": "Calibrating", "confidence": 50.0, "fallback": True})
-    price = snapshot["price"]
-    analyst = _analyst_consensus(ticker, price)
+    price = normalized_quote["price"]
+    analyst = _analyst_consensus(ticker, price, quote)
     smart_raw = smart.get("smart_money_score")
     smart_score = safe_float(smart_raw, 50.0) if smart_raw is not None else None
     regime_name = str(regime.get("name") or "Calibrating")
@@ -367,15 +405,16 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
     if _looks_like_empty_score(smart, "smart_money_score"):
         smart = _fallback_smart_money()
 
-    return {
+    result = {
         "ticker": ticker,
         "company_name": _company_name(ticker, quote),
-        "price": price,
-        "change": snapshot["change"],
-        "change_percent": snapshot["change_percent"],
-        "market_cap": _resolve_market_cap(quote),
+        "price": normalized_quote["price"],
+        "change": normalized_quote["change"],
+        "change_percent": normalized_quote["change_percent"],
+        "market_cap": normalized_quote["market_cap"],
         "sector": _sector(ticker, quote),
-        "quote_status": snapshot["source"],
+        "quote_status": normalized_quote["status"],
+        "quote": normalized_quote,
         "bubble_analysis_data": bubble_data,
         "earnings_quality": earnings,
         "smart_money": smart,
@@ -392,3 +431,10 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
         },
         "news": _news(ticker),
     }
+    if include_provider_quote:
+        result["provider_quote"] = quote
+    return result
+
+
+def analyze_stock(symbol: str) -> Dict[str, Any]:
+    return central_stock_enrichment(symbol)

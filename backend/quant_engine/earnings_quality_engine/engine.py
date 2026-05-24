@@ -6,9 +6,9 @@ from alpha_engine.scoring import bounded_score, confidence_label, partial_weight
 from quant_engine.data_pipeline import get_quote, get_statements, safe_float, statement_value
 
 
-def analyze_earnings_quality(symbol: str) -> Dict[str, Any]:
+def analyze_earnings_quality(symbol: str, quote: Dict[str, Any] | None = None) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
-    info = get_quote(ticker)
+    info = quote if isinstance(quote, dict) else get_quote(ticker)
     financials, cashflow, balance = get_statements(ticker)
 
     revenue = statement_value(financials, ["Total Revenue", "Operating Revenue"])

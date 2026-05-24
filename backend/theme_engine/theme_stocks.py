@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from alpha_engine.scoring import bounded_score, confidence_label
-from quant_engine.data_pipeline import get_history, get_quote, safe_float
+from quant_engine.data_pipeline import get_history, safe_float
+from quant_engine.stock_service import central_stock_enrichment
 
 from .supply_chain_mapper import map_supply_chain
 from .theme_detector import ThemeDefinition, get_theme_definitions
@@ -126,15 +127,17 @@ def _history_metrics(symbol: str) -> dict[str, float | None]:
 
 
 def _stock_row(symbol: str, role: str, theme_score: float) -> Dict[str, Any]:
-    quote: dict[str, Any] = {}
     try:
-        quote = get_quote(symbol)
+        enriched = central_stock_enrichment(symbol)
     except Exception:
-        quote = {}
+        enriched = {}
+    quote = enriched.get("quote") if isinstance(enriched, dict) else {}
+    quote = quote if isinstance(quote, dict) else {}
     metrics = _history_metrics(symbol)
-    price = safe_float(quote.get("currentPrice") or quote.get("regularMarketPrice"))
-    change_percent = safe_float(quote.get("regularMarketChangePercent"))
-    market_cap = safe_float(quote.get("marketCap") or quote.get("market_cap"))
+    price = safe_float(quote.get("price"))
+    change = quote.get("change")
+    change_percent = quote.get("change_percent")
+    market_cap = safe_float(quote.get("market_cap"))
     momentum = metrics["momentum"]
     relative_volume = metrics["relative_volume"]
     alpha_score = bounded_score(
@@ -145,24 +148,26 @@ def _stock_row(symbol: str, role: str, theme_score: float) -> Dict[str, Any]:
         + min(market_cap, 1_000_000_000_000.0) / 1_000_000_000_000.0 * 8.0
     ) if momentum is not None or price > 0 else None
     smart_money = bounded_score(46.0 + ((relative_volume or 1.0) - 1.0) * 26.0 + max(0.0, momentum or 0.0) * 55.0) if relative_volume is not None or momentum is not None else None
-    pe = safe_float(quote.get("trailingPE") or quote.get("forwardPE"))
-    ps = safe_float(quote.get("priceToSalesTrailing12Months"))
+    pe = safe_float(quote.get("pe_ratio"))
+    ps = safe_float(quote.get("ps_ratio"))
     bubble_risk = bounded_score(30.0 + max(0.0, pe - 28.0) * 0.75 + max(0.0, ps - 6.0) * 3.6 + max(0.0, momentum or 0.0) * 34.0) if pe > 0 or ps > 0 or momentum is not None else None
     confidence_inputs = [price > 0, momentum is not None, relative_volume is not None, market_cap > 0]
     confidence_score = bounded_score(sum(1 for value in confidence_inputs if value) / len(confidence_inputs) * 100.0)
     return {
         "ticker": symbol,
-        "company_name": str(quote.get("longName") or quote.get("shortName") or COMPANY_FALLBACKS.get(symbol) or symbol),
+        "company_name": str(enriched.get("company_name") or COMPANY_FALLBACKS.get(symbol) or symbol),
         "role": role,
         "price": round(price, 4) if price > 0 else None,
-        "change_percent": round(change_percent, 4) if change_percent != 0.0 else None,
+        "change": round(float(change), 4) if isinstance(change, (int, float)) else None,
+        "change_percent": round(float(change_percent), 4) if isinstance(change_percent, (int, float)) else None,
         "market_cap": market_cap if market_cap > 0 else None,
         "alpha_score": round(alpha_score, 2) if alpha_score is not None else None,
         "smart_money": round(smart_money, 2) if smart_money is not None else None,
         "bubble_risk": round(bubble_risk, 2) if bubble_risk is not None else None,
         "confidence_score": confidence_score,
         "confidence_label": confidence_label(confidence_score),
-        "quote_status": quote.get("quoteStatus") or ("live" if price > 0 else "unavailable"),
+        "quote_status": quote.get("status") or enriched.get("quote_status") or ("live" if price > 0 else "unavailable"),
+        "quote": quote,
     }
 
 

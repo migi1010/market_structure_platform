@@ -1,3 +1,3 @@
-from .stock_service import analyze_stock
+from .stock_service import analyze_stock, central_stock_enrichment
 
-__all__ = ["analyze_stock"]
+__all__ = ["analyze_stock", "central_stock_enrichment"]

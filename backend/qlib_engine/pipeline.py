@@ -10,7 +10,8 @@ from typing import Any, Dict, List
 import numpy as np
 
 from alpha_engine.scoring import bounded_score, calculate_bubble_index, confidence_label, data_completeness, partial_weighted_score
-from quant_engine.data_pipeline import get_history, get_quote, safe_float
+from quant_engine.data_pipeline import get_history, safe_float
+from quant_engine.stock_service import central_stock_enrichment
 
 SP500_UNIVERSE = [
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "AVGO", "LLY", "JPM", "XOM",
@@ -79,6 +80,10 @@ class AlphaRow:
     ticker: str
     company_name: str
     sector: str
+    price: float | None
+    change: float | None
+    change_percent: float | None
+    quote_status: str
     alpha_score: float
     base_alpha_score: float
     universe_context_score: float
@@ -142,7 +147,9 @@ def _pct(now: float, then: float) -> float:
 
 
 def _series_metrics(symbol: str) -> Dict[str, Any]:
-    info = get_quote(symbol)
+    enriched = central_stock_enrichment(symbol, include_provider_quote=True)
+    quote = enriched.get("quote") or {}
+    info = enriched.get("provider_quote") or {}
     hist = get_history(symbol, "9mo")
     if hist is None or hist.empty or len(hist) < 64:
         raise ValueError(f"insufficient history for {symbol}")
@@ -195,11 +202,13 @@ def _series_metrics(symbol: str) -> Dict[str, Any]:
 
     return {
         "ticker": symbol,
-        "company_name": str(info.get("longName") or info.get("shortName") or symbol),
-        "sector": str(info.get("sector") or "Unknown"),
-        "price": latest,
-        "change_percent": safe_float(info.get("regularMarketChangePercent")) or ret_1m * 100.0,
-        "market_cap": safe_float(info.get("marketCap")),
+        "company_name": str(enriched.get("company_name") or info.get("longName") or info.get("shortName") or symbol),
+        "sector": str(enriched.get("sector") or info.get("sector") or "Unknown"),
+        "price": quote.get("price") if quote.get("price") is not None else latest,
+        "change": quote.get("change"),
+        "change_percent": quote.get("change_percent") if quote.get("change_percent") is not None else ret_1m * 100.0,
+        "market_cap": safe_float(quote.get("market_cap") or info.get("marketCap")),
+        "quote_status": str(quote.get("status") or enriched.get("quote_status") or "unavailable"),
         "ret_1m": ret_1m,
         "ret_3m": ret_3m,
         "ret_6m": ret_6m,
@@ -315,6 +324,10 @@ def _factor_scores(metrics: Dict[str, Any], sector_alignment: float, regime: str
         ticker=metrics["ticker"],
         company_name=metrics["company_name"],
         sector=metrics["sector"],
+        price=metrics.get("price"),
+        change=metrics.get("change"),
+        change_percent=metrics.get("change_percent"),
+        quote_status=metrics.get("quote_status", "unavailable"),
         alpha_score=base_alpha_score,
         base_alpha_score=base_alpha_score,
         universe_context_score=base_alpha_score,

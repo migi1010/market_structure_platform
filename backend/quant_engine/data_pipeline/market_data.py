@@ -23,7 +23,7 @@ from quant_engine.data_pipeline.providers import (
 )
 from settings import get_settings
 
-CACHE_SCHEMA_VERSION = "stock_v4"
+CACHE_SCHEMA_VERSION = "stock_v6"
 _LOCKS_GUARD = threading.Lock()
 _LOCKS: dict[str, threading.Lock] = {}
 
@@ -54,6 +54,14 @@ class SQLiteCache:
                     payload BLOB NOT NULL,
                     expires_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS cache_meta (
+                    meta_key TEXT PRIMARY KEY,
+                    meta_value TEXT NOT NULL
                 )
                 """
             )
@@ -91,6 +99,63 @@ class SQLiteCache:
             )
             conn.commit()
 
+    def get_meta(self, meta_key: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT meta_value FROM cache_meta WHERE meta_key = ?",
+                (meta_key,),
+            ).fetchone()
+            return str(row[0]) if row else None
+
+    def set_meta(self, meta_key: str, meta_value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO cache_meta (meta_key, meta_value)
+                VALUES (?, ?)
+                ON CONFLICT(meta_key) DO UPDATE SET meta_value = excluded.meta_value
+                """,
+                (meta_key, meta_value),
+            )
+            conn.commit()
+
+    def delete_stale_schema_entries(self, current_schema: str) -> int:
+        stale_endpoint_prefix = f"endpoint:{current_schema}:%"
+        current_data_prefixes = (
+            f"quote:{current_schema}:%",
+            f"quote_lkg:{current_schema}:%",
+            f"history:{current_schema}:%",
+            f"financials:{current_schema}:%",
+            f"news:{current_schema}:%",
+        )
+        with self._connect() as conn:
+            before = int(conn.execute("SELECT COUNT(*) FROM kv_cache").fetchone()[0])
+            conn.execute(
+                """
+                DELETE FROM kv_cache
+                WHERE (
+                    cache_key LIKE 'endpoint:%'
+                    AND cache_key NOT LIKE ?
+                )
+                OR cache_key LIKE 'quote_v%'
+                OR cache_key LIKE 'history_v%'
+                OR cache_key LIKE 'financials_v%'
+                OR cache_key LIKE 'news_v%'
+                OR (
+                    (cache_key LIKE 'quote:%' OR cache_key LIKE 'quote_lkg:%' OR cache_key LIKE 'history:%' OR cache_key LIKE 'financials:%' OR cache_key LIKE 'news:%')
+                    AND cache_key NOT LIKE ?
+                    AND cache_key NOT LIKE ?
+                    AND cache_key NOT LIKE ?
+                    AND cache_key NOT LIKE ?
+                    AND cache_key NOT LIKE ?
+                )
+                """,
+                (stale_endpoint_prefix, *current_data_prefixes),
+            )
+            conn.commit()
+            after = int(conn.execute("SELECT COUNT(*) FROM kv_cache").fetchone()[0])
+            return max(0, before - after)
+
 
 @lru_cache(maxsize=1)
 def _cache() -> SQLiteCache:
@@ -98,7 +163,11 @@ def _cache() -> SQLiteCache:
 
 
 def initialize_cache() -> None:
-    _cache()
+    cache = _cache()
+    previous_schema = cache.get_meta("cache_schema_version")
+    if previous_schema != CACHE_SCHEMA_VERSION:
+        cache.delete_stale_schema_entries(CACHE_SCHEMA_VERSION)
+        cache.set_meta("cache_schema_version", CACHE_SCHEMA_VERSION)
 
 
 def _get_cached(cache_key: str, allow_expired: bool = False) -> Any | None:
@@ -115,7 +184,7 @@ def _get_cached(cache_key: str, allow_expired: bool = False) -> Any | None:
 
 def _set_cached(cache_key: str, value: Any, ttl_seconds: int, content_type: str = "json") -> None:
     if content_type == "json":
-        payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        payload = json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
     else:
         payload = pickle.dumps(value)
     _cache().set(cache_key, content_type, payload, ttl_seconds)
@@ -144,28 +213,35 @@ def _statements_available(statements: Tuple[pd.DataFrame, pd.DataFrame, pd.DataF
 
 def get_quote(symbol: str) -> Dict[str, Any]:
     normalized = symbol.strip().upper()
-    cache_key = f"quote_v3:{normalized}"
+    cache_key = f"quote:{CACHE_SCHEMA_VERSION}:{normalized}"
+    last_good_key = f"quote_lkg:{CACHE_SCHEMA_VERSION}:{normalized}"
     cached = _get_cached(cache_key)
     if _quote_has_price(cached):
         return cached
     stale = _get_cached(cache_key, allow_expired=True)
+    last_good = _get_cached(last_good_key, allow_expired=True)
     with _lock_for(cache_key):
         cached = _get_cached(cache_key)
         if _quote_has_price(cached):
             return cached
         stale = _get_cached(cache_key, allow_expired=True)
-        quote = robust_quote_fetch(normalized, stale if isinstance(stale, dict) else None) or {}
+        last_good = _get_cached(last_good_key, allow_expired=True)
+        seed = stale if _quote_has_price(stale) else last_good if _quote_has_price(last_good) else None
+        quote = robust_quote_fetch(normalized, seed if isinstance(seed, dict) else None) or {}
         if _quote_has_price(quote):
             _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
+            _set_cached(last_good_key, quote, max(get_settings().quote_ttl_seconds * 288, 86400), "json")
             return quote
         if _quote_has_price(stale):
             return stale
+        if _quote_has_price(last_good):
+            return last_good
         return quote if isinstance(quote, dict) else {"symbol": normalized, "quoteStatus": "unavailable"}
 
 
 def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
     normalized = symbol.strip().upper()
-    cache_key = f"history_v3:{normalized}:{period}"
+    cache_key = f"history:{CACHE_SCHEMA_VERSION}:{normalized}:{period}"
     cached = _get_cached(cache_key)
     if isinstance(cached, pd.DataFrame):
         return cached
@@ -194,7 +270,7 @@ def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
 
 def get_statements(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     normalized = symbol.strip().upper()
-    cache_key = f"financials_v3:{normalized}"
+    cache_key = f"financials:{CACHE_SCHEMA_VERSION}:{normalized}"
     cached = _get_cached(cache_key)
     if _statements_available(cached):
         return cached
@@ -221,7 +297,7 @@ def get_statements(symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
 
 def get_news(symbol: str) -> List[Dict[str, Any]]:
     normalized = symbol.strip().upper()
-    cache_key = f"news_v3:{normalized}"
+    cache_key = f"news:{CACHE_SCHEMA_VERSION}:{normalized}"
     cached = _get_cached(cache_key)
     if isinstance(cached, list):
         return cached

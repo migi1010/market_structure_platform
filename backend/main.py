@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import logging
+import math
 import time
 from concurrent.futures import TimeoutError, ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -14,14 +15,11 @@ from alpha_engine.scoring import bounded_score, confidence_label
 from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
-from quant_engine.bubble_engine import analyze_bubble
-from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
-from quant_engine.earnings_quality_engine import analyze_earnings_quality
+from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, initialize_cache, safe_float, set_cached_value
 from quant_engine.qlib_engine import run_alpha_ranking
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
-from quant_engine.smart_money_engine import analyze_smart_money
-from quant_engine.stock_service import analyze_stock, fallback_stock_payload
+from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
 from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
 from settings import get_settings
 from theme_engine import (
@@ -42,6 +40,8 @@ logger = logging.getLogger("miji.api")
 settings = get_settings()
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 CACHE_MISS_WAIT_SECONDS = 4.0
+LIFECYCLE_STATES = {"cold_start", "warming", "partial_live", "live", "degraded", "recovery"}
+UNCACHEABLE_LIFECYCLES = {"cold_start", "warming", "partial_live", "degraded"}
 
 
 @asynccontextmanager
@@ -89,14 +89,93 @@ def _schema_cache_key(namespace: str, *parts: Any) -> str:
 def _finite_positive(value: Any) -> bool:
     try:
         parsed = float(value)
-        return parsed > 0
+        return math.isfinite(parsed) and parsed > 0
     except (TypeError, ValueError):
         return False
+
+
+def _finite_number(value: Any) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _contains_non_finite(value: Any) -> bool:
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    if isinstance(value, dict):
+        return any(_contains_non_finite(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_non_finite(item) for item in value)
+    return False
+
+
+def _payload_flagged_fallback(value: Any) -> bool:
+    if isinstance(value, dict):
+        if value.get("fallback") is True:
+            return True
+        engine = value.get("qlib_engine")
+        if isinstance(engine, dict) and engine.get("mode") == "fallback":
+            return True
+        return any(_payload_flagged_fallback(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_payload_flagged_fallback(item) for item in value)
+    return False
+
+
+def _score_available(value: Any, *keys: str) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return any(_finite_number(value.get(key)) for key in keys)
+
+
+def _stock_lifecycle(result: dict) -> str:
+    if _payload_flagged_fallback(result):
+        return "degraded"
+    if not _finite_positive(result.get("price")):
+        return "warming"
+    quote = result.get("quote")
+    quote_live = isinstance(quote, dict) and _finite_positive(quote.get("price")) and str(quote.get("status") or "").lower() not in {"unavailable", "fallback"}
+    bubble = result.get("bubble_analysis_data")
+    earnings = result.get("earnings_quality")
+    smart = result.get("smart_money")
+    intelligence_live = (
+        _score_available(bubble, "bubble_index")
+        and _score_available(earnings, "earnings_quality_score", "quality_score")
+        and _score_available(smart, "smart_money_score", "score")
+    )
+    return "live" if quote_live and intelligence_live else "partial_live"
+
+
+def _endpoint_lifecycle(cache_key: str, result: Any) -> str | None:
+    lowered_key = cache_key.lower()
+    if ":stock:" in lowered_key and isinstance(result, dict):
+        return _stock_lifecycle(result)
+    if _payload_flagged_fallback(result):
+        return "degraded"
+    return None
+
+
+def _with_lifecycle(cache_key: str, result: Any, override: str | None = None) -> Any:
+    if not isinstance(result, dict):
+        return result
+    lifecycle = override or _endpoint_lifecycle(cache_key, result)
+    if lifecycle not in LIFECYCLE_STATES:
+        return result
+    return {**result, "lifecycle_state": lifecycle}
 
 
 def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
     if not isinstance(result, (dict, list)):
         return True
+    if _contains_non_finite(result):
+        return False
+    if _payload_flagged_fallback(result):
+        return False
+    lifecycle = _endpoint_lifecycle(cache_key, result)
+    if lifecycle in UNCACHEABLE_LIFECYCLES:
+        return False
     lowered_key = cache_key.lower()
     if ":stock:" in lowered_key and isinstance(result, dict):
         return _finite_positive(result.get("price"))
@@ -120,17 +199,18 @@ def _cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any]) 
     started = time.perf_counter()
     try:
         result = task()
-        if _cacheable_endpoint_result(cache_key, result):
-            set_cached_value(cache_key, result, ttl_seconds, "json")
+        cache_result = _with_lifecycle(cache_key, result)
+        if _cacheable_endpoint_result(cache_key, cache_result):
+            set_cached_value(cache_key, cache_result, ttl_seconds, "json")
         else:
             logger.warning("skipping endpoint cache write for low-quality result key=%s", cache_key)
         logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
-        return result
+        return cache_result
     except Exception:
         stale = get_cached_value(cache_key, allow_expired=True)
         if stale is not None:
             logger.warning("serving stale endpoint cache key=%s", cache_key)
-            return stale
+            return _with_lifecycle(cache_key, stale, "recovery")
         raise
 
 
@@ -138,8 +218,9 @@ def _schedule_cache_refresh(cache_key: str, ttl_seconds: int, task: Callable[[],
     def refresh() -> None:
         try:
             result = task()
-            if _cacheable_endpoint_result(cache_key, result):
-                set_cached_value(cache_key, result, ttl_seconds, "json")
+            cache_result = _with_lifecycle(cache_key, result)
+            if _cacheable_endpoint_result(cache_key, cache_result):
+                set_cached_value(cache_key, cache_result, ttl_seconds, "json")
             else:
                 logger.warning("skipping background cache write for low-quality result key=%s", cache_key)
             logger.info("background cache refresh complete key=%s", cache_key)
@@ -158,14 +239,15 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
     if stale is not None:
         logger.info("endpoint stale cache hit key=%s", cache_key)
         _schedule_cache_refresh(cache_key, ttl_seconds, task)
-        return stale
+        return _with_lifecycle(cache_key, stale, "recovery")
     future = BACKGROUND_EXECUTOR.submit(task)
 
     def store_result_when_ready(completed: Any) -> None:
         try:
             result = completed.result()
-            if _cacheable_endpoint_result(cache_key, result):
-                set_cached_value(cache_key, result, ttl_seconds, "json")
+            cache_result = _with_lifecycle(cache_key, result)
+            if _cacheable_endpoint_result(cache_key, cache_result):
+                set_cached_value(cache_key, cache_result, ttl_seconds, "json")
             else:
                 logger.warning("skipping deferred cache write for low-quality result key=%s", cache_key)
             logger.info("deferred cache fill complete key=%s", cache_key)
@@ -176,18 +258,19 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
     started = time.perf_counter()
     try:
         result = future.result(timeout=CACHE_MISS_WAIT_SECONDS)
-        if _cacheable_endpoint_result(cache_key, result):
-            set_cached_value(cache_key, result, ttl_seconds, "json")
+        cache_result = _with_lifecycle(cache_key, result)
+        if _cacheable_endpoint_result(cache_key, cache_result):
+            set_cached_value(cache_key, cache_result, ttl_seconds, "json")
         else:
             logger.warning("skipping endpoint cache write for low-quality result key=%s", cache_key)
         logger.info("endpoint cache miss key=%s duration=%.2fs", cache_key, time.perf_counter() - started)
-        return result
+        return cache_result
     except TimeoutError:
         logger.warning("endpoint timed out key=%s; serving fallback", cache_key)
-        return fallback()
+        return _with_lifecycle(cache_key, fallback(), "degraded")
     except Exception as exc:
         logger.warning("endpoint failed key=%s; serving fallback error=%s", cache_key, exc)
-        return fallback()
+        return _with_lifecycle(cache_key, fallback(), "degraded")
 
 
 def _fallback_sector_rotation() -> list[dict]:
@@ -334,15 +417,19 @@ def _fallback_alpha(universe: str) -> dict:
     rows = []
     for index, symbol in enumerate(symbols):
         quote: dict[str, Any] = {}
+        enriched: dict[str, Any] = {}
+        normalized_quote: dict[str, Any] = {}
         try:
-            quote = get_quote(symbol)
+            enriched = central_stock_enrichment(symbol, include_provider_quote=True)
+            quote = enriched.get("provider_quote") or {}
+            normalized_quote = enriched.get("quote") or {}
             history = get_history(symbol, "3mo")
             close = history["Close"].astype(float) if history is not None and not history.empty and "Close" in history else None
             ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1.0) if close is not None and len(close) > 22 else 0.0
             ret_3m = float(close.iloc[-1] / close.iloc[0] - 1.0) if close is not None and len(close) > 1 else 0.0
             volume = history["Volume"].astype(float) if history is not None and not history.empty and "Volume" in history else None
             rel_volume = float(volume.iloc[-1] / max(volume.tail(45).mean(), 1.0)) if volume is not None and len(volume) > 10 else 1.0
-            market_cap = safe_float(quote.get("marketCap"))
+            market_cap = safe_float(normalized_quote.get("market_cap") or quote.get("marketCap"))
             momentum = bounded_score(48.0 + ret_3m * 150.0 + ret_1m * 80.0)
             smart_money = bounded_score(45.0 + (rel_volume - 1.0) * 24.0 + ret_1m * 75.0)
             quality = bounded_score(44.0 + safe_float(quote.get("grossMargins")) * 55.0 + safe_float(quote.get("profitMargins")) * 85.0)
@@ -358,8 +445,12 @@ def _fallback_alpha(universe: str) -> dict:
             alpha_score = bounded_score(momentum * 0.30 + quality * 0.28 + smart_money * 0.22 + valuation * 0.12 - 6.0)
         row = {
             "ticker": symbol,
-            "company_name": str(quote.get("longName") or quote.get("shortName") or symbol),
-            "sector": str(quote.get("sector") or "Partial Data"),
+            "company_name": str(enriched.get("company_name") or quote.get("longName") or quote.get("shortName") or symbol),
+            "sector": str(enriched.get("sector") or quote.get("sector") or "Partial Data"),
+            "price": normalized_quote.get("price"),
+            "change": normalized_quote.get("change"),
+            "change_percent": normalized_quote.get("change_percent"),
+            "quote_status": normalized_quote.get("status") or enriched.get("quote_status") or "unavailable",
             "alpha_score": alpha_score,
             "base_alpha_score": alpha_score,
             "universe_context_score": alpha_score,
@@ -429,7 +520,7 @@ async def unhandled_exception_handler(_, exc: Exception):
 @app.get("/stock/{ticker}")
 def get_stock(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: analyze_stock(symbol), lambda: fallback_stock_payload(symbol)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: central_stock_enrichment(symbol), lambda: fallback_stock_payload(symbol)))
 
 
 @app.get("/debug/provider/{ticker}")
@@ -455,7 +546,19 @@ def backtest_top_alpha(
 @app.get("/bubble/{ticker}")
 def get_bubble(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_schema_cache_key("bubble", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_bubble(symbol)))
+    def build() -> dict:
+        stock = central_stock_enrichment(symbol)
+        quote = stock.get("quote") or {}
+        return {
+            "ticker": symbol,
+            "company_name": stock.get("company_name", symbol),
+            "price": quote.get("price"),
+            "sector": stock.get("sector", "US Equity"),
+            "quote": quote,
+            "bubble_analysis_data": stock.get("bubble_analysis_data"),
+        }
+
+    return _guard(lambda: _cached_response(_schema_cache_key("bubble", symbol), settings.fundamentals_ttl_seconds, build))
 
 
 @app.get("/market/regime")
@@ -467,26 +570,27 @@ def get_market_regime() -> dict:
 def get_market_overview() -> list[dict]:
     symbols = ["SPY", "QQQ", "SMH", "DIA", "IWM", "XLK", "XLF", "XLE", "XLV", "NVDA", "AAPL", "MSFT"]
 
+    def finite_or_none(value: Any) -> float | None:
+        try:
+            parsed = float(value)
+            return parsed if math.isfinite(parsed) else None
+        except (TypeError, ValueError):
+            return None
+
     def build() -> list[dict]:
         tape = []
         for symbol in symbols:
-            quote = get_quote(symbol)
-            price = safe_float(quote.get("currentPrice") or quote.get("regularMarketPrice"))
-            change = safe_float(quote.get("regularMarketChange"))
-            change_percent = safe_float(quote.get("regularMarketChangePercent"))
-            if price == 0.0 or change_percent == 0.0:
-                history = get_history(symbol, "5d")
-                if history is not None and not history.empty and len(history) >= 2:
-                    close = history["Close"].astype(float)
-                    price = float(close.iloc[-1])
-                    previous = float(close.iloc[-2])
-                    change = price - previous
-                    change_percent = (change / previous * 100.0) if previous > 0 else 0.0
+            enriched = central_stock_enrichment(symbol)
+            quote = enriched.get("quote") or {}
+            price = finite_or_none(quote.get("price"))
+            change = finite_or_none(quote.get("change"))
+            change_percent = finite_or_none(quote.get("change_percent"))
             tape.append({
                 "ticker": symbol,
-                "price": round(price, 2),
-                "change": round(change, 2),
-                "change_percent": round(change_percent, 2),
+                "price": round(price, 2) if price is not None else None,
+                "change": round(change, 2) if change is not None else None,
+                "change_percent": round(change_percent, 2) if change_percent is not None else None,
+                "quote_status": quote.get("status") or enriched.get("quote_status") or "unavailable",
             })
         return tape
 
@@ -544,13 +648,13 @@ def get_theme_detail_endpoint(theme_id: str) -> dict:
 @app.get("/smart-money/{ticker}")
 def get_smart_money(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_schema_cache_key("smart_money", symbol), settings.quote_ttl_seconds, lambda: analyze_smart_money(symbol)))
+    return _guard(lambda: _cached_response(_schema_cache_key("smart_money", symbol), settings.quote_ttl_seconds, lambda: central_stock_enrichment(symbol).get("smart_money")))
 
 
 @app.get("/earnings-quality/{ticker}")
 def get_earnings_quality(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _cached_response(_schema_cache_key("earnings_quality", symbol), settings.fundamentals_ttl_seconds, lambda: analyze_earnings_quality(symbol)))
+    return _guard(lambda: _cached_response(_schema_cache_key("earnings_quality", symbol), settings.fundamentals_ttl_seconds, lambda: central_stock_enrichment(symbol).get("earnings_quality")))
 
 
 @app.api_route("/warmup", methods=["GET", "POST"])
@@ -592,10 +696,14 @@ def warmup() -> dict:
 @app.get("/search")
 def search_stocks(q: str = Query(..., min_length=1)) -> list[dict]:
     symbol = q.strip().upper()
-    stock = _guard(lambda: analyze_stock(symbol))
+    stock = _guard(lambda: central_stock_enrichment(symbol))
+    quote = stock.get("quote") or {}
     return [{
         "symbol": stock.get("ticker", symbol),
         "name": stock.get("company_name", symbol),
         "exchange": "US",
         "type": "Equity",
+        "price": quote.get("price"),
+        "change_percent": quote.get("change_percent"),
+        "quote_status": quote.get("status") or stock.get("quote_status"),
     }]

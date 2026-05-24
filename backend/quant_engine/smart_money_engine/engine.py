@@ -8,9 +8,9 @@ from alpha_engine.scoring import bounded_score, confidence_label
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
 
 
-def analyze_smart_money(symbol: str) -> Dict[str, Any]:
+def analyze_smart_money(symbol: str, quote: Dict[str, Any] | None = None) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
-    quote = get_quote(ticker)
+    quote = quote if isinstance(quote, dict) else get_quote(ticker)
     history = get_history(ticker, "9mo")
     if history is None or history.empty or len(history) < 64:
         volume = safe_float(quote.get("regularMarketVolume") or quote.get("volume"))

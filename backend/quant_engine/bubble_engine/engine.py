@@ -15,9 +15,9 @@ from quant_engine.data_pipeline import (
 )
 
 
-def analyze_bubble(symbol: str) -> Dict[str, Any]:
+def analyze_bubble(symbol: str, quote: Dict[str, Any] | None = None) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
-    info = get_quote(ticker)
+    info = quote if isinstance(quote, dict) else get_quote(ticker)
     financials, cashflow, balance = get_statements(ticker)
     history = get_history(ticker, "9mo")
 

@@ -8,10 +8,18 @@ frontend/build/
 __pycache__/
 *.pyc
 .env
+.env.*
+.env.local
+.env.development
+.env.production
 .venv
 venv/
 env/
 .pytest_cache/
+
+# Runtime / agent caches
+.cache/
+backend/.cache/*.sqlite3
 
 # Data backups (optional, but prevents massive files)
 # reports/*.json
