@@ -19,6 +19,15 @@ export default function StockAnalysisWorkspace({ ticker }: StockAnalysisWorkspac
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // hasFetchedOnce: true after the first fetch (success or fallback) completes.
+  // Prevents the retry from firing on the initial null state before any fetch.
+  const hasFetchedOnce = useRef(false);
+  const retryFiredRef = useRef(false);
+  useEffect(() => {
+    hasFetchedOnce.current = false;
+    retryFiredRef.current = false;
+  }, [ticker]);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -26,9 +35,15 @@ export default function StockAnalysisWorkspace({ ticker }: StockAnalysisWorkspac
       setError(null);
       try {
         const result = await fetchStockAnalysis(ticker);
-        if (!cancelled) setStock(result);
+        if (!cancelled) {
+          hasFetchedOnce.current = true;
+          setStock(result);
+        }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Analysis failed");
+        if (!cancelled) {
+          hasFetchedOnce.current = true;
+          setError(err instanceof Error ? err.message : "Analysis failed");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -39,17 +54,17 @@ export default function StockAnalysisWorkspace({ ticker }: StockAnalysisWorkspac
     };
   }, [ticker]);
 
-  // One-shot retry: if the initial load returned a cold-start fallback (price null,
-  // status unavailable), wait 10s for the backend to warm up then try once more.
-  // The retryFiredRef prevents this from firing more than once per ticker.
-  const retryFiredRef = useRef(false);
-  useEffect(() => {
-    retryFiredRef.current = false;
-  }, [ticker]);
+  // One-shot retry: fires ONLY after the initial fetch has returned a fallback response
+  // (price null + status unavailable). The hasFetchedOnce guard ensures the retry never
+  // fires on the initial null state before any fetch completes.
   useEffect(() => {
     if (loading) return;
+    if (!hasFetchedOnce.current) return;     // initial state — fetch not yet complete
     if (retryFiredRef.current) return;
-    const isFallback = stock === null || (stock.price === null && (stock.quote_status === "unavailable" || stock.quote?.status === "unavailable"));
+    const isFallback =
+      stock === null ||
+      ((stock.price === null || !Number.isFinite(stock.price as number)) &&
+        (stock.quote_status === "unavailable" || stock.quote?.status === "unavailable"));
     if (!isFallback) return;
     retryFiredRef.current = true;
     const handle = window.setTimeout(async () => {
@@ -62,7 +77,6 @@ export default function StockAnalysisWorkspace({ ticker }: StockAnalysisWorkspac
     }, 10_000);
     return () => window.clearTimeout(handle);
   }, [loading, stock, ticker]);
-
 
   const hmm = stock?.hmm_prediction;
   const bullProbability = typeof hmm?.bull_probability === "number" ? hmm.bull_probability : null;

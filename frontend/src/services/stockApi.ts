@@ -199,9 +199,14 @@ function validPrice(value: unknown): number | null {
 
 function normalizeQuote(data: Partial<StockAnalysis> | null | undefined, symbol: string): StockQuote {
   const raw = data?.quote;
-  const price = validPrice(raw?.price ?? data?.price);
-  const change = validNumber(raw?.change ?? data?.change);
-  const changePercent = validNumber(raw?.change_percent ?? data?.change_percent);
+  // Coerce to number: the backend always emits JSON numbers, but guard against string
+  // serialization edge cases (e.g., some proxies or CDN rewrites) where price arrives as "215.33".
+  const rawPrice = raw?.price ?? data?.price;
+  const price = validPrice(typeof rawPrice === "string" ? parseFloat(rawPrice) : rawPrice);
+  const rawChange = raw?.change ?? data?.change;
+  const change = validNumber(typeof rawChange === "string" ? parseFloat(rawChange) : rawChange);
+  const rawChangePercent = raw?.change_percent ?? data?.change_percent;
+  const changePercent = validNumber(typeof rawChangePercent === "string" ? parseFloat(rawChangePercent) : rawChangePercent);
   const marketCap = validPrice(raw?.market_cap ?? data?.market_cap);
   return {
     ticker: (raw?.ticker ?? data?.ticker ?? symbol).trim().toUpperCase(),
@@ -301,9 +306,9 @@ function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnaly
     ticker: (data?.ticker ?? symbol).trim().toUpperCase(),
     company_name: company,
     sector,
-    price: quote.price,
-    change: quote.change,
-    change_percent: quote.change_percent,
+    price: quote.price ?? (typeof data?.price === "number" && Number.isFinite(data.price) && data.price > 0 ? data.price : null),
+    change: quote.change ?? (typeof data?.change === "number" && Number.isFinite(data.change) ? data.change : null),
+    change_percent: quote.change_percent ?? (typeof data?.change_percent === "number" && Number.isFinite(data.change_percent) ? data.change_percent : null),
     market_cap: quote.market_cap,
     quote_status: quote.status,
     quote,
