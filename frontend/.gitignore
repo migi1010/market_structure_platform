@@ -1,0 +1,42 @@
+node_modules
+.vercel
+
+# Next.js build & export artifacts
+.next/
+out/
+build/
+
+# Environment files — never commit
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+
+# Capacitor / iOS / Android (out of scope for web deployment)
+ios/
+android/
+capacitor.config.ts
+
+# Mobile / app-store assets (out of scope for web deployment)
+assets/
+app-store-assets/
+icons/
+
+# PWA-generated files (out of scope for Phase 1-2)
+public/apple-touch-icon.png
+public/logo.png
+public/icons/
+public/manifest.json
+public/manifest.webmanifest
+public/pwa-icon-512.png
+public/sw.js
+
+# Scripts generated for PWA/mobile pipeline
+scripts/
+
+# Documentation artifacts
+docs/
+
+# Vercel config (contains PWA-scoped headers for sw.js/manifest — out of scope)
+vercel.json
