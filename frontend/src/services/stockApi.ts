@@ -16,6 +16,7 @@ import type {
   ThemeStocksResponse,
   ThemeSupplyChainResponse,
   ThemeTopResponse,
+  WorkspaceAction,
 } from "@/types/stock";
 import { enabledTerminalModules } from "@/modules/terminalModules";
 
@@ -157,10 +158,85 @@ function matchesOmniboxItem(item: OmniboxRegistryItem, query: string): boolean {
     || item.aliases.some((alias) => compactSearchText(alias).includes(intentQuery) || intentQuery.includes(compactSearchText(alias)));
 }
 
+function actionForResult(item: SearchResult, query = ""): WorkspaceAction {
+  const type = item.type.toLowerCase();
+  const normalizedQuery = compactSearchText(query);
+  const targetTab = item.target_tab ?? "stock-analysis";
+  if (targetTab === "stock-analysis") {
+    const ticker = (item.ticker ?? item.symbol).trim().toUpperCase();
+    return {
+      actionType: "open_stock",
+      target_tab: "stock-analysis",
+      focusTarget: "stock-workspace",
+      openMode: "replace",
+      contextPayload: { ticker, label: `Open ${ticker} Analysis` },
+    };
+  }
+  if (type === "theme" || targetTab === "theme-intelligence") {
+    const theme = item.theme ?? item.label ?? item.name;
+    return {
+      actionType: type === "theme" ? "open_theme" : "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: type === "theme" ? "theme-detail" : "theme-workspace",
+      openMode: "replace",
+      contextPayload: type === "theme" ? { theme, label: `Open ${theme}` } : { label: item.label ?? item.name },
+    };
+  }
+  if (type === "sector" || targetTab === "market-intel") {
+    const sector = item.sector ?? item.label ?? item.name;
+    return {
+      actionType: type === "sector" ? "open_sector" : "open_module",
+      target_tab: "market-intel",
+      focusTarget: "sector-drilldown",
+      openMode: "replace",
+      contextPayload: type === "sector" ? { sector, label: `Open ${sector} Rotation` } : { label: item.label ?? item.name },
+    };
+  }
+  if (targetTab === "alpha-quant") {
+    const alphaView = normalizedQuery.includes("MOMENTUM") ? "momentum" : normalizedQuery.includes("FACTOR") ? "factors" : "top-alpha";
+    return {
+      actionType: "open_alpha",
+      target_tab: "alpha-quant",
+      focusTarget: alphaView === "momentum" ? "alpha-momentum" : "alpha-workspace",
+      openMode: "replace",
+      contextPayload: { alphaView, label: alphaView === "momentum" ? "Alpha Momentum" : item.label ?? item.name },
+    };
+  }
+  if (targetTab === "portfolio") {
+    const portfolioView = normalizedQuery.includes("WATCHLIST") ? "watchlist" : "overview";
+    return {
+      actionType: "open_portfolio",
+      target_tab: "portfolio",
+      focusTarget: "portfolio-watchlist",
+      openMode: "replace",
+      contextPayload: { portfolioView, label: portfolioView === "watchlist" ? "Portfolio Watchlist" : item.label ?? item.name },
+    };
+  }
+  return {
+    actionType: "open_module",
+    target_tab: targetTab,
+    focusTarget: targetTab,
+    openMode: "replace",
+    contextPayload: { label: item.label ?? item.name },
+  };
+}
+
+function withWorkspaceAction(item: SearchResult, query = ""): SearchResult {
+  const workspaceAction = actionForResult(item, query);
+  return {
+    ...item,
+    actionType: workspaceAction.actionType,
+    focusTarget: workspaceAction.focusTarget,
+    contextPayload: workspaceAction.contextPayload,
+    openMode: workspaceAction.openMode,
+    workspaceAction,
+  };
+}
+
 function enrichStockResult(item: SearchResult): SearchResult {
   const symbol = item.symbol.trim().toUpperCase();
   const isEtf = item.type.toUpperCase() === "ETF" || item.exchange.toUpperCase() === "ETF";
-  return {
+  return withWorkspaceAction({
     ...item,
     symbol,
     ticker: symbol,
@@ -171,13 +247,13 @@ function enrichStockResult(item: SearchResult): SearchResult {
     intent: "ticker",
     group: "Stocks",
     target_tab: "stock-analysis",
-  };
+  });
 }
 
 function enrichUniversalResult(item: SearchResult): SearchResult {
   const type = item.type.toLowerCase();
   if (type === "theme") {
-    return {
+    return withWorkspaceAction({
       ...item,
       label: item.label ?? item.name.split("/")[0].trim(),
       theme: item.theme ?? item.name.split("/")[0].trim(),
@@ -185,10 +261,10 @@ function enrichUniversalResult(item: SearchResult): SearchResult {
       intent: "theme",
       group: "Themes",
       target_tab: "theme-intelligence",
-    };
+    });
   }
   if (type === "sector") {
-    return {
+    return withWorkspaceAction({
       ...item,
       label: item.label ?? item.name.split("/")[0].trim(),
       sector: item.sector ?? item.name.split("/")[0].trim(),
@@ -196,7 +272,7 @@ function enrichUniversalResult(item: SearchResult): SearchResult {
       intent: "sector",
       group: "Sectors",
       target_tab: "market-intel",
-    };
+    });
   }
   return enrichStockResult(item);
 }
@@ -691,9 +767,9 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
     const haystack = `${item.symbol} ${item.name} ${item.type}`.toUpperCase();
     return haystack.includes(normalized) || haystack.includes(intentQuery);
   }).map(enrichUniversalResult);
-  const themeMatches = OMNIBOX_THEMES.filter((item) => matchesOmniboxItem(item, normalized));
-  const sectorMatches = OMNIBOX_SECTORS.filter((item) => matchesOmniboxItem(item, normalized));
-  const commandMatches = OMNIBOX_COMMANDS.filter((item) => matchesOmniboxItem(item, normalized));
+  const themeMatches = OMNIBOX_THEMES.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
+  const sectorMatches = OMNIBOX_SECTORS.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
+  const commandMatches = OMNIBOX_COMMANDS.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
   const localBuckets: Record<OmniboxIntent, SearchResult[]> = {
     command: [...commandMatches, ...localMatches, ...themeMatches, ...sectorMatches, ...universalMatches],
     theme: [...themeMatches, ...localMatches, ...sectorMatches, ...commandMatches, ...universalMatches],

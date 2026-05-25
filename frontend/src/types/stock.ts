@@ -87,6 +87,23 @@ export interface MarketOverviewItem {
 export type OmniboxIntent = "ticker" | "theme" | "sector" | "command" | "natural_language";
 export type OmniboxGroup = "Stocks" | "Themes" | "Sectors" | "Commands";
 export type OmniboxTargetTab = "theme-intelligence" | "portfolio" | "alpha-quant" | "market-intel" | "stock-analysis";
+export type WorkspaceActionType = "open_stock" | "open_theme" | "open_sector" | "open_alpha" | "open_portfolio" | "open_module";
+export type WorkspaceOpenMode = "replace" | "focus" | "background";
+
+export interface WorkspaceAction {
+  actionType: WorkspaceActionType;
+  target_tab: OmniboxTargetTab;
+  focusTarget?: string;
+  openMode?: WorkspaceOpenMode;
+  contextPayload?: {
+    ticker?: string;
+    theme?: string;
+    sector?: string;
+    alphaView?: string;
+    portfolioView?: string;
+    label?: string;
+  };
+}
 
 export interface SearchResult {
   symbol: string;
@@ -105,6 +122,11 @@ export interface SearchResult {
   intent?: OmniboxIntent;
   group?: OmniboxGroup;
   target_tab?: OmniboxTargetTab;
+  actionType?: WorkspaceActionType;
+  focusTarget?: string;
+  contextPayload?: WorkspaceAction["contextPayload"];
+  openMode?: WorkspaceOpenMode;
+  workspaceAction?: WorkspaceAction;
   price?: number | null;
   change_percent?: number | null;
   quote_status?: string;

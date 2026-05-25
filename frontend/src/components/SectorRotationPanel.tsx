@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown, Loader2, Radar } from "lucide-react";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { fetchSectorRotation } from "@/services/stockApi";
 import type { SectorRotation } from "@/types/stock";
@@ -81,8 +82,9 @@ function SectorSkeleton() {
 }
 
 export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPanelProps) {
+  const { selectedSector, setSelectedSector } = useWorkspace();
   const [sectors, setSectors] = useState<SectorRotation[]>([]);
-  const [activeSector, setActiveSector] = useState<string>("Technology");
+  const [activeSector, setActiveSector] = useState<string>(selectedSector || "Technology");
   const [sectorDropdownOpen, setSectorDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const dropdownRef = useRef<HTMLDivElement | null>(null);

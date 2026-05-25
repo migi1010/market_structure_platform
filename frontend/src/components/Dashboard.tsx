@@ -9,7 +9,7 @@ import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
 import { enabledTerminalModules, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
 
 import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
-import type { SearchResult, StockAnalysis } from "@/types/stock";
+import type { SearchResult, StockAnalysis, WorkspaceAction } from "@/types/stock";
 import AppErrorBoundary from "./AppErrorBoundary";
 import GlobalStockSearch from "./GlobalStockSearch";
 import LoadingScreen from "./LoadingScreen";
@@ -47,6 +47,53 @@ function normalizeSymbol(symbol: string): string {
 
 function normalizeThemeName(result: SearchResult): string {
   return (result.theme ?? result.label ?? result.name ?? result.symbol).trim();
+}
+
+function normalizeSectorName(result: SearchResult): string {
+  return (result.sector ?? result.label ?? result.name ?? result.symbol).trim();
+}
+
+function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
+  if (result.workspaceAction) return result.workspaceAction;
+  const type = result.type?.toLowerCase() ?? "equity";
+  if (type === "theme") {
+    const theme = normalizeThemeName(result);
+    return {
+      actionType: "open_theme",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-detail",
+      openMode: "replace",
+      contextPayload: { theme, label: `Open ${theme}` },
+    };
+  }
+  if (type === "sector") {
+    const sector = normalizeSectorName(result);
+    return {
+      actionType: "open_sector",
+      target_tab: "market-intel",
+      focusTarget: "sector-drilldown",
+      openMode: "replace",
+      contextPayload: { sector, label: `Open ${sector} Rotation` },
+    };
+  }
+  const targetModule = getTerminalModule(result.target_tab);
+  if (targetModule && targetModule.workspaceType !== "stock") {
+    return {
+      actionType: targetModule.id === "alpha-quant" ? "open_alpha" : targetModule.id === "portfolio" ? "open_portfolio" : "open_module",
+      target_tab: targetModule.id,
+      focusTarget: targetModule.id,
+      openMode: "replace",
+      contextPayload: { label: result.label ?? targetModule.title },
+    };
+  }
+  const ticker = normalizeSymbol(result.ticker ?? result.symbol);
+  return {
+    actionType: "open_stock",
+    target_tab: "stock-analysis",
+    focusTarget: "stock-workspace",
+    openMode: "replace",
+    contextPayload: { ticker, label: `Open ${ticker} Analysis` },
+  };
 }
 
 function readWatchlist(): string[] {
@@ -88,6 +135,7 @@ function PortfolioHome({
   onTickerSelect: (ticker: string) => void;
   onRemove: (ticker: string) => void;
 }) {
+  const { selectedPortfolioView } = useWorkspace();
   const [snapshots, setSnapshots] = useState<Record<string, StockAnalysis>>({});
   const [loading, setLoading] = useState(false);
 
@@ -128,6 +176,7 @@ function PortfolioHome({
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Portfolio Command Center</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#E6EDF3]">Institutional Watchlist</h1>
           <p className="mt-2 text-sm text-[#9BA7B4]">Editable hedge fund watchlist with live price, bubble risk, and HMM trend state.</p>
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-amber-200">Focus: {selectedPortfolioView}</p>
         </div>
         {loading && <div className="flex items-center gap-2 text-sm font-medium text-[#9BA7B4]"><Loader2 className="animate-spin" size={16} /> Refreshing portfolio tape</div>}
       </div>
@@ -202,7 +251,17 @@ function PortfolioHome({
 }
 
 function DashboardApp() {
-  const { activeModule: activeTab, setActiveModule, setSelectedTheme, setSelectedTicker } = useWorkspace();
+  const {
+    activeModule: activeTab,
+    selectedTicker,
+    selectedTheme,
+    selectedSector,
+    selectedAlphaView,
+    selectedPortfolioView,
+    lastWorkspaceAction,
+    setActiveModule,
+    dispatchWorkspaceAction,
+  } = useWorkspace();
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [watchlistReady, setWatchlistReady] = useState(false);
   const [timestamp, setTimestamp] = useState("");
@@ -235,55 +294,64 @@ function DashboardApp() {
     setWatchlist((prev) => prev.filter((item) => item !== symbol));
   }, []);
 
+  const focusWorkspaceAction = useCallback((action: WorkspaceAction) => {
+    window.setTimeout(() => {
+      if (action.focusTarget === "stock-workspace") {
+        document.getElementById("stock-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("stock-analysis")?.focus({ preventScroll: true });
+        return;
+      }
+      if (action.focusTarget === "theme-detail" || action.focusTarget === "theme-workspace") {
+        document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (action.focusTarget === "sector-drilldown") {
+        document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (action.focusTarget === "alpha-momentum" || action.focusTarget === "alpha-workspace") {
+        document.getElementById("alpha-quant")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (action.focusTarget === "portfolio-watchlist") {
+        document.getElementById("portfolio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 120);
+  }, []);
+
+  const runWorkspaceAction = useCallback((action: WorkspaceAction) => {
+    dispatchWorkspaceAction(action);
+    setMobileMenuOpen(false);
+    focusWorkspaceAction(action);
+  }, [dispatchWorkspaceAction, focusWorkspaceAction]);
+
   const openStock = useCallback((ticker: string) => {
     const symbol = normalizeSymbol(ticker);
-    setSelectedTicker(symbol);
-    setActiveModule("stock-analysis");
-    setMobileMenuOpen(false);
-    window.setTimeout(() => {
-      document.getElementById("stock-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("stock-analysis")?.focus({ preventScroll: true });
-    }, 120);
-  }, [setActiveModule, setSelectedTicker]);
+    runWorkspaceAction({
+      actionType: "open_stock",
+      target_tab: "stock-analysis",
+      focusTarget: "stock-workspace",
+      openMode: "replace",
+      contextPayload: { ticker: symbol, label: `Open ${symbol} Analysis` },
+    });
+  }, [runWorkspaceAction]);
 
   const openSearchResult = useCallback((result: SearchResult) => {
-    const type = result.type?.toLowerCase() ?? "equity";
-    const targetModule = getTerminalModule(result.target_tab);
-    if (targetModule && targetModule.workspaceType !== "stock") {
-      if (targetModule.workspaceType === "theme" && (result.intent === "theme" || type === "theme")) setSelectedTheme(normalizeThemeName(result));
-      setActiveModule(targetModule.id);
-      setMobileMenuOpen(false);
-      window.setTimeout(() => {
-        if (targetModule.id === "theme-intelligence") document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        if (targetModule.id === "market-intel") document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 120);
-      return;
-    }
-    if (targetModule?.workspaceType === "stock") {
-      openStock(result.ticker ?? result.symbol);
-      return;
-    }
-
-    if (type === "theme") {
-      setSelectedTheme(normalizeThemeName(result));
-      setActiveModule("theme-intelligence");
-      setMobileMenuOpen(false);
-      window.setTimeout(() => document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-      return;
-    }
-    if (type === "sector") {
-      setActiveModule("market-intel");
-      setMobileMenuOpen(false);
-      window.setTimeout(() => document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-      return;
-    }
-    openStock(result.symbol);
-  }, [openStock, setActiveModule, setSelectedTheme]);
+    runWorkspaceAction(workspaceActionFromResult(result));
+  }, [runWorkspaceAction]);
 
   const selectMobileMenu = useCallback((id: ActiveTab | "settings") => {
     if (id !== "settings") setActiveModule(id);
     setMobileMenuOpen(false);
   }, [setActiveModule]);
+
+  const activeContextLabel =
+    lastWorkspaceAction?.contextPayload?.label
+    ?? (activeTab === "stock-analysis" ? selectedTicker
+      : activeTab === "theme-intelligence" ? selectedTheme || "Theme Intelligence"
+        : activeTab === "market-intel" ? selectedSector
+          : activeTab === "alpha-quant" ? selectedAlphaView
+            : selectedPortfolioView);
 
   return (
     <div className="miji-shell flex h-[100dvh] w-full flex-col overflow-hidden bg-[#0A0C10] text-[#E6EDF3]">
@@ -334,6 +402,10 @@ function DashboardApp() {
           </div>
           <div className="miji-header-actions flex w-full min-w-0 items-center gap-3 md:w-auto">
             <GlobalStockSearch onSelect={openStock} onSelectResult={openSearchResult} onAddToWatchlist={addToWatchlist} />
+            <div className="hidden min-w-0 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2 text-[11px] text-[#9BA7B4] xl:block">
+              <span className="font-semibold uppercase tracking-wide text-[#6E7681]">Workspace</span>
+              <span className="ml-2 font-mono text-[#C9D1D9]">{activeContextLabel}</span>
+            </div>
             <div className="hidden rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2 font-mono text-[11px] text-[#9BA7B4] lg:block" suppressHydrationWarning>
               {timestamp ? `LIVE ${timestamp}` : "LIVE"}
             </div>
@@ -343,8 +415,8 @@ function DashboardApp() {
 
       <div className="miji-content min-h-0 flex-1 overflow-y-auto bg-[#0A0C10]">
         {activeTab === "theme-intelligence" && <div id="theme-intelligence"><ThemeIntelligenceDashboard onTickerSelect={openStock} /></div>}
-        {activeTab === "portfolio" && <PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} />}
-        {activeTab === "alpha-quant" && <AlphaQuantPage onTickerSelect={openStock} />}
+        {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
+        {activeTab === "alpha-quant" && <div id="alpha-quant"><AlphaQuantPage onTickerSelect={openStock} /></div>}
         {activeTab === "market-intel" && <div id="sector-rotation"><SectorRotationPanel onTickerSelect={openStock} /></div>}
         {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]"><StockAnalysisWorkspace /></div>}
       </div>

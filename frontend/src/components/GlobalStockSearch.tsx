@@ -6,7 +6,7 @@ import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { enabledTerminalModules, getTerminalModule } from "@/modules/terminalModules";
 import { searchStocks } from "@/services/stockApi";
-import type { SearchResult } from "@/types/stock";
+import type { OmniboxTargetTab, SearchResult, WorkspaceAction } from "@/types/stock";
 
 interface GlobalStockSearchProps {
   onSelect: (symbol: string) => void;
@@ -52,6 +52,13 @@ interface OverlayPosition {
 
 function stockRecentResult(ticker: string): SearchResult {
   const symbol = ticker.trim().toUpperCase();
+  const workspaceAction: WorkspaceAction = {
+    actionType: "open_stock",
+    target_tab: "stock-analysis",
+    focusTarget: "stock-workspace",
+    openMode: "replace",
+    contextPayload: { ticker: symbol, label: `Open ${symbol} Analysis` },
+  };
   return {
     symbol,
     ticker: symbol,
@@ -64,11 +71,23 @@ function stockRecentResult(ticker: string): SearchResult {
     intent: "ticker",
     group: "Stocks",
     target_tab: "stock-analysis",
+    actionType: workspaceAction.actionType,
+    focusTarget: workspaceAction.focusTarget,
+    contextPayload: workspaceAction.contextPayload,
+    openMode: workspaceAction.openMode,
+    workspaceAction,
   };
 }
 
 function themeRecentResult(theme: string): SearchResult {
   const label = theme.trim();
+  const workspaceAction: WorkspaceAction = {
+    actionType: "open_theme",
+    target_tab: "theme-intelligence",
+    focusTarget: "theme-detail",
+    openMode: "replace",
+    contextPayload: { theme: label, label: `Open ${label}` },
+  };
   return {
     symbol: `THEME:${label.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
     name: label,
@@ -80,11 +99,33 @@ function themeRecentResult(theme: string): SearchResult {
     intent: "theme",
     group: "Themes",
     target_tab: "theme-intelligence",
+    actionType: workspaceAction.actionType,
+    focusTarget: workspaceAction.focusTarget,
+    contextPayload: workspaceAction.contextPayload,
+    openMode: workspaceAction.openMode,
+    workspaceAction,
   };
 }
 
-function commandResult(title: string, description: string, targetTab: SearchResult["target_tab"]): SearchResult {
+function commandAction(title: string, targetTab: OmniboxTargetTab): WorkspaceAction {
+  if (targetTab === "alpha-quant") {
+    return { actionType: "open_alpha", target_tab: targetTab, focusTarget: "alpha-workspace", openMode: "replace", contextPayload: { alphaView: "top-alpha", label: title } };
+  }
+  if (targetTab === "portfolio") {
+    return { actionType: "open_portfolio", target_tab: targetTab, focusTarget: "portfolio-watchlist", openMode: "replace", contextPayload: { portfolioView: "watchlist", label: title } };
+  }
+  if (targetTab === "market-intel") {
+    return { actionType: "open_sector", target_tab: targetTab, focusTarget: "sector-drilldown", openMode: "replace", contextPayload: { label: title } };
+  }
+  if (targetTab === "theme-intelligence") {
+    return { actionType: "open_module", target_tab: targetTab, focusTarget: "theme-workspace", openMode: "replace", contextPayload: { label: title } };
+  }
+  return { actionType: "open_module", target_tab: targetTab, focusTarget: targetTab, openMode: "replace", contextPayload: { label: title } };
+}
+
+function commandResult(title: string, description: string, targetTab: OmniboxTargetTab): SearchResult {
   const symbol = title.toUpperCase().replace(/[^A-Z0-9]+/g, "-");
+  const workspaceAction = commandAction(title, targetTab);
   return {
     symbol,
     name: title,
@@ -96,6 +137,11 @@ function commandResult(title: string, description: string, targetTab: SearchResu
     group: "Commands",
     target_tab: targetTab,
     command: `open-${targetTab}`,
+    actionType: workspaceAction.actionType,
+    focusTarget: workspaceAction.focusTarget,
+    contextPayload: workspaceAction.contextPayload,
+    openMode: workspaceAction.openMode,
+    workspaceAction,
   };
 }
 
@@ -231,11 +277,11 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   }, [visibleResults.length]);
 
   const overlay = open && portalReady ? createPortal(
-    <div className="miji-omnibox-portal fixed inset-0 z-[240]">
+    <div className="miji-omnibox-portal pointer-events-auto fixed inset-0 isolate z-[9999]" style={{ zIndex: 9999 }}>
       <button
         type="button"
         aria-label="Close command palette"
-        className="absolute inset-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
+        className="absolute inset-0 z-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
         onMouseDown={(event) => {
           event.preventDefault();
           setOpen(false);
@@ -246,8 +292,8 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         }}
       />
       <div
-        className="miji-command-palette fixed max-h-[min(72dvh,34rem)] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl max-md:inset-x-3 max-md:top-[5.5rem] max-md:w-auto"
-        style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width }}
+        className="miji-command-palette pointer-events-auto fixed z-[10000] max-h-[min(72dvh,34rem)] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl max-md:inset-x-3 max-md:top-[5.5rem] max-md:w-auto"
+        style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, zIndex: 10000 }}
       >
         <div className="flex items-center justify-between border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
