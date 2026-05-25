@@ -1,8 +1,10 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
-import { getTerminalModule } from "@/modules/terminalModules";
+import { useWorkspace } from "@/context/WorkspaceContext";
+import { enabledTerminalModules, getTerminalModule } from "@/modules/terminalModules";
 import { searchStocks } from "@/services/stockApi";
 import type { SearchResult } from "@/types/stock";
 
@@ -11,59 +13,6 @@ interface GlobalStockSearchProps {
   onSelectResult?: (result: SearchResult) => void;
   onAddToWatchlist?: (symbol: string) => void;
   placeholder?: string;
-}
-
-const RECENT_KEY = "miji:recent-searches";
-const RECENT_SCHEMA_VERSION = "stock_v6";
-
-interface RecentEnvelope {
-  schema_version: string;
-  data: SearchResult[];
-}
-
-function normalizeRecentItem(item: SearchResult): SearchResult | null {
-  const symbol = item.symbol?.trim().toUpperCase();
-  if (!symbol) return null;
-  const price = typeof item.price === "number" && Number.isFinite(item.price) && item.price > 0 ? item.price : null;
-  const changePercent = typeof item.change_percent === "number" && Number.isFinite(item.change_percent) ? item.change_percent : null;
-  return {
-    ...item,
-    symbol,
-    price,
-    change_percent: changePercent,
-  };
-}
-
-function readRecent(): SearchResult[] {
-  try {
-    const raw = window.localStorage.getItem(RECENT_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || (parsed as RecentEnvelope).schema_version !== RECENT_SCHEMA_VERSION) {
-      window.localStorage.removeItem(RECENT_KEY);
-      return [];
-    }
-    const data = (parsed as RecentEnvelope).data;
-    if (!Array.isArray(data)) {
-      window.localStorage.removeItem(RECENT_KEY);
-      return [];
-    }
-    return data.map(normalizeRecentItem).filter((item): item is SearchResult => item !== null).slice(0, 6);
-  } catch {
-    window.localStorage.removeItem(RECENT_KEY);
-    return [];
-  }
-}
-
-function writeRecent(item: SearchResult): void {
-  try {
-    const normalized = normalizeRecentItem(item);
-    if (!normalized) return;
-    const next = [normalized, ...readRecent().filter((entry) => entry.symbol !== normalized.symbol)].slice(0, 6);
-    window.localStorage.setItem(RECENT_KEY, JSON.stringify({ schema_version: RECENT_SCHEMA_VERSION, data: next }));
-  } catch {
-    // Recent search cache is best effort.
-  }
 }
 
 const GROUP_ORDER = ["Stocks", "Themes", "Sectors", "Commands"] as const;
@@ -95,24 +44,111 @@ function canAddToWatchlist(item: SearchResult): boolean {
   return group === "Stocks" && !["theme", "sector", "command"].includes(type);
 }
 
+interface OverlayPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
+function stockRecentResult(ticker: string): SearchResult {
+  const symbol = ticker.trim().toUpperCase();
+  return {
+    symbol,
+    ticker: symbol,
+    name: `${symbol} Analysis`,
+    company: `${symbol} Analysis`,
+    label: `Open ${symbol} Analysis`,
+    description: "Recent stock workspace",
+    exchange: "Recent",
+    type: "Equity",
+    intent: "ticker",
+    group: "Stocks",
+    target_tab: "stock-analysis",
+  };
+}
+
+function themeRecentResult(theme: string): SearchResult {
+  const label = theme.trim();
+  return {
+    symbol: `THEME:${label.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
+    name: label,
+    theme: label,
+    label,
+    description: "Recent theme workspace",
+    exchange: "Recent",
+    type: "Theme",
+    intent: "theme",
+    group: "Themes",
+    target_tab: "theme-intelligence",
+  };
+}
+
+function commandResult(title: string, description: string, targetTab: SearchResult["target_tab"]): SearchResult {
+  const symbol = title.toUpperCase().replace(/[^A-Z0-9]+/g, "-");
+  return {
+    symbol,
+    name: title,
+    label: title,
+    description,
+    exchange: "Command",
+    type: "Command",
+    intent: "command",
+    group: "Commands",
+    target_tab: targetTab,
+    command: `open-${targetTab}`,
+  };
+}
+
 export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWatchlist, placeholder = "Search ticker, theme, sector, ETF..." }: GlobalStockSearchProps) {
+  const { recentTickers, recentThemes } = useWorkspace();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [recent, setRecent] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [portalReady, setPortalReady] = useState(false);
+  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>({ top: 88, left: 16, width: 720 });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const composingRef = useRef(false);
 
+  const quickResults = useMemo<SearchResult[]>(() => {
+    const moduleCommands = enabledTerminalModules
+      .filter((module) => module.workspaceType !== "stock")
+      .map((module) => commandResult(`Open ${module.title}`, module.description, module.target_tab));
+    const defaultStockAction = recentTickers.some((ticker) => ticker.toUpperCase() === "NVDA") ? [] : [stockRecentResult("NVDA")];
+    return [
+      ...recentTickers.slice(0, 5).map(stockRecentResult),
+      ...recentThemes.slice(0, 4).map(themeRecentResult),
+      ...defaultStockAction,
+      ...moduleCommands,
+    ];
+  }, [recentThemes, recentTickers]);
+
+  const updateOverlayPosition = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || typeof window === "undefined") return;
+    const margin = 12;
+    const maxWidth = Math.min(760, window.innerWidth - margin * 2);
+    const preferredWidth = Math.max(420, Math.min(maxWidth, Math.max(rect.width, 620)));
+    const left = Math.min(Math.max(margin, rect.right - preferredWidth), window.innerWidth - preferredWidth - margin);
+    const top = Math.min(Math.max(rect.bottom + 10, 72), window.innerHeight - 220);
+    setOverlayPosition({ top, left, width: preferredWidth });
+  }, []);
+
   useEffect(() => {
-    setRecent(readRecent());
+    setPortalReady(true);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      if (!query.trim()) {
+        setResults([]);
+        setActiveIndex(0);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       const next = await searchStocks(query);
       if (!cancelled) {
@@ -128,16 +164,15 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   }, [query]);
 
   useEffect(() => {
-    function onPointerDown(event: MouseEvent | TouchEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("touchstart", onPointerDown, { passive: true });
+    if (!open) return;
+    updateOverlayPosition();
+    window.addEventListener("resize", updateOverlayPosition);
+    window.addEventListener("scroll", updateOverlayPosition, true);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("touchstart", onPointerDown);
+      window.removeEventListener("resize", updateOverlayPosition);
+      window.removeEventListener("scroll", updateOverlayPosition, true);
     };
-  }, []);
+  }, [open, updateOverlayPosition]);
 
   useEffect(() => {
     function onGlobalKeyDown(event: KeyboardEvent) {
@@ -156,8 +191,6 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     const normalized = item.symbol.trim().toUpperCase();
     if (!normalized) return;
     const normalizedItem = { ...item, symbol: normalized };
-    writeRecent(normalizedItem);
-    setRecent(readRecent());
     setQuery("");
     setOpen(false);
     inputRef.current?.blur();
@@ -184,7 +217,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     else commit(normalized);
   };
 
-  const visibleResults = (results?.length ?? 0) > 0 ? results : query ? [] : recent;
+  const visibleResults = query.trim() ? results : quickResults;
   const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
     const group = getResultGroup(item);
     const existing = acc.find((entry) => entry.group === group);
@@ -196,6 +229,119 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   useEffect(() => {
     setActiveIndex((idx) => Math.min(Math.max(visibleResults.length - 1, 0), idx));
   }, [visibleResults.length]);
+
+  const overlay = open && portalReady ? createPortal(
+    <div className="miji-omnibox-portal fixed inset-0 z-[240]">
+      <button
+        type="button"
+        aria-label="Close command palette"
+        className="absolute inset-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
+        onMouseDown={(event) => {
+          event.preventDefault();
+          setOpen(false);
+        }}
+        onTouchStart={(event) => {
+          event.preventDefault();
+          setOpen(false);
+        }}
+      />
+      <div
+        className="miji-command-palette fixed max-h-[min(72dvh,34rem)] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl max-md:inset-x-3 max-md:top-[5.5rem] max-md:w-auto"
+        style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width }}
+      >
+        <div className="flex items-center justify-between border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <CommandIcon size={14} className="text-amber-200" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#C9D1D9]">Terminal Command Palette</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">
+            <span>Enter</span>
+            <span>Open</span>
+            <span>Esc</span>
+            <span>Close</span>
+          </div>
+        </div>
+
+        <div className="max-h-[calc(min(72dvh,34rem)-2.5rem)] overflow-y-auto overscroll-contain p-2">
+          {(visibleResults?.length ?? 0) === 0 ? (
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault();
+                commit(query);
+              }}
+              className="w-full rounded-lg border border-[#2B313C] bg-[#111318] px-3 py-3 text-left font-mono text-sm text-[#C9D1D9] transition hover:border-amber-400/20 hover:bg-[#161B22]"
+            >
+              Open {query || "ticker"} Analysis
+            </button>
+          ) : (
+            <>
+              {!query.trim() && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Recent and Quick Actions</div>}
+              {groupedResults.map(({ group, items }) => (
+                <section key={group} className="pb-2">
+                  <div className="sticky top-0 z-10 bg-[#090B0F]/95 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681] backdrop-blur-md">{group}</div>
+                  <div className="space-y-1">
+                    {items.map((item) => {
+                      const index = visibleResults.indexOf(item);
+                      const active = activeIndex === index;
+                      const title = getResultTitle(item);
+                      const description = getResultDescription(item);
+                      const target = getTargetLabel(item);
+                      const symbolLabel = item.ticker ?? item.symbol;
+                      return (
+                        <div
+                          key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
+                          className={`group rounded-lg border px-3 py-2.5 transition ${
+                            active
+                              ? "border-amber-400/25 bg-[#1A1F29] shadow-[inset_3px_0_0_rgba(251,191,36,0.65)]"
+                              : "border-transparent hover:border-[#2B313C] hover:bg-[#111318]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              onPointerDown={(event) => {
+                                event.preventDefault();
+                                commitResult(item);
+                              }}
+                              className="min-w-0 flex-1 text-left"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="min-w-[4.25rem] shrink-0 font-mono text-sm font-semibold text-[#E6EDF3]">{symbolLabel}</span>
+                                <span className="truncate text-sm font-medium text-[#C9D1D9]">{title}</span>
+                                <span className="shrink-0 rounded border border-[#2B313C] bg-[#0A0C10] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{item.type}</span>
+                              </div>
+                              <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
+                                <span className="truncate text-[#7D8590]">{description}</span>
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">{target}</span>
+                              </div>
+                            </button>
+                            {onAddToWatchlist && canAddToWatchlist(item) && (
+                              <button
+                                type="button"
+                                onPointerDown={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  onAddToWatchlist(item.ticker ?? item.symbol);
+                                }}
+                                className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-400/20 px-2 py-1 text-[10px] font-semibold text-amber-200 opacity-80 transition hover:bg-amber-400/10 group-hover:opacity-100"
+                              >
+                                <Plus size={12} />
+                                Add
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   return (
     <div ref={containerRef} className="miji-global-search relative w-full max-w-[360px]">
@@ -245,94 +391,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         />
         {loading && <Loader2 size={15} className="animate-spin text-amber-200" />}
       </form>
-
-      {open && (
-        <div className="miji-search-results absolute right-0 top-12 z-[90] max-h-[min(70vh,28rem)] w-[min(92vw,560px)] min-w-full overflow-y-auto rounded-2xl border border-[#2B313C] bg-[#0A0C10]/95 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.42)] backdrop-blur-md">
-          {(visibleResults?.length ?? 0) === 0 ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault();
-                commit(query);
-              }}
-              className="w-full rounded-xl px-3 py-3 text-left font-mono text-sm text-[#C9D1D9] hover:bg-[#161B22]"
-            >
-              Analyze {query || "ticker"}
-            </button>
-          ) : (
-            <>
-            {!query && recent.length > 0 && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Recent Searches</div>}
-            {groupedResults.map(({ group, items }) => (
-              <div key={group} className="pb-1">
-                <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">{group}</div>
-                {items.map((item) => {
-                  const index = visibleResults.indexOf(item);
-                  const title = getResultTitle(item);
-                  const description = getResultDescription(item);
-                  const target = getTargetLabel(item);
-                  const symbolLabel = item.ticker ?? item.symbol;
-                  return (
-                    <div
-                      key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
-                      className={`rounded-xl px-3 py-3 transition ${activeIndex === index ? "bg-[#161B22]" : "hover:bg-[#111318]"}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <button
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            commitResult(item);
-                          }}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <div className="flex min-w-0 items-center justify-between gap-3">
-                            <span className="truncate font-mono text-sm font-semibold text-[#E6EDF3]">{symbolLabel}</span>
-                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-amber-200">{item?.exchange ?? "US"}</span>
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
-                            <span className="min-w-0 truncate text-[#C9D1D9]">{title}</span>
-                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{target}</span>
-                          </div>
-                          <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
-                            <span className="truncate text-[#9BA7B4]">{description}</span>
-                            {typeof item?.price === "number" && item.price > 0 && (
-                              <span className="shrink-0 font-mono text-[#C9D1D9]">
-                                ${item.price.toFixed(2)}
-                                {typeof item.change_percent === "number" && (
-                                  <span className={item.change_percent >= 0 ? "ml-2 text-emerald-300" : "ml-2 text-rose-300"}>
-                                    {item.change_percent >= 0 ? "+" : ""}{item.change_percent.toFixed(2)}%
-                                  </span>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                        {onAddToWatchlist && canAddToWatchlist(item) && (
-                          <button
-                            type="button"
-                            onPointerDown={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              onAddToWatchlist(item.ticker ?? item.symbol);
-                            }}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/20 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/10"
-                          >
-                            <Plus size={12} />
-                            Add
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            </>
-          )}
-          <div className="flex items-center gap-2 px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">
-            <CommandIcon size={11} />
-            <span>Ctrl/Cmd+K</span>
-          </div>
-        </div>
-      )}
+      {overlay}
     </div>
   );
 }
