@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timezone
@@ -6,7 +6,6 @@ from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
-import vectorbt as vbt
 import yfinance as yf
 
 from alpha_engine.scoring import bounded_score, calculate_bubble_index
@@ -225,6 +224,9 @@ def _factor_attribution(snapshots: Iterable[FactorSnapshot]) -> Dict[str, float]
 
 
 def run_top_alpha_backtest(universe: str = "sp500", years: int = 3) -> Dict[str, Any]:
+    # Lazy import: vectorbt pulls numba, plotly, and a large dependency tree (~150-200MB).
+    # It must NOT be imported at module level or it will exhaust Render Free Tier RAM on startup.
+    import vectorbt as vbt  # noqa: PLC0415
     normalized_universe = "nasdaq100" if universe.lower() == "nasdaq100" else "sp500"
     symbols = sorted(set(NASDAQ100_UNIVERSE if normalized_universe == "nasdaq100" else SP500_UNIVERSE))
     period = f"{max(2, years + 1)}y"

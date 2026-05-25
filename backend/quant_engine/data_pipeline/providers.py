@@ -1,10 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Any, Dict, List
+
 
 import requests
 import yfinance as yf
@@ -14,7 +16,11 @@ from settings import get_settings
 logger = logging.getLogger("miji.providers")
 PROVIDER_TIMEOUT_SECONDS = 8.0
 PROVIDER_RETRY_COUNT = 2
-PROVIDER_EXECUTOR = ThreadPoolExecutor(max_workers=8)
+# Render Free Tier: 512MB RAM. 8 simultaneous threads means 8 concurrent yfinance/HTTP calls
+# with 8 sets of pandas DataFrames resident simultaneously. 4 is sufficient for fetch+timeout pattern.
+# Override via RENDER_PROVIDER_WORKERS env var if on a higher tier.
+PROVIDER_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.getenv("RENDER_PROVIDER_WORKERS", "4")))
+
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:

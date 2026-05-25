@@ -412,86 +412,93 @@ def _fallback_theme_top() -> dict:
 
 
 def _fallback_alpha(universe: str) -> dict:
+    """
+    Pure static instant fallback — ZERO network I/O, ZERO data fetching.
+
+    The old implementation called central_stock_enrichment() + get_history() for up to 10
+    symbols in the fallback path, making it MORE expensive than the live pipeline during
+    an OOM/timeout event. This replacement is instant and allocation-free.
+
+    Scores are graduated (not uniform 50.0) and confidence is explicitly low (28),
+    signalling partial_data to the frontend lifecycle system.
+    True live scores will replace this once the background pipeline completes.
+    """
     universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
     rows = []
+    # Graduated base scores by position: top symbol starts ~72, each position drops ~3.5pts.
+    # This avoids the uniform-50 collapse that the old numeric-index fallback produced when exceptions
+    # fired inside the enrichment loop.
     for index, symbol in enumerate(symbols):
-        quote: dict[str, Any] = {}
-        enriched: dict[str, Any] = {}
-        normalized_quote: dict[str, Any] = {}
-        try:
-            enriched = central_stock_enrichment(symbol, include_provider_quote=True)
-            quote = enriched.get("provider_quote") or {}
-            normalized_quote = enriched.get("quote") or {}
-            history = get_history(symbol, "3mo")
-            close = history["Close"].astype(float) if history is not None and not history.empty and "Close" in history else None
-            ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1.0) if close is not None and len(close) > 22 else 0.0
-            ret_3m = float(close.iloc[-1] / close.iloc[0] - 1.0) if close is not None and len(close) > 1 else 0.0
-            volume = history["Volume"].astype(float) if history is not None and not history.empty and "Volume" in history else None
-            rel_volume = float(volume.iloc[-1] / max(volume.tail(45).mean(), 1.0)) if volume is not None and len(volume) > 10 else 1.0
-            market_cap = safe_float(normalized_quote.get("market_cap") or quote.get("marketCap"))
-            momentum = bounded_score(48.0 + ret_3m * 150.0 + ret_1m * 80.0)
-            smart_money = bounded_score(45.0 + (rel_volume - 1.0) * 24.0 + ret_1m * 75.0)
-            quality = bounded_score(44.0 + safe_float(quote.get("grossMargins")) * 55.0 + safe_float(quote.get("profitMargins")) * 85.0)
-            valuation = bounded_score(78.0 - max(0.0, safe_float(quote.get("trailingPE") or quote.get("forwardPE")) - 22.0) * 0.7 - max(0.0, safe_float(quote.get("priceToSalesTrailing12Months")) - 5.0) * 2.0)
-            confidence = bounded_score((65.0 if close is not None and len(close) > 44 else 28.0) + min(market_cap, 200_000_000_000.0) / 200_000_000_000.0 * 20.0)
-            alpha_score = bounded_score(momentum * 0.32 + quality * 0.24 + smart_money * 0.22 + valuation * 0.14 + confidence * 0.08 - (100.0 - confidence) * 0.08)
-        except Exception:
-            momentum = bounded_score(42.0 + index * 2.7)
-            smart_money = bounded_score(39.0 + index * 1.9)
-            quality = bounded_score(41.0 + index * 2.1)
-            valuation = bounded_score(46.0 - index * 1.2)
-            confidence = 22.0
-            alpha_score = bounded_score(momentum * 0.30 + quality * 0.28 + smart_money * 0.22 + valuation * 0.12 - 6.0)
-        row = {
+        base  = bounded_score(72.0 - index * 3.5)
+        qual  = bounded_score(70.0 - index * 2.8)
+        smrt  = bounded_score(68.0 - index * 3.1)
+        val   = bounded_score(55.0 - index * 1.8)
+        mom   = bounded_score(65.0 - index * 2.4)
+        conf  = 28.0  # intentionally low — signals partial data to frontend lifecycle
+        rows.append({
             "ticker": symbol,
-            "company_name": str(enriched.get("company_name") or quote.get("longName") or quote.get("shortName") or symbol),
-            "sector": str(enriched.get("sector") or quote.get("sector") or "Partial Data"),
-            "price": normalized_quote.get("price"),
-            "change": normalized_quote.get("change"),
-            "change_percent": normalized_quote.get("change_percent"),
-            "quote_status": normalized_quote.get("status") or enriched.get("quote_status") or "unavailable",
-            "alpha_score": alpha_score,
-            "base_alpha_score": alpha_score,
-            "universe_context_score": alpha_score,
+            "company_name": symbol,
+            "sector": "Calibrating",
+            # Price fields are null — fallback must never emit a live price.
+            "price": None,
+            "change": None,
+            "change_percent": None,
+            "quote_status": "unavailable",
+            "alpha_score": base,
+            "base_alpha_score": base,
+            "universe_context_score": base,
             "universe_adjustment": 0.0,
-            "universe_percentile": 0.0,
+            "universe_percentile": round((len(symbols) - index - 1) / max(len(symbols) - 1, 1) * 100.0, 2),
             "rank_in_universe": index + 1,
             "universe": universe.upper(),
-            "quality": quality,
-            "growth": momentum,
-            "smart_money": smart_money,
-            "valuation": valuation,
-            "earnings_quality": quality,
-            "market_structure": momentum,
-            "bubble_risk": bounded_score(100.0 - valuation),
-            "sector_alignment": momentum,
-            "theme_alignment": bounded_score((momentum + smart_money) / 2.0),
-            "theme_strength": momentum,
-            "theme_capital_flow": smart_money,
-            "confidence_score": confidence,
-            "confidence_label": confidence_label(confidence),
-            "theme_explanation": ["Alpha engine delayed; showing neutral fallback until cached intelligence is ready."],
+            "quality": qual,
+            "growth": mom,
+            "smart_money": smrt,
+            "valuation": val,
+            "earnings_quality": qual,
+            "market_structure": mom,
+            "bubble_risk": bounded_score(100.0 - val),
+            "sector_alignment": mom,
+            "theme_alignment": bounded_score((mom + smrt) / 2.0),
+            "theme_strength": mom,
+            "theme_capital_flow": smrt,
+            "confidence_score": conf,
+            "confidence_label": confidence_label(conf),
+            "theme_explanation": ["Alpha engine warming up; static institutional position shown."],
             "suggested_action": "Hold",
-            "factor_importance": {"quality": 0.2, "growth": 0.2, "smart_money": 0.2, "valuation": 0.15, "earnings_quality": 0.15, "market_structure": 0.1},
-            "bullish_factors": ["Partial price and liquidity factors are available."] if confidence >= 45 else [],
-            "risk_factors": ["Live alpha engine delayed; confidence reduced until background cache completes."],
-        }
-        rows.append(row)
-    rows.sort(key=lambda item: safe_float(item.get("alpha_score")), reverse=True)
-    total = len(rows)
-    for rank, row in enumerate(rows, start=1):
-        row["rank_in_universe"] = rank
-        row["universe_percentile"] = round((total - rank) / max(total - 1, 1) * 100.0, 2) if total > 1 else 100.0
+            "factor_importance": {
+                "quality": 0.20,
+                "growth": 0.20,
+                "smart_money": 0.20,
+                "valuation": 0.15,
+                "earnings_quality": 0.15,
+                "market_structure": 0.10,
+            },
+            "bullish_factors": [],
+            "risk_factors": ["Live alpha engine warming up; confidence is low until background pipeline completes."],
+        })
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "universe": universe.upper(),
-        "qlib_engine": {"available": False, "mode": "fallback", "provider": "Miji Quant", "factor_set": "Cached Alpha Fallback"},
-        "market_regime": {"name": "Calibrating", "confidence": 50.0},
-        "factor_importance": rows[0]["factor_importance"],
+        "qlib_engine": {
+            "available": False,
+            "mode": "fallback",
+            "provider": "Miji Quant",
+            "factor_set": "Static Institutional Fallback",
+        },
+        "market_regime": {"name": "Calibrating", "confidence": 38.0},
+        "factor_importance": {
+            "quality": 0.20,
+            "growth": 0.20,
+            "smart_money": 0.20,
+            "valuation": 0.15,
+            "earnings_quality": 0.15,
+            "market_structure": 0.10,
+        },
         "top_alpha": rows,
         "recommendations": rows[:5],
-        "summary": "Live engine delayed. Showing cached institutional intelligence fallback while Render warms up.",
+        "summary": "Alpha pipeline warming up. Static institutional fallback shown. Scores update when live engine completes.",
         "fallback": True,
     }
 
@@ -659,36 +666,65 @@ def get_earnings_quality(ticker: str) -> dict:
 
 @app.api_route("/warmup", methods=["GET", "POST"])
 def warmup() -> dict:
+    """
+    Scheduled warmup: populates the SQLite cache for high-traffic endpoints.
+
+    Memory-safe design for Render Free Tier:
+    - Tasks are submitted in batches of 2 with 1-second gaps between batches.
+    - Only lightweight essential endpoints are warmed (stock quotes, market overview).
+    - Heavy pipelines (alpha ranking, theme, regime) are deferred to on-demand first access.
+      The _fast_cached_response pattern handles them: it serves a static fallback instantly
+      while the live pipeline runs in the background and populates the cache.
+    - Warming alpha/theme/regime here would create a concurrent memory spike and is removed.
+    """
     started = time.perf_counter()
-    tasks: dict[str, Callable[[], Any]] = {
-        "sector_rotation": get_sector_rotation,
-        "market_regime": get_market_regime,
-        "theme_top": get_theme_top,
-        "theme_emerging": get_theme_emerging,
-        "theme_rotation": get_theme_rotation_endpoint,
-        "theme_capital_flow": get_theme_capital_flow_endpoint,
-        "alpha_top": lambda: get_alpha_top("sp500"),
+
+    # Phase 1: lightweight stock quote cache only (cheap network-only fetches, no pipeline)
+    phase1: dict[str, Callable[[], Any]] = {
         "market_overview": get_market_overview,
     }
-    for symbol in ["NVDA", "AAPL", "MSFT", "SPY", "QQQ", "SMH"]:
-        tasks[f"stock_{symbol}"] = lambda symbol=symbol: get_stock(symbol)
+    for symbol in ["NVDA", "AAPL", "MSFT", "SPY"]:
+        phase1[f"stock_{symbol}"] = lambda symbol=symbol: get_stock(symbol)
+
+    # Phase 2: heavier endpoints, submitted after phase 1 completes with a delay
+    # NOTE: alpha_top, theme, and regime are intentionally NOT warmed here.
+    # They self-warm on first access via _fast_cached_response.
+    phase2: dict[str, Callable[[], Any]] = {
+        "sector_rotation": get_sector_rotation,
+    }
 
     scheduled: list[str] = []
-    for name, task in tasks.items():
-        scheduled.append(name)
 
-        def run(name: str = name, task: Callable[[], Any] = task) -> None:
-            try:
-                task()
-                logger.info("warmup task complete name=%s", name)
-            except Exception as exc:
-                logger.warning("warmup task failed name=%s error=%s", name, exc)
+    def _submit_batch(batch: list[tuple[str, Callable[[], Any]]]) -> None:
+        for name, task in batch:
+            scheduled.append(name)
 
-        BACKGROUND_EXECUTOR.submit(run)
+            def run(name: str = name, task: Callable[[], Any] = task) -> None:
+                try:
+                    task()
+                    logger.info("warmup task complete name=%s", name)
+                except Exception as exc:
+                    logger.warning("warmup task failed name=%s error=%s", name, exc)
+
+            BACKGROUND_EXECUTOR.submit(run)
+
+    # Submit phase 1 in batches of 2 with 0.5s gap
+    phase1_items = list(phase1.items())
+    for i in range(0, len(phase1_items), 2):
+        _submit_batch(phase1_items[i:i + 2])
+        if i + 2 < len(phase1_items):
+            time.sleep(0.5)
+
+    # Submit phase 2 after a 2-second delay to let phase 1 settle
+    def _delayed_phase2() -> None:
+        time.sleep(2.0)
+        _submit_batch(list(phase2.items()))
+
+    BACKGROUND_EXECUTOR.submit(_delayed_phase2)
 
     return {
         "status": "scheduled",
-        "tasks": sorted(scheduled),
+        "tasks": sorted(scheduled + list(phase2.keys())),
         "duration_seconds": round(time.perf_counter() - started, 3),
     }
 
