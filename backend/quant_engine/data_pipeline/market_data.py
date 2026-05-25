@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import pickle
 import sqlite3
 import threading
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd
+
+logger = logging.getLogger("miji.market_data")
 
 from quant_engine.data_pipeline.providers import (
     fetch_quote_with_fallbacks,
