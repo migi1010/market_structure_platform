@@ -84,11 +84,27 @@ export interface MarketOverviewItem {
   quote_status?: string;
 }
 
+export type OmniboxIntent = "ticker" | "theme" | "sector" | "command" | "natural_language";
+export type OmniboxGroup = "Stocks" | "Themes" | "Sectors" | "Commands";
+export type OmniboxTargetTab = "theme-intelligence" | "portfolio" | "alpha-quant" | "market-intel" | "stock-analysis";
+
 export interface SearchResult {
   symbol: string;
   name: string;
   exchange: string;
   type: string;
+  id?: string;
+  label?: string;
+  description?: string;
+  company?: string;
+  theme?: string;
+  sector?: string;
+  etf?: string;
+  command?: string;
+  ticker?: string;
+  intent?: OmniboxIntent;
+  group?: OmniboxGroup;
+  target_tab?: OmniboxTargetTab;
   price?: number | null;
   change_percent?: number | null;
   quote_status?: string;

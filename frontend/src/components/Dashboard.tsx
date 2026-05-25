@@ -242,6 +242,21 @@ function DashboardApp() {
   }, []);
 
   const openSearchResult = useCallback((result: SearchResult) => {
+    const targetTab = result.target_tab;
+    if (targetTab === "alpha-quant" || targetTab === "portfolio" || targetTab === "theme-intelligence" || targetTab === "market-intel") {
+      setActiveTab(targetTab);
+      setMobileMenuOpen(false);
+      window.setTimeout(() => {
+        if (targetTab === "theme-intelligence") document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (targetTab === "market-intel") document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 120);
+      return;
+    }
+    if (targetTab === "stock-analysis") {
+      openStock(result.ticker ?? result.symbol);
+      return;
+    }
+
     const type = result.type?.toLowerCase() ?? "equity";
     if (type === "theme") {
       setActiveTab("theme-intelligence");

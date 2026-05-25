@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
 import { searchStocks } from "@/services/stockApi";
 import type { SearchResult } from "@/types/stock";
 
@@ -65,6 +65,39 @@ function writeRecent(item: SearchResult): void {
   }
 }
 
+const GROUP_ORDER = ["Stocks", "Themes", "Sectors", "Commands"] as const;
+
+function getResultGroup(item: SearchResult): (typeof GROUP_ORDER)[number] {
+  if (item.group && GROUP_ORDER.includes(item.group)) return item.group;
+  const type = item.type?.toLowerCase();
+  if (type === "theme") return "Themes";
+  if (type === "sector") return "Sectors";
+  if (type === "command") return "Commands";
+  return "Stocks";
+}
+
+function getResultTitle(item: SearchResult): string {
+  return item.label ?? item.company ?? item.theme ?? item.sector ?? item.name ?? item.symbol;
+}
+
+function getResultDescription(item: SearchResult): string {
+  return item.description ?? item.name ?? item.type ?? "Open workspace";
+}
+
+function getTargetLabel(item: SearchResult): string {
+  if (item.target_tab === "alpha-quant") return "Alpha Quant";
+  if (item.target_tab === "portfolio") return "Portfolio";
+  if (item.target_tab === "theme-intelligence") return "Theme Intelligence";
+  if (item.target_tab === "market-intel") return "Sector Rotation";
+  return "Stock Analysis";
+}
+
+function canAddToWatchlist(item: SearchResult): boolean {
+  const group = getResultGroup(item);
+  const type = item.type?.toLowerCase();
+  return group === "Stocks" && !["theme", "sector", "command"].includes(type);
+}
+
 export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWatchlist, placeholder = "Search ticker, theme, sector, ETF..." }: GlobalStockSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -109,6 +142,19 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     };
   }, []);
 
+  useEffect(() => {
+    function onGlobalKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpen(true);
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    }
+    window.addEventListener("keydown", onGlobalKeyDown);
+    return () => window.removeEventListener("keydown", onGlobalKeyDown);
+  }, []);
+
   const commitResult = (item: SearchResult) => {
     const normalized = item.symbol.trim().toUpperCase();
     if (!normalized) return;
@@ -134,14 +180,25 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
 
   const commitFromCurrentInput = () => {
     const normalized = query.trim().toUpperCase();
-    const exact = results.find((item) => item.symbol.trim().toUpperCase() === normalized);
-    const selected = results?.[activeIndex];
+    const exact = visibleResults.find((item) => item.symbol.trim().toUpperCase() === normalized || item.ticker?.trim().toUpperCase() === normalized);
+    const selected = visibleResults?.[activeIndex];
     if (exact) commitResult(exact);
     else if (selected) commitResult(selected);
     else commit(normalized);
   };
 
   const visibleResults = (results?.length ?? 0) > 0 ? results : query ? [] : recent;
+  const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
+    const group = getResultGroup(item);
+    const existing = acc.find((entry) => entry.group === group);
+    if (existing) existing.items.push(item);
+    else acc.push({ group, items: [item] });
+    return acc;
+  }, []);
+
+  useEffect(() => {
+    setActiveIndex((idx) => Math.min(Math.max(visibleResults.length - 1, 0), idx));
+  }, [visibleResults.length]);
 
   return (
     <div ref={containerRef} className="miji-global-search relative w-full max-w-[360px]">
@@ -178,7 +235,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
             }
             if (event.key === "ArrowDown") {
               event.preventDefault();
-              setActiveIndex((idx) => Math.min((results?.length ?? 1) - 1, idx + 1));
+              setActiveIndex((idx) => Math.min(Math.max(visibleResults.length - 1, 0), idx + 1));
             }
             if (event.key === "ArrowUp") {
               event.preventDefault();
@@ -193,7 +250,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
       </form>
 
       {open && (
-        <div className="miji-search-results absolute right-0 top-12 z-50 max-h-96 w-full overflow-y-auto rounded-2xl border border-[#2B313C] bg-[#0A0C10]/95 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.42)] backdrop-blur-md">
+        <div className="miji-search-results absolute right-0 top-12 z-[90] max-h-[min(70vh,28rem)] w-[min(92vw,560px)] min-w-full overflow-y-auto rounded-2xl border border-[#2B313C] bg-[#0A0C10]/95 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.42)] backdrop-blur-md">
           {(visibleResults?.length ?? 0) === 0 ? (
             <button
               onPointerDown={(event) => {
@@ -207,56 +264,76 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
           ) : (
             <>
             {!query && recent.length > 0 && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Recent Searches</div>}
-            {visibleResults.map((item, index) => (
-              <div
-                key={`${item.symbol}-${item.exchange}`}
-                className={`rounded-xl px-3 py-3 transition ${activeIndex === index ? "bg-[#161B22]" : "hover:bg-[#111318]"}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <button
-                    onPointerDown={(event) => {
-                      event.preventDefault();
-                      commitResult(item);
-                    }}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-sm font-semibold text-[#E6EDF3]">{item?.symbol ?? ""}</span>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-200">{item?.exchange ?? "US"}</span>
-                    </div>
-                    <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
-                      <span className="truncate text-[#9BA7B4]">{item?.name ?? item?.type ?? "Equity"}</span>
-                      {typeof item?.price === "number" && item.price > 0 && (
-                        <span className="shrink-0 font-mono text-[#C9D1D9]">
-                          ${item.price.toFixed(2)}
-                          {typeof item.change_percent === "number" && (
-                            <span className={item.change_percent >= 0 ? "ml-2 text-emerald-300" : "ml-2 text-rose-300"}>
-                              {item.change_percent >= 0 ? "+" : ""}{item.change_percent.toFixed(2)}%
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                  {onAddToWatchlist && !["Theme", "Sector"].includes(item.type) && (
-                    <button
-                      type="button"
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onAddToWatchlist(item.symbol);
-                      }}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/20 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/10"
+            {groupedResults.map(({ group, items }) => (
+              <div key={group} className="pb-1">
+                <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">{group}</div>
+                {items.map((item) => {
+                  const index = visibleResults.indexOf(item);
+                  const title = getResultTitle(item);
+                  const description = getResultDescription(item);
+                  const target = getTargetLabel(item);
+                  const symbolLabel = item.ticker ?? item.symbol;
+                  return (
+                    <div
+                      key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
+                      className={`rounded-xl px-3 py-3 transition ${activeIndex === index ? "bg-[#161B22]" : "hover:bg-[#111318]"}`}
                     >
-                      <Plus size={12} />
-                      Add to Watchlist
-                    </button>
-                  )}
-                </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            commitResult(item);
+                          }}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex min-w-0 items-center justify-between gap-3">
+                            <span className="truncate font-mono text-sm font-semibold text-[#E6EDF3]">{symbolLabel}</span>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-widest text-amber-200">{item?.exchange ?? "US"}</span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
+                            <span className="min-w-0 truncate text-[#C9D1D9]">{title}</span>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{target}</span>
+                          </div>
+                          <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
+                            <span className="truncate text-[#9BA7B4]">{description}</span>
+                            {typeof item?.price === "number" && item.price > 0 && (
+                              <span className="shrink-0 font-mono text-[#C9D1D9]">
+                                ${item.price.toFixed(2)}
+                                {typeof item.change_percent === "number" && (
+                                  <span className={item.change_percent >= 0 ? "ml-2 text-emerald-300" : "ml-2 text-rose-300"}>
+                                    {item.change_percent >= 0 ? "+" : ""}{item.change_percent.toFixed(2)}%
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                        {onAddToWatchlist && canAddToWatchlist(item) && (
+                          <button
+                            type="button"
+                            onPointerDown={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onAddToWatchlist(item.ticker ?? item.symbol);
+                            }}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/20 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-400/10"
+                          >
+                            <Plus size={12} />
+                            Add
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
             </>
           )}
+          <div className="flex items-center gap-2 px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">
+            <CommandIcon size={11} />
+            <span>Ctrl/Cmd+K</span>
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,9 @@ import type {
   AlphaQuantResponse,
   EmergingThemeResponse,
   MarketOverviewItem,
+  OmniboxGroup,
+  OmniboxIntent,
+  OmniboxTargetTab,
   SearchResult,
   SectorRotation,
   StockAnalysis,
@@ -56,6 +59,208 @@ const UNIVERSAL_SEARCH: SearchResult[] = [
   { symbol: "SOXX", name: "iShares Semiconductor ETF", exchange: "ETF", type: "ETF" },
   { symbol: "QQQ", name: "Invesco QQQ Trust", exchange: "ETF", type: "ETF" },
 ];
+
+interface OmniboxRegistryItem extends SearchResult {
+  aliases: string[];
+}
+
+const OMNIBOX_COMMANDS: OmniboxRegistryItem[] = [
+  {
+    symbol: "ALPHA",
+    name: "Alpha Quant",
+    exchange: "Command",
+    type: "Command",
+    command: "open-alpha-quant",
+    label: "Alpha Quant",
+    description: "Open the alpha ranking and factor workspace",
+    intent: "command",
+    group: "Commands",
+    target_tab: "alpha-quant",
+    aliases: ["ALPHA", "ALPHA QUANT", "RANKING", "RANKINGS", "TOP ALPHA"],
+  },
+  {
+    symbol: "PORTFOLIO",
+    name: "Portfolio",
+    exchange: "Command",
+    type: "Command",
+    command: "open-portfolio",
+    label: "Portfolio",
+    description: "Open the institutional watchlist workspace",
+    intent: "command",
+    group: "Commands",
+    target_tab: "portfolio",
+    aliases: ["PORTFOLIO", "WATCHLIST", "HOLDINGS"],
+  },
+  {
+    symbol: "THEMES",
+    name: "Theme Intelligence",
+    exchange: "Command",
+    type: "Command",
+    command: "open-theme-intelligence",
+    label: "Theme Intelligence",
+    description: "Open macro theme, supply chain, and capital-flow intelligence",
+    intent: "command",
+    group: "Commands",
+    target_tab: "theme-intelligence",
+    aliases: ["THEME", "THEMES", "THEME INTELLIGENCE", "AI THEMES"],
+  },
+  {
+    symbol: "SECTORS",
+    name: "Sector Rotation",
+    exchange: "Command",
+    type: "Command",
+    command: "open-sector-rotation",
+    label: "Sector Rotation",
+    description: "Open sector leadership and rotation analytics",
+    intent: "command",
+    group: "Commands",
+    target_tab: "market-intel",
+    aliases: ["SECTOR", "SECTORS", "SECTOR ROTATION", "MARKET INTEL"],
+  },
+];
+
+const OMNIBOX_THEMES: OmniboxRegistryItem[] = [
+  ["AI Infrastructure", "AI capex, accelerators, cloud data centers, and power demand", ["AI", "ARTIFICIAL INTELLIGENCE", "AI INFRA", "AI INFRASTRUCTURE", "DATA CENTER"]],
+  ["Semiconductor", "Chip design, foundry capacity, equipment, and memory leaders", ["SEMICONDUCTOR", "SEMICONDUCTORS", "CHIPS", "SMH", "SOXX"]],
+  ["HBM", "High bandwidth memory supply chain and accelerator attach rates", ["HBM", "HIGH BANDWIDTH MEMORY", "MEMORY"]],
+  ["Electric Grid", "Grid equipment, power infrastructure, and electrification bottlenecks", ["GRID", "ELECTRIC GRID", "POWER GRID", "UTILITIES"]],
+  ["Nuclear Energy", "Uranium, reactor buildout, and baseload power infrastructure", ["NUCLEAR", "NUCLEAR ENERGY", "URANIUM"]],
+  ["Defense AI", "Defense software, autonomy, sensors, and compute programs", ["DEFENSE", "DEFENSE AI", "AEROSPACE"]],
+  ["Cybersecurity", "Security software, identity, endpoint, and cloud protection", ["CYBER", "CYBERSECURITY", "SECURITY"]],
+  ["Robotics", "Industrial automation, robotics platforms, and autonomy supply chain", ["ROBOTICS", "ROBOTS", "AUTOMATION"]],
+].map(([theme, description, aliases]) => ({
+  symbol: `THEME:${String(theme).toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
+  name: String(theme),
+  exchange: "Theme",
+  type: "Theme",
+  theme: String(theme),
+  label: String(theme),
+  description: String(description),
+  intent: "theme" as OmniboxIntent,
+  group: "Themes" as OmniboxGroup,
+  target_tab: "theme-intelligence" as OmniboxTargetTab,
+  aliases: aliases as string[],
+}));
+
+const OMNIBOX_SECTORS: OmniboxRegistryItem[] = [
+  ["Semiconductors", "Sector Rotation", "Chipmakers, foundries, equipment, and memory", ["SEMICONDUCTOR", "SEMICONDUCTORS", "SOX", "CHIPS"]],
+  ["Technology", "Sector Rotation", "Software, hardware, cloud, and platform leadership", ["TECH", "TECHNOLOGY", "XLK"]],
+  ["Financials", "Sector Rotation", "Banks, brokers, payment rails, and insurance", ["FINANCIALS", "BANKS", "XLF"]],
+  ["Energy", "Sector Rotation", "Oil, gas, services, and energy infrastructure", ["ENERGY", "OIL", "GAS", "XLE"]],
+  ["Healthcare", "Sector Rotation", "Pharma, biotech, providers, and medtech", ["HEALTHCARE", "HEALTH CARE", "XLV", "BIOTECH"]],
+  ["Utilities", "Sector Rotation", "Regulated power, grid demand, and defensive yield", ["UTILITIES", "UTILITY", "XLU"]],
+  ["Industrials", "Sector Rotation", "Manufacturing, aerospace, logistics, and automation", ["INDUSTRIALS", "XLI"]],
+].map(([sector, label, description, aliases]) => ({
+  symbol: `SECTOR:${String(sector).toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
+  name: String(sector),
+  exchange: String(label),
+  type: "Sector",
+  sector: String(sector),
+  label: String(sector),
+  description: String(description),
+  intent: "sector" as OmniboxIntent,
+  group: "Sectors" as OmniboxGroup,
+  target_tab: "market-intel" as OmniboxTargetTab,
+  aliases: aliases as string[],
+}));
+
+function compactSearchText(value: string): string {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9. ]+/g, " ").replace(/\s+/g, " ");
+}
+
+function stripIntentPrefix(value: string): string {
+  return compactSearchText(value).replace(/^(THEME|SECTOR|COMMAND|OPEN|GO TO|SHOW)\s+/, "");
+}
+
+function resultHaystack(item: SearchResult): string {
+  return compactSearchText([
+    item.symbol,
+    item.name,
+    item.label,
+    item.description,
+    item.company,
+    item.theme,
+    item.sector,
+    item.etf,
+    item.command,
+    item.type,
+    item.exchange,
+  ].filter(Boolean).join(" "));
+}
+
+function matchesOmniboxItem(item: OmniboxRegistryItem, query: string): boolean {
+  const normalized = compactSearchText(query);
+  const intentQuery = stripIntentPrefix(query);
+  const haystack = resultHaystack(item);
+  return haystack.includes(normalized)
+    || haystack.includes(intentQuery)
+    || item.aliases.some((alias) => compactSearchText(alias).includes(intentQuery) || intentQuery.includes(compactSearchText(alias)));
+}
+
+function enrichStockResult(item: SearchResult): SearchResult {
+  const symbol = item.symbol.trim().toUpperCase();
+  const isEtf = item.type.toUpperCase() === "ETF" || item.exchange.toUpperCase() === "ETF";
+  return {
+    ...item,
+    symbol,
+    ticker: symbol,
+    company: item.name,
+    etf: isEtf ? symbol : item.etf,
+    label: item.label ?? symbol,
+    description: item.description ?? item.name,
+    intent: "ticker",
+    group: "Stocks",
+    target_tab: "stock-analysis",
+  };
+}
+
+function enrichUniversalResult(item: SearchResult): SearchResult {
+  const type = item.type.toLowerCase();
+  if (type === "theme") {
+    return {
+      ...item,
+      label: item.label ?? item.name.split("/")[0].trim(),
+      theme: item.theme ?? item.name.split("/")[0].trim(),
+      description: item.description ?? "Open theme intelligence",
+      intent: "theme",
+      group: "Themes",
+      target_tab: "theme-intelligence",
+    };
+  }
+  if (type === "sector") {
+    return {
+      ...item,
+      label: item.label ?? item.name.split("/")[0].trim(),
+      sector: item.sector ?? item.name.split("/")[0].trim(),
+      description: item.description ?? "Open sector rotation",
+      intent: "sector",
+      group: "Sectors",
+      target_tab: "market-intel",
+    };
+  }
+  return enrichStockResult(item);
+}
+
+export function classifySearchIntent(query: string): OmniboxIntent {
+  const normalized = compactSearchText(query);
+  const stripped = stripIntentPrefix(query);
+  if (!normalized) return "ticker";
+  if (/^THEME\s+/.test(normalized)) return "theme";
+  if (/^SECTOR\s+/.test(normalized)) return "sector";
+  if (OMNIBOX_COMMANDS.some((item) => matchesOmniboxItem(item, normalized))) return "command";
+  if (OMNIBOX_THEMES.some((item) => matchesOmniboxItem(item, normalized))) return "theme";
+  if (OMNIBOX_SECTORS.some((item) => matchesOmniboxItem(item, normalized))) return "sector";
+  if (/^[A-Z.]{1,8}$/.test(stripped)) return "ticker";
+  return "natural_language";
+}
+
+function mergeSearchResults(results: SearchResult[]): SearchResult[] {
+  return results.reduce<SearchResult[]>((acc, item) => {
+    const key = item.id ?? `${item.group ?? item.type}:${item.symbol}`;
+    if (!acc.some((existing) => (existing.id ?? `${existing.group ?? existing.type}:${existing.symbol}`) === key)) acc.push(item);
+    return acc;
+  }, []);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -514,39 +719,60 @@ export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis>
 
 export async function searchStocks(query: string): Promise<SearchResult[]> {
   const normalized = query.trim().toUpperCase();
-  if (!normalized) return POPULAR_SYMBOLS.slice(0, 7);
+  if (!normalized) return POPULAR_SYMBOLS.slice(0, 7).map(enrichStockResult);
+  const intent = classifySearchIntent(query);
+  const intentQuery = stripIntentPrefix(query);
 
   const localMatches = POPULAR_SYMBOLS.filter((item) => {
     const haystack = `${item.symbol} ${item.name}`.toUpperCase();
-    return haystack.includes(normalized);
-  });
+    return haystack.includes(normalized) || haystack.includes(intentQuery);
+  }).map(enrichStockResult);
   const universalMatches = UNIVERSAL_SEARCH.filter((item) => {
     const haystack = `${item.symbol} ${item.name} ${item.type}`.toUpperCase();
-    return haystack.includes(normalized);
-  });
+    return haystack.includes(normalized) || haystack.includes(intentQuery);
+  }).map(enrichUniversalResult);
+  const themeMatches = OMNIBOX_THEMES.filter((item) => matchesOmniboxItem(item, normalized));
+  const sectorMatches = OMNIBOX_SECTORS.filter((item) => matchesOmniboxItem(item, normalized));
+  const commandMatches = OMNIBOX_COMMANDS.filter((item) => matchesOmniboxItem(item, normalized));
+  const localBuckets: Record<OmniboxIntent, SearchResult[]> = {
+    command: [...commandMatches, ...localMatches, ...themeMatches, ...sectorMatches, ...universalMatches],
+    theme: [...themeMatches, ...localMatches, ...sectorMatches, ...commandMatches, ...universalMatches],
+    sector: [...sectorMatches, ...localMatches, ...themeMatches, ...commandMatches, ...universalMatches],
+    ticker: [...localMatches, ...universalMatches, ...themeMatches, ...sectorMatches, ...commandMatches],
+    natural_language: [...localMatches, ...themeMatches, ...sectorMatches, ...commandMatches, ...universalMatches],
+  };
+  const localResults = mergeSearchResults(localBuckets[intent]);
 
-  if (normalized.length <= 1) return [...localMatches, ...universalMatches].slice(0, 8);
+  if (
+    intent === "command"
+    || intent === "theme"
+    || intent === "sector"
+    || normalized.length <= 1
+    || localResults.some((item) => item.group && item.group !== "Stocks")
+  ) {
+    return localResults.slice(0, 10);
+  }
+
+  const shouldQueryRemote = /^[A-Z.]{2,8}$/.test(intentQuery) && localResults.length === 0;
 
   try {
+    if (!shouldQueryRemote) return localResults.slice(0, 10);
     const response = await fetchWithRetry(`${API_URL}/search?q=${encodeURIComponent(normalized)}`, {
       cache: "no-store",
     });
     const remote = await readJson<SearchResult[]>(response);
-    const merged = [...localMatches, ...universalMatches, ...remote.map((item) => ({
+    const merged = mergeSearchResults([...localResults, ...remote.map((item) => enrichStockResult({
       ...item,
       price: validPrice(item.price),
       change_percent: validNumber(item.change_percent),
       quote_status: item.quote_status,
-    }))].reduce<SearchResult[]>((acc, item) => {
-      if (!acc.some((existing) => existing.symbol === item.symbol)) acc.push(item);
-      return acc;
-    }, []);
-    return merged.slice(0, 8);
+    }))]);
+    return merged.slice(0, 10);
   } catch {
-    const fallback = [...localMatches, ...universalMatches];
+    const fallback = localResults;
     return fallback.length > 0
-      ? fallback.slice(0, 8)
-      : [{ symbol: normalized, name: normalized, exchange: "US", type: "Equity" }];
+      ? fallback.slice(0, 10)
+      : [enrichStockResult({ symbol: intentQuery || normalized, name: intentQuery || normalized, exchange: "US", type: "Equity" })];
   }
 }
 
