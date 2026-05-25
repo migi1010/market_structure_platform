@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   TrendingUp,
 } from "lucide-react";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import {
   fetchThemeCapitalFlow,
   fetchThemeDetail,
@@ -361,6 +362,7 @@ function ThemeDetailPanel({
 }
 
 function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticker: string) => void }) {
+  const { selectedTheme, setSelectedTheme } = useWorkspace();
   const [top, setTop] = useState<ThemeTopResponse | null>(null);
   const [emerging, setEmerging] = useState<EmergingThemeResponse | null>(null);
   const [rotation, setRotation] = useState<ThemeRotationResponse | null>(null);
@@ -370,7 +372,6 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   const [error, setError] = useState("");
   const [bootIndex, setBootIndex] = useState(0);
   const [bootProgress, setBootProgress] = useState(8);
-  const [selectedTheme, setSelectedTheme] = useState<string>("");
   const [themeDetail, setThemeDetail] = useState<ThemeDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 

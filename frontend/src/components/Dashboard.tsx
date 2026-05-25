@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { BrainCircuit, Briefcase, LineChart, Loader2, Menu, Radar, Settings, Trash2, X } from "lucide-react";
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { uiText } from "@/lib/i18n";
+import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
 import { enabledTerminalModules, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
 
 import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
@@ -42,6 +43,10 @@ const mobileMenuItems: Array<{ id: ActiveTab | "settings"; label: string; icon: 
 
 function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
+}
+
+function normalizeThemeName(result: SearchResult): string {
+  return (result.theme ?? result.label ?? result.name ?? result.symbol).trim();
 }
 
 function readWatchlist(): string[] {
@@ -197,8 +202,7 @@ function PortfolioHome({
 }
 
 function DashboardApp() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("theme-intelligence");
-  const [selectedTicker, setSelectedTicker] = useState("NVDA");
+  const { activeModule: activeTab, setActiveModule, setSelectedTheme, setSelectedTicker } = useWorkspace();
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [watchlistReady, setWatchlistReady] = useState(false);
   const [timestamp, setTimestamp] = useState("");
@@ -234,18 +238,20 @@ function DashboardApp() {
   const openStock = useCallback((ticker: string) => {
     const symbol = normalizeSymbol(ticker);
     setSelectedTicker(symbol);
-    setActiveTab("stock-analysis");
+    setActiveModule("stock-analysis");
     setMobileMenuOpen(false);
     window.setTimeout(() => {
       document.getElementById("stock-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
       document.getElementById("stock-analysis")?.focus({ preventScroll: true });
     }, 120);
-  }, []);
+  }, [setActiveModule, setSelectedTicker]);
 
   const openSearchResult = useCallback((result: SearchResult) => {
+    const type = result.type?.toLowerCase() ?? "equity";
     const targetModule = getTerminalModule(result.target_tab);
     if (targetModule && targetModule.workspaceType !== "stock") {
-      setActiveTab(targetModule.id);
+      if (targetModule.workspaceType === "theme" && (result.intent === "theme" || type === "theme")) setSelectedTheme(normalizeThemeName(result));
+      setActiveModule(targetModule.id);
       setMobileMenuOpen(false);
       window.setTimeout(() => {
         if (targetModule.id === "theme-intelligence") document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -258,26 +264,26 @@ function DashboardApp() {
       return;
     }
 
-    const type = result.type?.toLowerCase() ?? "equity";
     if (type === "theme") {
-      setActiveTab("theme-intelligence");
+      setSelectedTheme(normalizeThemeName(result));
+      setActiveModule("theme-intelligence");
       setMobileMenuOpen(false);
       window.setTimeout(() => document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
       return;
     }
     if (type === "sector") {
-      setActiveTab("market-intel");
+      setActiveModule("market-intel");
       setMobileMenuOpen(false);
       window.setTimeout(() => document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
       return;
     }
     openStock(result.symbol);
-  }, [openStock]);
+  }, [openStock, setActiveModule, setSelectedTheme]);
 
   const selectMobileMenu = useCallback((id: ActiveTab | "settings") => {
-    if (id !== "settings") setActiveTab(id);
+    if (id !== "settings") setActiveModule(id);
     setMobileMenuOpen(false);
-  }, []);
+  }, [setActiveModule]);
 
   return (
     <div className="miji-shell flex h-[100dvh] w-full flex-col overflow-hidden bg-[#0A0C10] text-[#E6EDF3]">
@@ -314,7 +320,7 @@ function DashboardApp() {
             {navItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => setActiveModule(item.id)}
                 className={`flex h-10 items-center gap-2 rounded-2xl border px-3 text-sm font-medium transition ${
                   activeTab === item.id
                     ? "bg-[#1D2430] border border-amber-400/20 text-[#E6EDF3]"
@@ -340,7 +346,7 @@ function DashboardApp() {
         {activeTab === "portfolio" && <PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} />}
         {activeTab === "alpha-quant" && <AlphaQuantPage onTickerSelect={openStock} />}
         {activeTab === "market-intel" && <div id="sector-rotation"><SectorRotationPanel onTickerSelect={openStock} /></div>}
-        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]"><StockAnalysisWorkspace ticker={selectedTicker} /></div>}
+        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]"><StockAnalysisWorkspace /></div>}
       </div>
       {mobileMenuOpen && (
         <motion.div
@@ -413,7 +419,9 @@ export default function Dashboard() {
   return (
     <AppErrorBoundary>
       <Suspense fallback={<LoadingScreen />}>
-        <DashboardApp />
+        <WorkspaceProvider>
+          <DashboardApp />
+        </WorkspaceProvider>
       </Suspense>
     </AppErrorBoundary>
   );

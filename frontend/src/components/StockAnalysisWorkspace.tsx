@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrainCircuit, Loader2, TrendingDown, TrendingUp } from "lucide-react";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { formatTickerCompanyLabel } from "@/lib/sanitize";
 import { fetchStockAnalysis } from "@/services/stockApi";
 import type { StockAnalysis } from "@/types/stock";
@@ -10,11 +11,8 @@ import BubbleDiagnosisPanel from "./BubbleDiagnosisPanel";
 import NewsIntelligencePanel from "./NewsIntelligencePanel";
 import TradingViewChart from "./TradingViewChart";
 
-interface StockAnalysisWorkspaceProps {
-  ticker: string;
-}
-
-export default function StockAnalysisWorkspace({ ticker }: StockAnalysisWorkspaceProps) {
+export default function StockAnalysisWorkspace() {
+  const { selectedTicker: ticker } = useWorkspace();
   const [stock, setStock] = useState<StockAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
