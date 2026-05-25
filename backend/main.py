@@ -15,7 +15,7 @@ from alpha_engine.scoring import bounded_score, confidence_label
 from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
-from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, initialize_cache, safe_float, set_cached_value
+from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
 from quant_engine.qlib_engine import run_alpha_ranking
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
@@ -273,6 +273,111 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
         return _with_lifecycle(cache_key, fallback(), "degraded")
 
 
+def _quote_aware_stock_fallback(symbol: str) -> dict:
+    """Stock timeout fallback that reads the LKG quote before returning price=null.
+
+    Phase 2.8B fix: _fast_cached_response() calls this when central_stock_enrichment()
+    exceeds CACHE_MISS_WAIT_SECONDS (12s). The old static fallback_stock_payload()
+    returned price=null unconditionally, discarding the quote already written to
+    the SQLite LKG cache by get_quote() during Phase 1 of central_stock_enrichment().
+
+    This function:
+    1. Calls get_quote(symbol) — fast: reads from LKG SQLite cache in <50ms since
+       Phase 1 of central_stock_enrichment() already executed and wrote the quote.
+    2. If price is finite, returns a partial_live payload with real price + calibrating engines.
+    3. If price is null (provider genuinely unavailable), falls through to fallback_stock_payload().
+
+    The partial_live result does NOT set fallback=True so it is cacheable by
+    _cacheable_endpoint_result() when price is present.
+    """
+    ticker = symbol.strip().upper()
+    try:
+        raw_quote = get_quote(ticker)
+    except Exception as exc:
+        logger.warning("_quote_aware_stock_fallback get_quote failed symbol=%s error=%s", ticker, exc)
+        raw_quote = {}
+
+    # Extract price from the provider quote dict (camelCase keys from yfinance/robust_quote_fetch)
+    price_raw = raw_quote.get("currentPrice") or raw_quote.get("regularMarketPrice")
+    try:
+        price = float(price_raw) if price_raw is not None else None
+        if price is not None and (not math.isfinite(price) or price <= 0):
+            price = None
+    except (TypeError, ValueError):
+        price = None
+
+    if price is None:
+        # No live or LKG quote available — return the static fallback
+        logger.warning("_quote_aware_stock_fallback no price available symbol=%s; serving static fallback", ticker)
+        return fallback_stock_payload(ticker)
+
+    # We have a finite price. Build a partial_live payload with calibrating engines.
+    def _sf(v: Any) -> float | None:
+        try:
+            f = float(v)
+            return f if math.isfinite(f) else None
+        except (TypeError, ValueError):
+            return None
+
+    change = _sf(raw_quote.get("regularMarketChange"))
+    change_pct = _sf(raw_quote.get("regularMarketChangePercent"))
+    prev_close = _sf(raw_quote.get("previousClose") or raw_quote.get("regularMarketPreviousClose"))
+    market_cap = _sf(raw_quote.get("marketCap"))
+    quote_source = str(raw_quote.get("quoteSource") or raw_quote.get("_quote_source") or "last_known_good").lower()
+    quote_status = str(raw_quote.get("quoteStatus") or "partial_live").lower()
+    if quote_status in {"unavailable", "fallback", ""}:
+        quote_status = "partial_live"
+
+    from quant_engine.stock_service import COMMON_METADATA, _fallback_bubble, _fallback_earnings, _fallback_smart_money  # noqa: PLC0415
+    metadata = COMMON_METADATA.get(ticker, {"company_name": ticker, "sector": "US Equity"})
+
+    normalized_quote = {
+        "ticker": ticker,
+        "price": round(price, 4),
+        "change": round(change, 4) if change is not None else None,
+        "change_percent": round(change_pct, 4) if change_pct is not None else None,
+        "previous_close": round(prev_close, 4) if prev_close is not None else None,
+        "market_cap": market_cap,
+        "pe_ratio": None,
+        "ps_ratio": None,
+        "currency": raw_quote.get("currency") or "USD",
+        "status": quote_status,
+        "source": quote_source,
+    }
+    logger.info("_quote_aware_stock_fallback partial_live symbol=%s price=%.4f source=%s",
+                ticker, price, quote_source)
+    return {
+        "ticker": ticker,
+        "company_name": metadata["company_name"],
+        "price": round(price, 4),
+        "change": normalized_quote["change"],
+        "change_percent": normalized_quote["change_percent"],
+        "market_cap": market_cap,
+        "sector": metadata["sector"],
+        "quote_status": quote_status,
+        "quote": normalized_quote,
+        "bubble_analysis_data": _fallback_bubble(ticker, raw_quote, price)["bubble_analysis_data"],
+        "earnings_quality": _fallback_earnings(),
+        "smart_money": _fallback_smart_money(),
+        "analyst_targets": {"available": False, "high": None, "average": None, "low": None,
+                            "average_target": None, "implied_upside": None,
+                            "buy": None, "hold": None, "sell": None},
+        "analyst_consensus": {"available": False, "high": None, "average": None, "low": None,
+                              "average_target": None, "implied_upside": None,
+                              "buy": None, "hold": None, "sell": None},
+        "hmm_prediction": {
+            "available": False,
+            "predicted_trend": "Calibrating model...",
+            "bull_probability": None,
+            "bear_probability": None,
+            "regime_state": "Awaiting regime confirmation...",
+            "confidence": None,
+            "message": "Enrichment engines are warming. Price data is live.",
+        },
+        "news": [],
+    }
+
+
 def _fallback_sector_rotation() -> list[dict]:
     sectors = [
         ("Technology", "XLK"), ("Energy", "XLE"), ("Healthcare", "XLV"), ("Financials", "XLF"),
@@ -527,7 +632,7 @@ async def unhandled_exception_handler(_, exc: Exception):
 @app.get("/stock/{ticker}")
 def get_stock(ticker: str) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: central_stock_enrichment(symbol), lambda: fallback_stock_payload(symbol)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: central_stock_enrichment(symbol), lambda: _quote_aware_stock_fallback(symbol)))
 
 
 @app.get("/debug/provider/{ticker}")
