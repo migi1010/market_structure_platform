@@ -1,6 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import logging
 import math
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Dict, List
 
 from quant_engine.bubble_engine import analyze_bubble
@@ -8,6 +10,21 @@ from quant_engine.data_pipeline import get_history, get_news, get_quote, safe_fl
 from quant_engine.earnings_quality_engine import analyze_earnings_quality
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.smart_money_engine import analyze_smart_money
+
+logger = logging.getLogger("miji.stock_service")
+
+# Phase 2.8: dedicated executor for the four heavy fundamental engines.
+# analyze_bubble / analyze_earnings_quality each call get_statements() which fetches
+# ticker.financials + ticker.cashflow + ticker.balance_sheet sequentially (up to 24s each
+# on cold SQLite cache). Running them sequentially inside central_stock_enrichment() could
+# block for 72s+, exceeding CACHE_MISS_WAIT_SECONDS=12s and causing _fast_cached_response()
+# to time out and return fallback_stock_payload() even though get_quote() succeeded.
+# Running the engines CONCURRENTLY with a 9s wall-time cap ensures:
+#   - central_stock_enrichment() always returns within ~11s (1-2s quote + 9s engine cap)
+#   - Engines that miss the cap continue in background, populating SQLite for next request
+#   - Memory impact: 4 threads × ~2MB stack = ~8MB — negligible vs Phase 2.6 savings
+_ENRICHMENT_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="miji.enrichment")
+_ENGINE_TIMEOUT_SECONDS = 9.0  # must be < CACHE_MISS_WAIT_SECONDS (12s in main.py)
 
 COMMON_METADATA: dict[str, dict[str, str]] = {
     "AAPL": {"company_name": "Apple Inc.", "sector": "Technology"},
@@ -375,16 +392,60 @@ def _news(symbol: str) -> List[Dict[str, Any]]:
     return items
 
 
+def _collect_engine(future: Future, fallback_val: Any, name: str) -> Any:  # noqa: ANN001
+    """Collect a future result within _ENGINE_TIMEOUT_SECONDS, returning fallback on timeout/error.
+
+    The future continues executing in _ENRICHMENT_EXECUTOR after this returns —
+    populating SQLite cache so the next request benefits from the completed data.
+    """
+    try:
+        result = future.result(timeout=_ENGINE_TIMEOUT_SECONDS)
+        return result if result is not None else fallback_val
+    except Exception as exc:
+        logger.warning("engine timeout or error name=%s error=%s", name, exc)
+        return fallback_val
+
+
 def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
+
+    # ── Phase 1: synchronous quote fetch (critical path) ───────────────────────
+    # get_quote() uses PROVIDER_EXECUTOR (6 workers) and typically completes in
+    # 1-2s when yfinance is healthy. This MUST run synchronously so we have a
+    # price before assembling the response. The quote is also written to the
+    # SQLite LKG cache inside get_quote(), so it survives even if we time out.
     quote = get_quote(ticker)
+    logger.info("central_stock_enrichment quote symbol=%s price=%s status=%s",
+                ticker, quote.get("currentPrice") or quote.get("regularMarketPrice"),
+                quote.get("quoteStatus"))
     provisional = _resolve_price_snapshot(ticker, quote, {})
-    bubble = _safe_engine("bubble", lambda: analyze_bubble(ticker, quote=quote), _fallback_bubble(ticker, quote, provisional["price"]))
+
+    # ── Phase 2: concurrent fundamental engine submission ──────────────────────
+    # Each engine calls get_statements() (bubble, earnings) or get_history()
+    # (smart_money, regime) via PROVIDER_EXECUTOR. On a cold SQLite cache,
+    # fetch_yfinance_statements() makes 3 sequential _run_with_timeout(8s) calls
+    # = 24s per engine. Running them SEQUENTIALLY inside central_stock_enrichment()
+    # would block for 72s+, always exceeding CACHE_MISS_WAIT_SECONDS=12s.
+    # Running them CONCURRENTLY via _ENRICHMENT_EXECUTOR:
+    #   - bubble + earnings share the same get_statements() SQLite lock:
+    #     only one fetches, the other reads from cache once the lock is released.
+    #   - All four engines run in parallel, reducing wall time to max(individual).
+    #   - _collect_engine() caps the wait at _ENGINE_TIMEOUT_SECONDS (9s).
+    #   - If an engine misses the cap it continues in background, populating SQLite
+    #     for the next request (which will then return in <1s from cache).
+    f_bubble   = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_bubble(ticker, quote=quote))
+    f_earnings = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_earnings_quality(ticker, quote=quote))
+    f_smart    = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_smart_money(ticker, quote=quote))
+    f_regime   = _ENRICHMENT_EXECUTOR.submit(detect_market_regime)
+
+    bubble   = _collect_engine(f_bubble,   _fallback_bubble(ticker, quote, provisional["price"]), "bubble")
+    earnings = _collect_engine(f_earnings, _fallback_earnings(),                                    "earnings_quality")
+    smart    = _collect_engine(f_smart,    _fallback_smart_money(),                                 "smart_money")
+    regime   = _collect_engine(f_regime,   {"name": "Calibrating", "confidence": 50.0, "fallback": True}, "market_regime")
+
+    # ── Phase 3: assemble response ─────────────────────────────────────────────
     snapshot = _resolve_price_snapshot(ticker, quote, bubble)
     normalized_quote = _normalized_quote(ticker, quote, snapshot)
-    earnings = _safe_engine("earnings_quality", lambda: analyze_earnings_quality(ticker, quote=quote), _fallback_earnings())
-    smart = _safe_engine("smart_money", lambda: analyze_smart_money(ticker, quote=quote), _fallback_smart_money())
-    regime = _safe_engine("market_regime", detect_market_regime, {"name": "Calibrating", "confidence": 50.0, "fallback": True})
     price = normalized_quote["price"]
     analyst = _analyst_consensus(ticker, price, quote)
     smart_raw = smart.get("smart_money_score")
@@ -404,6 +465,8 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
         earnings = _fallback_earnings()
     if _looks_like_empty_score(smart, "smart_money_score"):
         smart = _fallback_smart_money()
+    logger.info("central_stock_enrichment complete symbol=%s price=%s bubble_available=%s",
+                ticker, price, bool(bubble_data.get("bubble_index") is not None))
 
     result = {
         "ticker": ticker,
