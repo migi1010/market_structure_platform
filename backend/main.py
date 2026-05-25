@@ -5,6 +5,7 @@ import math
 import time
 from concurrent.futures import TimeoutError, ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from threading import Lock
 from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query
@@ -16,8 +17,6 @@ from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
 from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
-from quant_engine.qlib_engine import run_alpha_ranking
-from quant_engine.regime_engine import detect_market_regime
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
 from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
@@ -42,6 +41,12 @@ BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 CACHE_MISS_WAIT_SECONDS = 12.0
 LIFECYCLE_STATES = {"cold_start", "warming", "partial_live", "live", "degraded", "recovery"}
 UNCACHEABLE_LIFECYCLES = {"cold_start", "warming", "partial_live", "degraded"}
+ALPHA_ENDPOINT_LOCK = Lock()
+REGIME_ENDPOINT_LOCK = Lock()
+_HEAVY_CIRCUITS: dict[str, dict[str, Any]] = {
+    "alpha": {"opened_until": 0.0, "reason": ""},
+    "regime": {"opened_until": 0.0, "reason": ""},
+}
 
 
 @asynccontextmanager
@@ -164,6 +169,25 @@ def _with_lifecycle(cache_key: str, result: Any, override: str | None = None) ->
     if lifecycle not in LIFECYCLE_STATES:
         return result
     return {**result, "lifecycle_state": lifecycle}
+
+
+def _circuit_open(name: str) -> bool:
+    return time.time() < float(_HEAVY_CIRCUITS.get(name, {}).get("opened_until", 0.0))
+
+
+def _circuit_reason(name: str) -> str:
+    return str(_HEAVY_CIRCUITS.get(name, {}).get("reason") or "heavy endpoint is cooling down")
+
+
+def _open_circuit(name: str, reason: str) -> None:
+    _HEAVY_CIRCUITS[name] = {
+        "opened_until": time.time() + settings.alpha_regime_circuit_cooldown_seconds,
+        "reason": reason,
+    }
+
+
+def _clear_circuit(name: str) -> None:
+    _HEAVY_CIRCUITS[name] = {"opened_until": 0.0, "reason": ""}
 
 
 def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
@@ -608,6 +632,147 @@ def _fallback_alpha(universe: str) -> dict:
     }
 
 
+def _partial_alpha(universe: str, reason: str) -> dict:
+    universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
+    symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
+    rows = [
+        {
+            "ticker": symbol,
+            "company_name": symbol,
+            "sector": "Partial Data",
+            "price": None,
+            "change": None,
+            "change_percent": None,
+            "quote_status": "unavailable",
+            "alpha_score": None,
+            "base_alpha_score": None,
+            "universe_context_score": None,
+            "universe_adjustment": None,
+            "universe_percentile": None,
+            "rank_in_universe": index + 1,
+            "universe": universe_key.upper(),
+            "quality": None,
+            "growth": None,
+            "smart_money": None,
+            "valuation": None,
+            "earnings_quality": None,
+            "market_structure": None,
+            "bubble_risk": None,
+            "sector_alignment": None,
+            "theme_alignment": None,
+            "theme_strength": None,
+            "theme_capital_flow": None,
+            "confidence_score": None,
+            "confidence_label": "Unavailable",
+            "theme_explanation": ["Heavy alpha pipeline is disabled for this runtime."],
+            "suggested_action": "Hold",
+            "factor_importance": {},
+            "bullish_factors": [],
+            "risk_factors": [reason],
+            "available": False,
+            "status": "partial_data",
+        }
+        for index, symbol in enumerate(symbols)
+    ]
+    return {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "universe": universe_key.upper(),
+        "available": False,
+        "status": "partial_data",
+        "lifecycle_state": "partial_live",
+        "qlib_engine": {
+            "available": False,
+            "mode": "disabled",
+            "provider": "Miji Quant",
+            "factor_set": "Render-safe partial data",
+            "reason": reason,
+        },
+        "market_regime": {"name": "Partial Data", "confidence": None, "status": "partial_data"},
+        "factor_importance": {},
+        "top_alpha": rows,
+        "recommendations": [],
+        "summary": reason,
+    }
+
+
+def _partial_regime(reason: str) -> dict:
+    return {
+        "name": "Partial Data",
+        "available": False,
+        "status": "partial_data",
+        "confidence": None,
+        "confidence_label": "Unavailable",
+        "states": [],
+        "lifecycle_state": "partial_live",
+        "summary": reason,
+    }
+
+
+def _alpha_top_response(universe: str) -> dict:
+    normalized = universe.strip().lower()
+    cache_key = _schema_cache_key("alpha_v4", normalized)
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        return cached
+    if not settings.miji_enable_heavy_alpha:
+        return _partial_alpha(normalized, "Heavy alpha pipeline is disabled by MIJI_ENABLE_HEAVY_ALPHA=false.")
+    if _circuit_open("alpha"):
+        return _partial_alpha(normalized, _circuit_reason("alpha"))
+    if not ALPHA_ENDPOINT_LOCK.acquire(blocking=False):
+        return _partial_alpha(normalized, "Heavy alpha pipeline is already running; returning partial data.")
+    try:
+        from quant_engine.qlib_engine import run_alpha_ranking  # noqa: PLC0415
+
+        result = run_alpha_ranking(normalized)
+        cache_result = _with_lifecycle(cache_key, result)
+        if _cacheable_endpoint_result(cache_key, cache_result):
+            set_cached_value(cache_key, cache_result, settings.alpha_ranking_ttl_seconds, "json")
+        _clear_circuit("alpha")
+        return cache_result
+    except Exception as exc:
+        reason = f"Heavy alpha pipeline failed; circuit open for cooldown: {exc}"
+        logger.warning("alpha endpoint failed universe=%s error=%s", normalized, exc)
+        _open_circuit("alpha", reason)
+        stale = get_cached_value(cache_key, allow_expired=True)
+        if stale is not None:
+            return _with_lifecycle(cache_key, stale, "recovery")
+        return _partial_alpha(normalized, reason)
+    finally:
+        ALPHA_ENDPOINT_LOCK.release()
+
+
+def _market_regime_response() -> dict:
+    cache_key = _schema_cache_key("market_regime")
+    cached = get_cached_value(cache_key)
+    if cached is not None:
+        return cached
+    if not settings.miji_enable_heavy_regime:
+        return _partial_regime("Heavy regime model is disabled by MIJI_ENABLE_HEAVY_REGIME=false.")
+    if _circuit_open("regime"):
+        return _partial_regime(_circuit_reason("regime"))
+    if not REGIME_ENDPOINT_LOCK.acquire(blocking=False):
+        return _partial_regime("Heavy regime model is already running; returning partial data.")
+    try:
+        from quant_engine.regime_engine import detect_market_regime  # noqa: PLC0415
+
+        result = detect_market_regime()
+        cache_result = _with_lifecycle(cache_key, result)
+        if _cacheable_endpoint_result(cache_key, cache_result):
+            set_cached_value(cache_key, cache_result, settings.market_regime_ttl_seconds, "json")
+        _clear_circuit("regime")
+        return cache_result
+    except Exception as exc:
+        reason = f"Heavy regime model failed; circuit open for cooldown: {exc}"
+        logger.warning("market regime endpoint failed error=%s", exc)
+        _open_circuit("regime", reason)
+        stale = get_cached_value(cache_key, allow_expired=True)
+        if stale is not None:
+            return _with_lifecycle(cache_key, stale, "recovery")
+        return _partial_regime(reason)
+    finally:
+        REGIME_ENDPOINT_LOCK.release()
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -643,8 +808,7 @@ def get_provider_debug(ticker: str) -> dict:
 
 @app.get("/alpha/top")
 def get_alpha_top(universe: str = Query("sp500")) -> dict:
-    normalized = universe.strip().lower()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("alpha_v4", normalized), settings.alpha_ranking_ttl_seconds, lambda: run_alpha_ranking(normalized), lambda: _fallback_alpha(normalized)))
+    return _guard(lambda: _alpha_top_response(universe))
 
 
 @app.get("/backtest/top-alpha")
@@ -675,7 +839,7 @@ def get_bubble(ticker: str) -> dict:
 
 @app.get("/market/regime")
 def get_market_regime() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("market_regime"), settings.market_regime_ttl_seconds, detect_market_regime, lambda: {"name": "Calibrating", "confidence": 38.0, "confidence_label": "Low Confidence", "fallback": True}))
+    return _guard(_market_regime_response)
 
 
 @app.get("/market/overview")
