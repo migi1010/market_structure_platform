@@ -16,10 +16,18 @@ from settings import get_settings
 logger = logging.getLogger("miji.providers")
 PROVIDER_TIMEOUT_SECONDS = 8.0
 PROVIDER_RETRY_COUNT = 2
-# Render Free Tier: 512MB RAM. 8 simultaneous threads means 8 concurrent yfinance/HTTP calls
-# with 8 sets of pandas DataFrames resident simultaneously. 4 is sufficient for fetch+timeout pattern.
-# Override via RENDER_PROVIDER_WORKERS env var if on a higher tier.
-PROVIDER_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.getenv("RENDER_PROVIDER_WORKERS", "4")))
+# Phase 2.7 fix: 4 workers caused a thread-pool self-deadlock.
+# fetch_yfinance_quote() makes 3 sequential blocking _run_with_timeout() calls
+# (ticker.info, ticker.fast_info, ticker.history). central_stock_enrichment()
+# also calls get_history() + get_statements() x3 — totalling up to 11 simultaneous
+# PROVIDER_EXECUTOR submissions from a single /stock request.
+# With max_workers=4, all 4 slots fill with blocking future.result() calls,
+# leaving no workers available to run the submitted tasks -> deadlock -> timeout -> fallback.
+# 6 workers breaks the deadlock (4 is the minimum to deadlock, 5 is the absolute minimum safe).
+# The memory savings from Phase 2.6 come from vectorbt lazy-load + 1 gunicorn worker;
+# thread count has negligible additional memory impact (~1-2MB per thread).
+# Override via RENDER_PROVIDER_WORKERS env var.
+PROVIDER_EXECUTOR = ThreadPoolExecutor(max_workers=int(os.getenv("RENDER_PROVIDER_WORKERS", "6")))
 
 
 
@@ -46,7 +54,15 @@ def finite_float(value: Any) -> float | None:
 
 def _run_with_timeout(task: Any, timeout_seconds: float = PROVIDER_TIMEOUT_SECONDS) -> Any:
     future = PROVIDER_EXECUTOR.submit(task)
-    return future.result(timeout=timeout_seconds)
+    try:
+        return future.result(timeout=timeout_seconds)
+    except TimeoutError:
+        # Cancel the pending future to release the worker slot as soon as the task
+        # can be interrupted. Log at WARNING so Render logs show provider timing issues.
+        future.cancel()
+        logger.warning("provider task timed out after %.1fs (executor workers=%d)",
+                       timeout_seconds, PROVIDER_EXECUTOR._max_workers)  # noqa: SLF001
+        raise
 
 
 def _quality_quote(quote: Dict[str, Any]) -> bool:

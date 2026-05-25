@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import pickle
@@ -217,6 +217,7 @@ def get_quote(symbol: str) -> Dict[str, Any]:
     last_good_key = f"quote_lkg:{CACHE_SCHEMA_VERSION}:{normalized}"
     cached = _get_cached(cache_key)
     if _quote_has_price(cached):
+        logger.debug("get_quote cache hit symbol=%s", normalized)
         return cached
     stale = _get_cached(cache_key, allow_expired=True)
     last_good = _get_cached(last_good_key, allow_expired=True)
@@ -229,13 +230,21 @@ def get_quote(symbol: str) -> Dict[str, Any]:
         seed = stale if _quote_has_price(stale) else last_good if _quote_has_price(last_good) else None
         quote = robust_quote_fetch(normalized, seed if isinstance(seed, dict) else None) or {}
         if _quote_has_price(quote):
+            logger.info("get_quote live fetch succeeded symbol=%s source=%s",
+                        normalized, quote.get("quoteSource") or quote.get("quoteStatus"))
             _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
             _set_cached(last_good_key, quote, max(get_settings().quote_ttl_seconds * 288, 86400), "json")
             return quote
         if _quote_has_price(stale):
+            logger.warning("get_quote serving stale cache symbol=%s", normalized)
+            stale["_quote_source"] = "stale_cache"
             return stale
         if _quote_has_price(last_good):
+            logger.warning("get_quote serving last-known-good symbol=%s", normalized)
+            last_good["_quote_source"] = "last_known_good"
             return last_good
+        logger.warning("get_quote all providers failed symbol=%s status=%s",
+                       normalized, quote.get("quoteStatus"))
         return quote if isinstance(quote, dict) else {"symbol": normalized, "quoteStatus": "unavailable"}
 
 
