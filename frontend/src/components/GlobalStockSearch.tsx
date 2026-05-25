@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
+import { getTerminalModule } from "@/modules/terminalModules";
 import { searchStocks } from "@/services/stockApi";
 import type { SearchResult } from "@/types/stock";
 
@@ -85,11 +86,7 @@ function getResultDescription(item: SearchResult): string {
 }
 
 function getTargetLabel(item: SearchResult): string {
-  if (item.target_tab === "alpha-quant") return "Alpha Quant";
-  if (item.target_tab === "portfolio") return "Portfolio";
-  if (item.target_tab === "theme-intelligence") return "Theme Intelligence";
-  if (item.target_tab === "market-intel") return "Sector Rotation";
-  return "Stock Analysis";
+  return getTerminalModule(item.target_tab)?.title ?? "Stock Analysis";
 }
 
 function canAddToWatchlist(item: SearchResult): boolean {

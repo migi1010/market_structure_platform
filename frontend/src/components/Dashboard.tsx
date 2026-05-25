@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { BrainCircuit, Briefcase, LineChart, Loader2, Menu, Radar, Settings, Trash2, X } from "lucide-react";
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { uiText } from "@/lib/i18n";
+import { enabledTerminalModules, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
 
 import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
 import type { SearchResult, StockAnalysis } from "@/types/stock";
@@ -18,24 +19,24 @@ const SectorRotationPanel = React.lazy(() => import("./SectorRotationPanel"));
 const StockAnalysisWorkspace = React.lazy(() => import("./StockAnalysisWorkspace"));
 const ThemeIntelligenceDashboard = React.lazy(() => import("./ThemeIntelligenceDashboard"));
 
-type ActiveTab = "theme-intelligence" | "portfolio" | "alpha-quant" | "market-intel" | "stock-analysis";
+type ActiveTab = TerminalModuleId;
 const WATCHLIST_KEY = "watchlist";
 const WATCHLIST_SCHEMA_VERSION = "stock_v6";
 
-const navItems: Array<{ id: ActiveTab; label: string; icon: React.ReactNode }> = [
-  { id: "theme-intelligence", label: "Theme Intelligence", icon: <Radar size={16} /> },
-  { id: "portfolio", label: "Portfolio", icon: <Briefcase size={16} /> },
-  { id: "alpha-quant", label: "Alpha Quant", icon: <BrainCircuit size={16} /> },
-  { id: "market-intel", label: "Sector Rotation", icon: <Radar size={16} /> },
-  { id: "stock-analysis", label: "Stock Analysis", icon: <LineChart size={16} /> },
-];
+function moduleIcon(iconKey: TerminalIconKey, size: number): React.ReactNode {
+  if (iconKey === "briefcase") return <Briefcase size={size} />;
+  if (iconKey === "brain") return <BrainCircuit size={size} />;
+  if (iconKey === "line-chart") return <LineChart size={size} />;
+  return <Radar size={size} />;
+}
 
+const navItems = enabledTerminalModules;
 const mobileMenuItems: Array<{ id: ActiveTab | "settings"; label: string; icon: React.ReactNode }> = [
-  { id: "theme-intelligence", label: uiText.navigation.dashboard, icon: <Radar size={17} /> },
-  { id: "theme-intelligence", label: uiText.navigation.themeIntelligence, icon: <Radar size={17} /> },
-  { id: "alpha-quant", label: uiText.navigation.quantAnalytics, icon: <BrainCircuit size={17} /> },
-  { id: "stock-analysis", label: uiText.navigation.marketStructure, icon: <LineChart size={17} /> },
-  { id: "portfolio", label: uiText.navigation.portfolio, icon: <Briefcase size={17} /> },
+  ...enabledTerminalModules.map((module) => ({
+    id: module.id,
+    label: module.id === "theme-intelligence" ? uiText.navigation.themeIntelligence : module.title,
+    icon: moduleIcon(module.iconKey, 17),
+  })),
   { id: "settings", label: uiText.navigation.settings, icon: <Settings size={17} /> },
 ];
 
@@ -242,17 +243,17 @@ function DashboardApp() {
   }, []);
 
   const openSearchResult = useCallback((result: SearchResult) => {
-    const targetTab = result.target_tab;
-    if (targetTab === "alpha-quant" || targetTab === "portfolio" || targetTab === "theme-intelligence" || targetTab === "market-intel") {
-      setActiveTab(targetTab);
+    const targetModule = getTerminalModule(result.target_tab);
+    if (targetModule && targetModule.workspaceType !== "stock") {
+      setActiveTab(targetModule.id);
       setMobileMenuOpen(false);
       window.setTimeout(() => {
-        if (targetTab === "theme-intelligence") document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        if (targetTab === "market-intel") document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (targetModule.id === "theme-intelligence") document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (targetModule.id === "market-intel") document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 120);
       return;
     }
-    if (targetTab === "stock-analysis") {
+    if (targetModule?.workspaceType === "stock") {
       openStock(result.ticker ?? result.symbol);
       return;
     }
@@ -320,8 +321,8 @@ function DashboardApp() {
                     : "border-[#2B313C] bg-[#111318] text-[#9BA7B4] hover:bg-[#151922]"
                 }`}
               >
-                {item.icon}
-                {item.label}
+                {moduleIcon(item.iconKey, 16)}
+                {item.title}
               </button>
             ))}
           </div>

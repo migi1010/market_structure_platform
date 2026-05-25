@@ -17,6 +17,7 @@ import type {
   ThemeSupplyChainResponse,
   ThemeTopResponse,
 } from "@/types/stock";
+import { enabledTerminalModules } from "@/modules/terminalModules";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://market-structure-platform.onrender.com";
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -64,60 +65,19 @@ interface OmniboxRegistryItem extends SearchResult {
   aliases: string[];
 }
 
-const OMNIBOX_COMMANDS: OmniboxRegistryItem[] = [
-  {
-    symbol: "ALPHA",
-    name: "Alpha Quant",
-    exchange: "Command",
-    type: "Command",
-    command: "open-alpha-quant",
-    label: "Alpha Quant",
-    description: "Open the alpha ranking and factor workspace",
-    intent: "command",
-    group: "Commands",
-    target_tab: "alpha-quant",
-    aliases: ["ALPHA", "ALPHA QUANT", "RANKING", "RANKINGS", "TOP ALPHA"],
-  },
-  {
-    symbol: "PORTFOLIO",
-    name: "Portfolio",
-    exchange: "Command",
-    type: "Command",
-    command: "open-portfolio",
-    label: "Portfolio",
-    description: "Open the institutional watchlist workspace",
-    intent: "command",
-    group: "Commands",
-    target_tab: "portfolio",
-    aliases: ["PORTFOLIO", "WATCHLIST", "HOLDINGS"],
-  },
-  {
-    symbol: "THEMES",
-    name: "Theme Intelligence",
-    exchange: "Command",
-    type: "Command",
-    command: "open-theme-intelligence",
-    label: "Theme Intelligence",
-    description: "Open macro theme, supply chain, and capital-flow intelligence",
-    intent: "command",
-    group: "Commands",
-    target_tab: "theme-intelligence",
-    aliases: ["THEME", "THEMES", "THEME INTELLIGENCE", "AI THEMES"],
-  },
-  {
-    symbol: "SECTORS",
-    name: "Sector Rotation",
-    exchange: "Command",
-    type: "Command",
-    command: "open-sector-rotation",
-    label: "Sector Rotation",
-    description: "Open sector leadership and rotation analytics",
-    intent: "command",
-    group: "Commands",
-    target_tab: "market-intel",
-    aliases: ["SECTOR", "SECTORS", "SECTOR ROTATION", "MARKET INTEL"],
-  },
-];
+const OMNIBOX_COMMANDS: OmniboxRegistryItem[] = enabledTerminalModules.filter((module) => module.workspaceType !== "stock").map((module) => ({
+  symbol: module.shortTitle.toUpperCase().replace(/[^A-Z0-9]+/g, "-"),
+  name: module.title,
+  exchange: "Command",
+  type: "Command",
+  command: `open-${module.id}`,
+  label: module.title,
+  description: module.description,
+  intent: "command",
+  group: "Commands",
+  target_tab: module.target_tab,
+  aliases: [module.title, module.shortTitle, ...module.searchKeywords],
+}));
 
 const OMNIBOX_THEMES: OmniboxRegistryItem[] = [
   ["AI Infrastructure", "AI capex, accelerators, cloud data centers, and power demand", ["AI", "ARTIFICIAL INTELLIGENCE", "AI INFRA", "AI INFRASTRUCTURE", "DATA CENTER"]],
