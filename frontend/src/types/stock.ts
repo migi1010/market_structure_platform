@@ -155,6 +155,31 @@ export interface SectorRotation {
   explanation?: string[];
   fallback?: boolean;
   message?: string;
+  sector_rank?: number;
+  leadership_state?: string;
+  momentum_direction?: string;
+  participation_strength?: number;
+  lifecycle_state?: string;
+  capital_rotation?: string;
+  narrative_state?: string;
+  acceleration_velocity?: number;
+  participation_breadth?: number;
+  institutional_alignment?: number;
+  ranking_score?: number | null;
+  overall_rank?: number | null;
+  market_classification?: string;
+  narrative_intelligence?: NarrativeIntelligence;
+  universe_ranking?: UniverseScreenerRow;
+  leadership_intelligence?: {
+    sector_rank?: number;
+    leadership_state?: string;
+    momentum_direction?: string;
+    participation_strength?: number;
+    confidence?: number;
+    confidence_label?: string;
+    lifecycle_state?: string;
+    explanation?: string;
+  };
 }
 
 export interface AlphaQuantRow {
@@ -190,6 +215,10 @@ export interface AlphaQuantRow {
   risk_factors?: string[];
   suggested_action: "Strong Buy" | "Accumulation" | "Watchlist" | "Hold" | "Bubble Risk" | "Avoid";
   factor_importance: Record<string, number>;
+  universe_ranking?: UniverseScreenerRow;
+  ranking_score?: number | null;
+  overall_rank?: number | null;
+  market_classification?: string;
 }
 
 export interface AlphaQuantResponse {
@@ -215,6 +244,7 @@ export interface AlphaQuantResponse {
   factor_importance: Record<string, number>;
   top_alpha: AlphaQuantRow[];
   recommendations: AlphaQuantRow[];
+  universe_screener?: UniverseRankingResponse;
   summary: string;
 }
 
@@ -275,6 +305,101 @@ export interface ThemeScore {
   confidence_score?: number;
   confidence_label?: string;
   data_completeness?: number;
+  theme_id?: string;
+  leadership_score?: number | null;
+  acceleration_score?: number;
+  participation_score?: number;
+  lifecycle_state?: string;
+  narrative_state?: string;
+  acceleration_velocity?: number;
+  participation_breadth?: number;
+  institutional_alignment?: number;
+  ranking_score?: number | null;
+  overall_rank?: number | null;
+  market_classification?: string;
+  narrative_intelligence?: NarrativeIntelligence;
+  universe_ranking?: UniverseScreenerRow;
+  leadership_intelligence?: {
+    theme_id: string;
+    theme_name: string;
+    leadership_score: number | null;
+    acceleration_score: number;
+    participation_score: number;
+    participating_sectors: string[];
+    representative_symbols: string[];
+    confidence: number;
+    confidence_label: string;
+    lifecycle_state: string;
+    status: string;
+    explanation: string;
+    capital_rotation: string;
+  };
+}
+
+export interface NarrativeIntelligence {
+  narrative_id: string;
+  narrative_name: string;
+  theme?: string;
+  narrative_strength: number;
+  narrative_acceleration?: number;
+  narrative_saturation?: number;
+  narrative_bubble_risk?: number;
+  acceleration_velocity: number;
+  participation_breadth: number;
+  institutional_alignment: number;
+  narrative_state: string;
+  representative_themes: string[];
+  representative_symbols: string[];
+  confidence: number;
+  confidence_label?: string;
+  lifecycle_state: string;
+  explanation: string;
+  capital_flow_semantics?: string;
+  summary?: string;
+  source?: string;
+  status?: string;
+}
+
+export interface UniverseScreenerRow {
+  symbol: string;
+  company_name: string;
+  entity_type?: string;
+  overall_rank?: number | null;
+  ranking_score: number | null;
+  confidence?: number | null;
+  confidence_label?: string;
+  lifecycle_state: string;
+  narrative_strength?: number | null;
+  momentum_strength?: number | null;
+  sector_leadership?: number | null;
+  institutional_alignment?: number | null;
+  participation_breadth?: number | null;
+  volatility_quality?: number | null;
+  crowding_risk?: number | null;
+  defensive_rotation?: number | null;
+  risk_state?: string;
+  crowding_state?: string;
+  market_classification: string;
+  explanation: string;
+  status?: string;
+  source?: string;
+}
+
+export interface UniverseRankingResponse {
+  generated_at: string;
+  status?: string;
+  lifecycle_state?: string;
+  screener: UniverseScreenerRow[];
+  strongest_leadership?: UniverseScreenerRow[];
+  accelerating?: UniverseScreenerRow[];
+  emerging?: UniverseScreenerRow[];
+  weakening?: UniverseScreenerRow[];
+  crowded?: UniverseScreenerRow[];
+  defensive?: UniverseScreenerRow[];
+  risk_on?: UniverseScreenerRow[];
+  risk_off?: UniverseScreenerRow[];
+  summary?: string;
+  future_hooks?: string[];
 }
 
 export interface CrossAssetRegime {
@@ -334,14 +459,17 @@ export interface ThemeSupplyChainResponse {
 
 export interface ThemeNarrativeResponse {
   generated_at: string;
-  narratives: Array<{
-    theme: string;
-    narrative_strength: number;
-    narrative_acceleration: number;
-    narrative_saturation: number;
-    narrative_bubble_risk: number;
-    summary: string;
-  }>;
+  status?: string;
+  lifecycle_state?: string;
+  top_narratives?: NarrativeIntelligence[];
+  emerging_narratives?: NarrativeIntelligence[];
+  weakening_narratives?: NarrativeIntelligence[];
+  crowded_narratives?: NarrativeIntelligence[];
+  defensive_narratives?: NarrativeIntelligence[];
+  narratives: NarrativeIntelligence[];
+  universe_ranking?: UniverseRankingResponse;
+  summary?: string;
+  future_hooks?: string[];
 }
 
 export interface ThemeStocksResponse {

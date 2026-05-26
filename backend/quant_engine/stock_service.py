@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from quant_engine.bubble_engine import analyze_bubble
 from quant_engine.data_pipeline import get_history, get_news, get_quote, safe_float
 from quant_engine.earnings_quality_engine import analyze_earnings_quality
+from quant_engine.factors import FactorContext, build_composite_intelligence
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.smart_money_engine import analyze_smart_money
 
@@ -392,6 +393,39 @@ def _news(symbol: str) -> List[Dict[str, Any]]:
     return items
 
 
+def _composite_intelligence(symbol: str, quote: Dict[str, Any], sector: str) -> Dict[str, Any]:
+    try:
+        history = get_history(symbol, "3mo")
+        benchmark_history = get_history("SPY", "3mo")
+        context = FactorContext(
+            symbol=symbol,
+            quote=quote,
+            history=history,
+            benchmark_history=benchmark_history,
+            metadata={"sector": sector},
+            lifecycle_state="partial_live",
+        )
+        return build_composite_intelligence(context)
+    except Exception as exc:
+        logger.warning("composite intelligence failed symbol=%s error=%s", symbol, exc)
+        return {
+            "available": False,
+            "status": "partial_data",
+            "lifecycle_state": "partial_live",
+            "confidence": 0.0,
+            "confidence_label": "Low Confidence",
+            "composites": {},
+            "future_hooks": [
+                "narrative_acceleration",
+                "macro_regime_overlay",
+                "multi_timeframe_scoring",
+                "feature_store",
+                "universe_ranking",
+                "ai_narrative_engine",
+            ],
+        }
+
+
 def _collect_engine(future: Future, fallback_val: Any, name: str) -> Any:  # noqa: ANN001
     """Collect a future result within _ENGINE_TIMEOUT_SECONDS, returning fallback on timeout/error.
 
@@ -468,6 +502,7 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
     logger.info("central_stock_enrichment complete symbol=%s price=%s bubble_available=%s",
                 ticker, price, bool(bubble_data.get("bubble_index") is not None))
 
+    sector = _sector(ticker, quote)
     result = {
         "ticker": ticker,
         "company_name": _company_name(ticker, quote),
@@ -475,12 +510,13 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
         "change": normalized_quote["change"],
         "change_percent": normalized_quote["change_percent"],
         "market_cap": normalized_quote["market_cap"],
-        "sector": _sector(ticker, quote),
+        "sector": sector,
         "quote_status": normalized_quote["status"],
         "quote": normalized_quote,
         "bubble_analysis_data": bubble_data,
         "earnings_quality": earnings,
         "smart_money": smart,
+        "composite_intelligence": _composite_intelligence(ticker, normalized_quote, sector),
         "analyst_targets": analyst,
         "analyst_consensus": analyst,
         "hmm_prediction": {

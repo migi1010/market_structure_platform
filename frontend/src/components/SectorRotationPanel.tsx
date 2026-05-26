@@ -65,8 +65,13 @@ function scoreLabel(score: number): string {
   return "Distressed";
 }
 
+function formatOptionalScore(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "--";
+}
+
 function sectorExplanation(sector: SectorRotation | undefined, name: string): string {
   if (!sector) return `${name} live rotation data is calibrating.`;
+  if (sector.capital_rotation) return sector.capital_rotation;
   if (sector.score >= 75) return `${sector.sector} is showing leadership with positive capital flow and relative momentum.`;
   if (sector.score >= 50) return `${sector.sector} remains balanced; monitor breadth and institutional flow for confirmation.`;
   return `${sector.sector} is lagging the market with weaker flow and momentum conditions.`;
@@ -132,6 +137,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
   }, []);
 
   const active = sectors.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
+  const activeRanking = active?.universe_ranking;
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
     return (FALLBACK_COMPANIES[activeSector] ?? []).map((ticker, index) => ({
@@ -184,8 +190,13 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           <p className="mt-1 text-sm text-[#9BA7B4]">{active?.sector ?? activeSector} capital flow score</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Screener Rank</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(activeRanking?.ranking_score)}</p>
+          <p className="mt-1 text-sm text-[#9BA7B4]">{activeRanking?.market_classification?.replaceAll("_", " ") ?? "Awaiting factors"}</p>
+        </div>
+        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Rotation State</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.rotation_state ?? scoreLabel(active?.score ?? 50)}</p>
+          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? active?.rotation_state ?? scoreLabel(active?.score ?? 50)}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Momentum and risk-adjusted sector status</p>
         </div>
       </div>
@@ -244,7 +255,9 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Sector Drilldown</p>
               <h2 className="text-2xl font-semibold tracking-wide text-[#E6EDF3]">{active?.sector ?? activeSector}</h2>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Workspace Focus</p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
+                {active?.momentum_direction ? `${active.momentum_direction} / rank ${active.sector_rank ?? "--"}` : "Workspace Focus"}
+              </p>
               </div>
               <ChevronDown className={`shrink-0 text-[#9BA7B4] transition ${sectorDropdownOpen ? "rotate-180" : ""}`} size={20} />
             </button>
@@ -272,11 +285,21 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           <div className="mb-5 rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
             <p className="text-sm font-semibold tracking-wide text-[#E6EDF3]">Sector Explanation</p>
             <p className="mt-2 text-sm leading-relaxed text-[#9BA7B4]">{sectorExplanation(active, activeSector)}</p>
+            {active?.leadership_intelligence?.explanation && (
+              <p className="mt-2 text-sm leading-relaxed text-[#C9D1D9]">{active.leadership_intelligence.explanation}</p>
+            )}
+            {active?.narrative_intelligence?.explanation && (
+              <p className="mt-2 text-sm leading-relaxed text-amber-100/80">{active.narrative_intelligence.explanation}</p>
+            )}
+            {activeRanking?.explanation && (
+              <p className="mt-2 text-sm leading-relaxed text-[#C9D1D9]">{activeRanking.explanation}</p>
+            )}
             <div className="mt-4 space-y-3">
               {[
                 ["Strength", active?.score ?? 50],
                 ["Capital Flow", active?.flow ?? 50],
                 ["Relative Momentum", active?.relative_strength ?? 50],
+                ["Narrative Velocity", active?.acceleration_velocity ?? 50],
                 ["Bubble Risk", activeCompanies.reduce((sum, item) => sum + item.bubble_score, 0) / Math.max(activeCompanies.length, 1)],
               ].map(([label, value]) => (
                 <div key={label as string}>

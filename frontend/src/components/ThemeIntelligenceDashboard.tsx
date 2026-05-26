@@ -19,6 +19,7 @@ import {
   fetchThemeCapitalFlow,
   fetchThemeDetail,
   fetchThemeEmerging,
+  fetchThemeNarrative,
   fetchThemeRotation,
   fetchThemeSupplyChain,
   fetchThemeTop,
@@ -28,6 +29,8 @@ import type {
   ThemeCapitalFlowResponse,
   ThemeDetailResponse,
   ThemeLeader,
+  ThemeNarrativeResponse,
+  NarrativeIntelligence,
   ThemeRotationResponse,
   ThemeScore,
   ThemeSupplyChainResponse,
@@ -72,6 +75,10 @@ function relatedStocksForTheme(theme: ThemeScore): ThemeLeader[] {
 
 function formatOptionalScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(0) : "--";
+}
+
+function isNarrativeIntelligence(value: ThemeScore["narrative_intelligence"]): value is NarrativeIntelligence {
+  return Boolean(value?.narrative_id && value?.narrative_name);
 }
 
 function ShimmerBlock({ className = "" }: { className?: string }) {
@@ -166,6 +173,9 @@ function ThemeRow({
   onThemeSelect: (theme: string) => void;
 }) {
   const score = theme?.theme_strength_score ?? 0;
+  const leadership = theme.leadership_intelligence;
+  const leadershipScore = typeof theme.leadership_score === "number" ? theme.leadership_score : leadership?.leadership_score;
+  const ranking = theme.universe_ranking;
   const leaders = relatedStocksForTheme(theme);
   return (
     <div
@@ -201,6 +211,24 @@ function ThemeRow({
           <p className="font-mono font-semibold text-[#C9D1D9]">{(theme?.breadth_participation ?? 0).toFixed(0)}%</p>
         </div>
       </div>
+      {leadership && (
+        <div className="mt-3 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">Leadership</p>
+            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{typeof leadershipScore === "number" ? leadershipScore.toFixed(0) : "--"}</p>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[#9BA7B4]">{leadership.capital_rotation}</p>
+        </div>
+      )}
+      {ranking && (
+        <div className="mt-3 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Universe Rank</p>
+            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{formatOptionalScore(ranking.ranking_score)}</p>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[#9BA7B4]">{ranking.market_classification.replaceAll("_", " ")} - {ranking.risk_state ?? "balanced"}</p>
+        </div>
+      )}
       {leaders.length > 0 && (
         <div className="mt-4">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#6E7681]">Top Related</p>
@@ -367,6 +395,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   const [emerging, setEmerging] = useState<EmergingThemeResponse | null>(null);
   const [rotation, setRotation] = useState<ThemeRotationResponse | null>(null);
   const [flow, setFlow] = useState<ThemeCapitalFlowResponse | null>(null);
+  const [narrative, setNarrative] = useState<ThemeNarrativeResponse | null>(null);
   const [supplyChain, setSupplyChain] = useState<ThemeSupplyChainResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -403,6 +432,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
     fetchThemeEmerging().then((value) => !cancelled && setEmerging(value)).catch(() => {});
     fetchThemeRotation().then((value) => !cancelled && setRotation(value)).catch(() => {});
     fetchThemeCapitalFlow().then((value) => !cancelled && setFlow(value)).catch(() => {});
+    fetchThemeNarrative().then((value) => !cancelled && setNarrative(value)).catch(() => {});
     fetchThemeSupplyChain().then((value) => !cancelled && setSupplyChain(value)).catch(() => {});
     return () => {
       cancelled = true;
@@ -451,6 +481,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   const topThemes = top?.themes ?? [];
   const emergingThemes = emerging?.emerging_themes ?? [];
   const flowItems = flow?.capital_flow ?? topThemes;
+  const narrativeItems = narrative?.top_narratives?.length
+    ? narrative.top_narratives
+    : topThemes.map((theme) => theme.narrative_intelligence).filter(isNarrativeIntelligence);
   const overheatedThemes = rotation?.overheated_themes ?? [];
   const undervaluedThemes = rotation?.undervalued_themes ?? [];
   const regime = top?.cross_asset_regime;
@@ -492,6 +525,32 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
         <MetricCard label="Volatility" value={regime?.volatility_regime ?? "Warming"} sublabel={`Volatility score ${(regime?.volatility_score ?? 0).toFixed(0)} using VIX proxy and equity vol`} icon={<ShieldAlert size={17} />} />
         <MetricCard label="Inflation" value={regime?.inflation_regime ?? "Warming"} sublabel={`Inflation score ${(regime?.inflation_score ?? 0).toFixed(0)} from oil, gold and yields`} icon={<RadioTower size={17} />} />
       </div>
+
+      <section className={`${cardClass} mb-4`}>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Narrative Acceleration / Cross-Theme Ranking</p>
+            <p className="mt-1 text-sm text-[#9BA7B4]">{narrative?.summary ?? "Ranking leadership, participation, acceleration and institutional alignment across themes."}</p>
+          </div>
+          <Activity className="text-amber-200" size={19} />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {narrativeItems.slice(0, 4).map((item) => (
+            <div key={item.narrative_id} className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.narrative_name}</p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">{item.narrative_state.replaceAll("_", " ")}</p>
+                </div>
+                <p className={`font-mono text-lg font-semibold ${scoreTone(item.narrative_strength)}`}>{item.narrative_strength.toFixed(0)}</p>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{item.capital_flow_semantics ?? item.explanation}</p>
+            </div>
+          ))}
+          {loading && narrativeItems.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-28" />)}
+          {!loading && narrativeItems.length === 0 && <EmptyState detail="Narrative acceleration appears once theme leadership factors are available." />}
+        </div>
+      </section>
 
       <ThemeDetailPanel detail={themeDetail} loading={detailLoading} onTickerSelect={onTickerSelect} />
 

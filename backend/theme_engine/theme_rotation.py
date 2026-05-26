@@ -7,6 +7,9 @@ from functools import lru_cache
 from typing import Any, Dict, List
 
 from quant_engine.data_pipeline import safe_float
+from quant_engine.narrative_engine import build_cross_theme_ranking, enrich_theme_narrative
+from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking
+from quant_engine.theme_engine import enrich_theme_leadership
 
 from .supply_chain_mapper import map_supply_chain
 from .theme_detector import ThemeDefinition, find_theme_exposure, get_theme_definitions
@@ -27,15 +30,21 @@ def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
         future_map = {executor.submit(score_theme, theme, spy, macro): theme for theme in definitions}
         for future in as_completed(future_map):
             try:
-                rows.append(future.result())
+                rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(future.result())), "theme"))
             except Exception:
                 theme = future_map[future]
-                rows.append(_fallback_theme_row(theme))
+                rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(_fallback_theme_row(theme))), "theme"))
     rows.sort(key=lambda item: safe_float(item.get("theme_strength_score")), reverse=True)
     return rows
 
 
 def build_theme_snapshot() -> List[Dict[str, Any]]:
+    return _theme_snapshot(_time_bucket())
+
+
+def get_cached_theme_snapshot() -> List[Dict[str, Any]] | None:
+    if _theme_snapshot.cache_info().currsize <= 0:
+        return None
     return _theme_snapshot(_time_bucket())
 
 
@@ -51,6 +60,8 @@ def get_top_themes(limit: int = 15) -> Dict[str, Any]:
 
 def get_theme_rotation() -> Dict[str, Any]:
     themes = build_theme_snapshot()
+    narrative_ranking = build_cross_theme_ranking(themes)
+    universe_ranking = build_universe_ranking(themes, entity_type="theme", limit=10)
     strengthening = sorted(themes, key=lambda item: safe_float(item.get("emerging_score")), reverse=True)[:8]
     weakening = sorted(themes, key=lambda item: safe_float(item.get("relative_momentum")))[:8]
     overheated = [item for item in themes if safe_float(item.get("overheating_score")) >= 62][:8]
@@ -67,6 +78,8 @@ def get_theme_rotation() -> Dict[str, Any]:
         "weakening": weakening,
         "overheated_themes": overheated,
         "undervalued_themes": undervalued,
+        "narrative_ranking": narrative_ranking,
+        "universe_ranking": universe_ranking,
         "summary": _rotation_summary(strengthening, weakening),
     }
 

@@ -7,6 +7,9 @@ import numpy as np
 
 from alpha_engine.scoring import bounded_score, calculate_sector_strength, calculate_stock_alpha, confidence_label
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
+from quant_engine.narrative_engine import enrich_sector_narrative
+from quant_engine.ranking_engine import enrich_universe_ranking
+from quant_engine.theme_engine import enrich_sector_leadership
 
 SECTOR_UNIVERSE: List[Dict[str, Any]] = [
     {"sector": "Technology", "etf": "XLK", "companies": ["NVDA", "AAPL", "MSFT", "AMD", "AVGO", "PLTR"]},
@@ -163,4 +166,5 @@ def analyze_sector_rotation() -> List[Dict[str, Any]]:
         futures = {executor.submit(_sector_metrics, sector, market_return): sector["sector"] for sector in SECTOR_UNIVERSE}
         for future in as_completed(futures):
             sectors.append(future.result())
-    return sorted(sectors, key=lambda row: row["score"], reverse=True)
+    ranked = sorted(sectors, key=lambda row: row["score"], reverse=True)
+    return [enrich_universe_ranking(enrich_sector_narrative(enrich_sector_leadership(row, index)), "sector", index) for index, row in enumerate(ranked, start=1)]

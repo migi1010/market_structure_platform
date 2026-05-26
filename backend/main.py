@@ -20,6 +20,7 @@ from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
 from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
+from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -565,7 +566,7 @@ def _fallback_alpha(universe: str) -> dict:
         val   = bounded_score(55.0 - index * 1.8)
         mom   = bounded_score(65.0 - index * 2.4)
         conf  = 28.0  # intentionally low — signals partial data to frontend lifecycle
-        rows.append({
+        rows.append(enrich_universe_ranking({
             "ticker": symbol,
             "company_name": symbol,
             "sector": "Calibrating",
@@ -606,7 +607,7 @@ def _fallback_alpha(universe: str) -> dict:
             },
             "bullish_factors": [],
             "risk_factors": ["Live alpha engine warming up; confidence is low until background pipeline completes."],
-        })
+        }, "stock", index + 1))
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "universe": universe.upper(),
@@ -627,6 +628,7 @@ def _fallback_alpha(universe: str) -> dict:
         },
         "top_alpha": rows,
         "recommendations": rows[:5],
+        "universe_screener": build_universe_ranking(rows, entity_type="stock", limit=10),
         "summary": "Alpha pipeline warming up. Static institutional fallback shown. Scores update when live engine completes.",
         "fallback": True,
     }
@@ -636,7 +638,7 @@ def _partial_alpha(universe: str, reason: str) -> dict:
     universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
     rows = [
-        {
+        enrich_universe_ranking({
             "ticker": symbol,
             "company_name": symbol,
             "sector": "Partial Data",
@@ -671,7 +673,7 @@ def _partial_alpha(universe: str, reason: str) -> dict:
             "risk_factors": [reason],
             "available": False,
             "status": "partial_data",
-        }
+        }, "stock", index + 1)
         for index, symbol in enumerate(symbols)
     ]
     return {
@@ -691,6 +693,7 @@ def _partial_alpha(universe: str, reason: str) -> dict:
         "factor_importance": {},
         "top_alpha": rows,
         "recommendations": [],
+        "universe_screener": build_universe_ranking(rows, entity_type="stock", limit=10),
         "summary": reason,
     }
 

@@ -18,6 +18,15 @@ function scoreColor(score: number): string {
   return "text-red-400";
 }
 
+function finiteScore(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatScore(value: number | null | undefined, digits = 1): string {
+  const score = finiteScore(value);
+  return score === null ? "--" : score.toFixed(digits);
+}
+
 function actionClass(action: AlphaQuantRow["suggested_action"]): string {
   if (action === "Strong Buy" || action === "Accumulation") return "border-[#10B981]/25 bg-[#10B981]/10 text-[#10B981]";
   if (action === "Bubble Risk" || action === "Avoid") return "border-red-400/25 bg-red-400/10 text-red-400";
@@ -80,6 +89,8 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
   const open = useCallback(() => onOpen(row.ticker), [onOpen, row.ticker]);
   const price = typeof row.price === "number" && Number.isFinite(row.price) && row.price > 0 ? row.price : null;
   const change = typeof row.change_percent === "number" && Number.isFinite(row.change_percent) ? row.change_percent : null;
+  const alphaScore = finiteScore(row.alpha_score);
+  const ranking = row.universe_ranking;
   return (
     <button onClick={open} className="miji-card w-full rounded-2xl border border-[#2A2F3D] bg-[#151922]/95 p-4 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition hover:border-[#06B6D4]/40">
       <div className="flex items-start justify-between gap-4">
@@ -100,7 +111,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
           </p>
         </div>
         <div className="text-right">
-          <p className={`font-mono text-3xl font-semibold ${scoreColor(row?.alpha_score ?? 0)}`}>{(row?.alpha_score ?? 0).toFixed(1)}</p>
+          <p className={`font-mono text-3xl font-semibold ${scoreColor(alphaScore ?? 0)}`}>{formatScore(alphaScore)}</p>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Alpha Score</p>
           <p className="mt-1 text-[10px] font-medium text-[#9BA7B4]">
             Rank in {row?.universe ?? "Universe"}: <span className="font-mono text-[#C9D1D9]">#{row?.rank_in_universe ?? "--"}</span>
@@ -117,6 +128,11 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
           Adj <b className="font-mono text-[#C9D1D9]">{typeof row?.universe_adjustment === "number" ? `${row.universe_adjustment >= 0 ? "+" : ""}${row.universe_adjustment.toFixed(1)}` : "--"}</b>
         </span>
+        {ranking && (
+          <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
+            Rank <b className="font-mono text-[#C9D1D9]">{formatScore(ranking.ranking_score)}</b> / <b className="text-[#06B6D4]">{ranking.market_classification.replaceAll("_", " ")}</b>
+          </span>
+        )}
       </div>
       <div className="miji-factor-grid mt-4 grid gap-3 md:grid-cols-3">
         <FactorBar label="Smart Money" value={row?.smart_money ?? 0} />
@@ -181,6 +197,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
   const recommendations = useMemo(() => data?.recommendations ?? [], [data]);
   const topAlpha = useMemo(() => data?.top_alpha ?? [], [data]);
   const factorImportance = useMemo(() => Object.entries(data?.factor_importance ?? {}), [data]);
+  const screener = data?.universe_screener?.screener ?? [];
 
   return (
     <main className="miji-page miji-alpha-page min-h-full bg-[#0B0E14] p-5 text-[#E6EDF3]">
@@ -238,6 +255,32 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
         </section>
       </div>
 
+      <section className="miji-card mb-5 rounded-2xl border border-[#2A2F3D] bg-[#151922]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
+        <div className="mb-3 flex items-center gap-2 text-[#06B6D4]">
+          <TrendingUp size={18} />
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[#E6EDF3]">Institutional Universe Screener</h2>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {screener.slice(0, 4).map((row) => (
+            <div key={`${row.symbol}-${row.market_classification}`} className="rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-sm font-semibold text-[#E6EDF3]">{row.symbol}</p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-[#06B6D4]">{row.market_classification.replaceAll("_", " ")}</p>
+                </div>
+                <p className={`font-mono text-lg font-semibold ${scoreColor(row.ranking_score ?? 0)}`}>{formatScore(row.ranking_score)}</p>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{row.explanation}</p>
+            </div>
+          ))}
+          {screener.length === 0 && (
+            <div className="rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3 text-sm text-[#9BA7B4]">
+              Universe screener awaits finite factor inputs.
+            </div>
+          )}
+        </div>
+      </section>
+
       <div className="miji-alpha-main-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_440px]">
         <section id="alpha-momentum" tabIndex={-1} className="miji-alpha-table-wrap min-w-0 outline-none ring-0">
           <div className="mb-3 flex items-center gap-2 text-[#06B6D4]">
@@ -263,7 +306,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
               <button key={row.ticker} onClick={() => onTickerSelect(row.ticker)} className="w-full rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3 text-left transition hover:border-[#10B981]/35">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-lg font-semibold text-[#E6EDF3]">{row.ticker}</span>
-                  <span className={scoreColor(row.alpha_score)}>{row.alpha_score.toFixed(1)}</span>
+                  <span className={scoreColor(finiteScore(row.alpha_score) ?? 0)}>{formatScore(row.alpha_score)}</span>
                 </div>
                 <p className="mt-1 truncate text-xs text-[#9BA7B4]">{sanitizeCompanyName(row.company_name)}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-wide text-[#9BA7B4]">
