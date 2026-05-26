@@ -768,7 +768,7 @@ function normalizeThemeStocksResponse<T extends ThemeStocksResponse | ThemeDetai
 }
 
 export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis> {
-  const symbol = ticker.trim().toUpperCase();
+  const symbol = ticker.trim().toUpperCase() || "NVDA";
   const cacheKey = `miji:stock:${symbol}`;
   const cached = readLocalCache<StockAnalysis>(cacheKey);
   const fallback = cached ? normalizeStockAnalysis(cached, symbol) : fallbackStock(symbol);

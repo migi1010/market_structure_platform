@@ -11,7 +11,7 @@ const DEFAULT_THEME = "";
 const DEFAULT_SECTOR = "Technology";
 const DEFAULT_ALPHA_VIEW = "top-alpha";
 const DEFAULT_PORTFOLIO_VIEW = "watchlist";
-const DEFAULT_MODULE: TerminalModuleId = "theme-intelligence";
+const DEFAULT_MODULE: TerminalModuleId = "stock-analysis";
 const MAX_RECENTS = 8;
 
 interface WorkspaceEnvelope {

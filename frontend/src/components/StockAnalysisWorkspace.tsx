@@ -11,8 +11,15 @@ import BubbleDiagnosisPanel from "./BubbleDiagnosisPanel";
 import NewsIntelligencePanel from "./NewsIntelligencePanel";
 import TradingViewChart from "./TradingViewChart";
 
+const DEFAULT_STOCK_TICKER = "NVDA";
+
+function normalizeWorkspaceTicker(ticker: string | null | undefined): string {
+  return ticker?.trim().toUpperCase() || DEFAULT_STOCK_TICKER;
+}
+
 export default function StockAnalysisWorkspace() {
-  const { selectedTicker: ticker } = useWorkspace();
+  const { selectedTicker, setSelectedTicker } = useWorkspace();
+  const ticker = normalizeWorkspaceTicker(selectedTicker);
   const [stock, setStock] = useState<StockAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +28,16 @@ export default function StockAnalysisWorkspace() {
   // Prevents the retry from firing on the initial null state before any fetch.
   const hasFetchedOnce = useRef(false);
   const retryFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (selectedTicker?.trim()) return;
+    setSelectedTicker(DEFAULT_STOCK_TICKER);
+  }, [selectedTicker, setSelectedTicker]);
+
   useEffect(() => {
     hasFetchedOnce.current = false;
     retryFiredRef.current = false;
+    setStock((current) => (current?.ticker?.toUpperCase() === ticker ? current : null));
   }, [ticker]);
 
   useEffect(() => {
