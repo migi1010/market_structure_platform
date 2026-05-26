@@ -5,8 +5,8 @@ import { createPortal } from "react-dom";
 import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { enabledTerminalModules, getTerminalModule } from "@/modules/terminalModules";
-import { searchStocks } from "@/services/stockApi";
-import type { OmniboxTargetTab, SearchResult, WorkspaceAction } from "@/types/stock";
+import { classifySearchIntent, searchStocks } from "@/services/stockApi";
+import type { OmniboxIntent, OmniboxTargetTab, SearchResult, WorkspaceAction } from "@/types/stock";
 
 interface GlobalStockSearchProps {
   onSelect: (symbol: string) => void;
@@ -16,6 +16,7 @@ interface GlobalStockSearchProps {
 }
 
 const GROUP_ORDER = ["Stocks", "Themes", "Sectors", "Commands"] as const;
+const EMPTY_SUGGESTIONS = ["NVDA", "AI Infrastructure", "Semiconductors", "Alpha Momentum", "Portfolio Watchlist"];
 
 function getResultGroup(item: SearchResult): (typeof GROUP_ORDER)[number] {
   if (item.group && GROUP_ORDER.includes(item.group)) return item.group;
@@ -36,6 +37,24 @@ function getResultDescription(item: SearchResult): string {
 
 function getTargetLabel(item: SearchResult): string {
   return getTerminalModule(item.target_tab)?.title ?? "Stock Analysis";
+}
+
+function getIntentLabel(intent: OmniboxIntent, item?: SearchResult): string {
+  const group = item ? getResultGroup(item) : null;
+  if (group === "Themes" || intent === "theme") return "THEME SEARCH";
+  if (group === "Sectors" || intent === "sector") return "SECTOR SEARCH";
+  if (group === "Commands" || intent === "command") return "COMMAND";
+  return "STOCK SEARCH";
+}
+
+function getActionSummary(item: SearchResult | undefined, fallbackQuery: string): string {
+  if (!item) return fallbackQuery.trim() ? `Search MIJI Terminal for ${fallbackQuery.trim()}` : "Start with a ticker, theme, sector, or command";
+  const group = getResultGroup(item);
+  const title = getResultTitle(item);
+  if (group === "Stocks") return `Open Stock Analysis for ${item.ticker ?? item.symbol}`;
+  if (group === "Themes") return `Open Theme Intelligence: ${title}`;
+  if (group === "Sectors") return `Open Sector Rotation: ${title}`;
+  return `Open ${getTargetLabel(item)}: ${title}`;
 }
 
 function canAddToWatchlist(item: SearchResult): boolean {
@@ -173,6 +192,10 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   }, [recentThemes, recentTickers]);
 
   const visibleResults = query.trim() ? results : quickResults;
+  const selectedResult = visibleResults?.[activeIndex];
+  const searchIntent = query.trim() ? classifySearchIntent(query) : "command";
+  const intentLabel = getIntentLabel(searchIntent, selectedResult);
+  const actionSummary = getActionSummary(selectedResult, query);
   const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
     const group = getResultGroup(item);
     const existing = acc.find((entry) => entry.group === group);
@@ -319,7 +342,8 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl"
         style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, maxHeight: overlayPosition.maxHeight, zIndex: 10000 }}
       >
-        <div className="flex items-center justify-between border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-2">
+        <div className="border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <CommandIcon size={14} className="text-amber-200" />
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[#C9D1D9]">Terminal Command Palette</span>
@@ -330,19 +354,53 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
             <span>Esc</span>
             <span>Close</span>
           </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-amber-400/20 bg-[#05070A] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.04)]">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">{intentLabel}</span>
+              {loading && <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]"><Loader2 size={12} className="animate-spin" /> Searching</span>}
+            </div>
+            <div className="flex min-w-0 items-center gap-1 font-mono text-xl font-semibold uppercase tracking-wide text-[#E6EDF3]">
+              <span className={query.trim() ? "truncate" : "truncate text-[#6E7681]"}>{query.trim() || "TYPE COMMAND OR SYMBOL"}</span>
+              <span className="h-6 w-2 animate-pulse bg-amber-200/80" aria-hidden="true" />
+            </div>
+            <p className="mt-2 truncate text-xs font-medium text-[#9BA7B4]">{actionSummary}</p>
+          </div>
         </div>
 
-        <div className="overflow-y-auto overscroll-contain p-2" style={{ maxHeight: Math.max(80, overlayPosition.maxHeight - 40) }}>
+        <div className="overflow-y-auto overscroll-contain p-2" style={{ maxHeight: Math.max(80, overlayPosition.maxHeight - 126) }}>
           {(visibleResults?.length ?? 0) === 0 ? (
-            <button
-              onPointerDown={(event) => {
-                event.preventDefault();
-                commit(query);
-              }}
-              className="w-full rounded-lg border border-[#2B313C] bg-[#111318] px-3 py-3 text-left font-mono text-sm text-[#C9D1D9] transition hover:border-amber-400/20 hover:bg-[#161B22]"
-            >
-              Open {query || "ticker"} Analysis
-            </button>
+            <div className="space-y-2">
+              <button
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  commit(query);
+                }}
+                className="w-full rounded-lg border border-[#2B313C] bg-[#111318] px-3 py-3 text-left font-mono text-sm text-[#C9D1D9] transition hover:border-amber-400/20 hover:bg-[#161B22]"
+              >
+                Open {query || "ticker"} Analysis
+              </button>
+              <div className="rounded-lg border border-[#2B313C] bg-[#0A0C10] p-3">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">Try</p>
+                <div className="flex flex-wrap gap-2">
+                  {EMPTY_SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        setQuery(suggestion.toUpperCase());
+                        setOpen(true);
+                        inputRef.current?.focus();
+                      }}
+                      className="rounded border border-[#2B313C] bg-[#111318] px-2.5 py-1.5 text-xs font-semibold text-[#C9D1D9] transition hover:border-amber-400/25 hover:text-amber-200"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           ) : (
             <>
               {!query.trim() && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Recent and Quick Actions</div>}
@@ -362,7 +420,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                           key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
                           className={`group rounded-lg border px-3 py-2.5 transition ${
                             active
-                              ? "border-amber-400/25 bg-[#1A1F29] shadow-[inset_3px_0_0_rgba(251,191,36,0.65)]"
+                              ? "border-amber-400/35 bg-[#1A1F29] shadow-[inset_3px_0_0_rgba(251,191,36,0.75),0_10px_30px_rgba(0,0,0,0.24)]"
                               : "border-transparent hover:border-[#2B313C] hover:bg-[#111318]"
                           }`}
                         >
@@ -378,10 +436,11 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                                 <span className="min-w-[4.25rem] shrink-0 font-mono text-sm font-semibold text-[#E6EDF3]">{symbolLabel}</span>
                                 <span className="truncate text-sm font-medium text-[#C9D1D9]">{title}</span>
                                 <span className="shrink-0 rounded border border-[#2B313C] bg-[#0A0C10] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{item.type}</span>
+                                <span className="hidden shrink-0 rounded border border-[#2B313C] bg-[#0A0C10] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681] sm:inline">{item.exchange}</span>
                               </div>
                               <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
                                 <span className="truncate text-[#7D8590]">{description}</span>
-                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">{target}</span>
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">{active ? "Enter to open" : target}</span>
                               </div>
                             </button>
                             {onAddToWatchlist && canAddToWatchlist(item) && (

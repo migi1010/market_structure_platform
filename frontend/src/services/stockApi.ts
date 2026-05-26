@@ -298,6 +298,37 @@ function mergeSearchResults(results: SearchResult[]): SearchResult[] {
   }, []);
 }
 
+function searchResultRank(item: SearchResult, query: string): number {
+  const exactTickerPriority = 0;
+  const tickerPrefixPriority = 10;
+  const exactCompanyPriority = 20;
+  const companyPrefixPriority = 30;
+  const themeSectorPriority = 40;
+  const commandPriority = 60;
+  const fallbackPriority = 80;
+  const normalizedQuery = stripIntentPrefix(query);
+  const symbol = compactSearchText(item.ticker ?? item.symbol);
+  const company = compactSearchText(item.company ?? item.name);
+  const group = item.group ?? (item.type.toLowerCase() === "theme" ? "Themes" : item.type.toLowerCase() === "sector" ? "Sectors" : item.type.toLowerCase() === "command" ? "Commands" : "Stocks");
+
+  if (symbol === normalizedQuery) return exactTickerPriority;
+  if (symbol.startsWith(normalizedQuery)) return tickerPrefixPriority;
+  if (company === normalizedQuery) return exactCompanyPriority;
+  if (company.startsWith(normalizedQuery)) return companyPrefixPriority;
+  if (group === "Themes" || group === "Sectors") return themeSectorPriority;
+  if (group === "Commands") return commandPriority;
+  return fallbackPriority;
+}
+
+function rankSearchResults(results: SearchResult[], query: string): SearchResult[] {
+  return [...results].sort((left, right) => {
+    const leftRank = searchResultRank(left, query);
+    const rightRank = searchResultRank(right, query);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return (left.ticker ?? left.symbol).localeCompare(right.ticker ?? right.symbol);
+  });
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -777,7 +808,7 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
     ticker: [...localMatches, ...universalMatches, ...themeMatches, ...sectorMatches, ...commandMatches],
     natural_language: [...localMatches, ...themeMatches, ...sectorMatches, ...commandMatches, ...universalMatches],
   };
-  const localResults = mergeSearchResults(localBuckets[intent]);
+  const localResults = rankSearchResults(mergeSearchResults(localBuckets[intent]), query);
 
   if (
     intent === "command"
@@ -797,12 +828,12 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
       cache: "no-store",
     });
     const remote = await readJson<SearchResult[]>(response);
-    const merged = mergeSearchResults([...localResults, ...remote.map((item) => enrichStockResult({
+    const merged = rankSearchResults(mergeSearchResults([...localResults, ...remote.map((item) => enrichStockResult({
       ...item,
       price: validPrice(item.price),
       change_percent: validNumber(item.change_percent),
       quote_status: item.quote_status,
-    }))]);
+    }))]), query);
     return merged.slice(0, 10);
   } catch {
     const fallback = localResults;
