@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
@@ -48,6 +48,7 @@ interface OverlayPosition {
   top: number;
   left: number;
   width: number;
+  maxHeight: number;
 }
 
 function stockRecentResult(ticker: string): SearchResult {
@@ -153,7 +154,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   const [loading, setLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [portalReady, setPortalReady] = useState(false);
-  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>({ top: 88, left: 16, width: 720 });
+  const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>({ top: 88, left: 16, width: 720, maxHeight: 544 });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const composingRef = useRef(false);
@@ -171,15 +172,43 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     ];
   }, [recentThemes, recentTickers]);
 
+  const visibleResults = query.trim() ? results : quickResults;
+  const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
+    const group = getResultGroup(item);
+    const existing = acc.find((entry) => entry.group === group);
+    if (existing) existing.items.push(item);
+    else acc.push({ group, items: [item] });
+    return acc;
+  }, []);
+
   const updateOverlayPosition = useCallback(() => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || typeof window === "undefined") return;
     const margin = 12;
-    const maxWidth = Math.min(760, window.innerWidth - margin * 2);
-    const preferredWidth = Math.max(420, Math.min(maxWidth, Math.max(rect.width, 620)));
-    const left = Math.min(Math.max(margin, rect.right - preferredWidth), window.innerWidth - preferredWidth - margin);
-    const top = Math.min(Math.max(rect.bottom + 10, 72), window.innerHeight - 220);
-    setOverlayPosition({ top, left, width: preferredWidth });
+    const spacing = 10;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const maxWidth = Math.max(280, viewportWidth - margin * 2);
+    const preferredWidth = Math.max(
+      Math.min(maxWidth, rect.width),
+      Math.min(maxWidth, viewportWidth < 768 ? maxWidth : 620),
+    );
+    const documentLeft = rect.right + scrollX - preferredWidth;
+    const documentTop = rect.bottom + scrollY + spacing;
+    const left = Math.min(Math.max(margin, documentLeft - scrollX), viewportWidth - preferredWidth - margin);
+    const anchoredTop = documentTop - scrollY;
+    const preferredMaxHeight = Math.min(544, viewportHeight * 0.72);
+    const belowSpace = viewportHeight - anchoredTop - margin;
+    const aboveSpace = rect.top - spacing - margin;
+    const useAbove = belowSpace < 180 && aboveSpace > belowSpace && aboveSpace >= 160;
+    const maxHeight = Math.max(80, Math.min(preferredMaxHeight, useAbove ? aboveSpace : belowSpace));
+    const top = useAbove ? Math.max(margin, rect.top - spacing - maxHeight) : Math.max(margin, anchoredTop);
+
+    // Portal coordinates are fixed to the viewport; scroll offsets are only used
+    // to normalize document-space measurements back into viewport coordinates.
+    setOverlayPosition({ top, left, width: preferredWidth, maxHeight });
   }, []);
 
   useEffect(() => {
@@ -209,9 +238,13 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     };
   }, [query]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     updateOverlayPosition();
+  }, [open, updateOverlayPosition, visibleResults.length]);
+
+  useEffect(() => {
+    if (!open) return;
     window.addEventListener("resize", updateOverlayPosition);
     window.addEventListener("scroll", updateOverlayPosition, true);
     return () => {
@@ -263,25 +296,16 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     else commit(normalized);
   };
 
-  const visibleResults = query.trim() ? results : quickResults;
-  const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
-    const group = getResultGroup(item);
-    const existing = acc.find((entry) => entry.group === group);
-    if (existing) existing.items.push(item);
-    else acc.push({ group, items: [item] });
-    return acc;
-  }, []);
-
   useEffect(() => {
     setActiveIndex((idx) => Math.min(Math.max(visibleResults.length - 1, 0), idx));
   }, [visibleResults.length]);
 
   const overlay = open && portalReady ? createPortal(
-    <div className="miji-omnibox-portal pointer-events-auto fixed inset-0 isolate z-[9999]" style={{ zIndex: 9999 }}>
+    <div className="miji-omnibox-portal pointer-events-none fixed inset-0 isolate z-[9999]" style={{ zIndex: 9999 }}>
       <button
         type="button"
         aria-label="Close command palette"
-        className="absolute inset-0 z-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
+        className="pointer-events-auto absolute inset-0 z-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
         onMouseDown={(event) => {
           event.preventDefault();
           setOpen(false);
@@ -292,8 +316,8 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         }}
       />
       <div
-        className="miji-command-palette pointer-events-auto fixed z-[10000] max-h-[min(72dvh,34rem)] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl max-md:inset-x-3 max-md:top-[5.5rem] max-md:w-auto"
-        style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, zIndex: 10000 }}
+        className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl"
+        style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, maxHeight: overlayPosition.maxHeight, zIndex: 10000 }}
       >
         <div className="flex items-center justify-between border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -308,7 +332,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
           </div>
         </div>
 
-        <div className="max-h-[calc(min(72dvh,34rem)-2.5rem)] overflow-y-auto overscroll-contain p-2">
+        <div className="overflow-y-auto overscroll-contain p-2" style={{ maxHeight: Math.max(80, overlayPosition.maxHeight - 40) }}>
           {(visibleResults?.length ?? 0) === 0 ? (
             <button
               onPointerDown={(event) => {
