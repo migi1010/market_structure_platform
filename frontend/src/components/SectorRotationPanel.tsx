@@ -13,6 +13,7 @@ interface SectorRotationPanelProps {
 }
 
 const CANONICAL_SECTORS = [
+  "Semiconductors",
   "Technology",
   "Energy",
   "Healthcare",
@@ -90,6 +91,11 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!selectedSector) return;
+    setActiveSector(selectedSector);
+  }, [selectedSector]);
+
+  useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -97,7 +103,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         const result = await fetchSectorRotation();
         if (!cancelled) {
           setSectors(result);
-          setActiveSector((current) => result.some((sector) => sector.sector === current) ? current : result?.[0]?.sector ?? "Technology");
+          setActiveSector((current) => current || result?.[0]?.sector || selectedSector || "Technology");
         }
       } catch {
         if (!cancelled) setSectors([]);
@@ -125,7 +131,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
     };
   }, []);
 
-  const active = sectors.find((sector) => sector.sector === activeSector) ?? sectors?.[0];
+  const active = sectors.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
     return (FALLBACK_COMPANIES[activeSector] ?? []).map((ticker, index) => ({
@@ -146,6 +152,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
 
   const selectSector = (sector: string) => {
     setActiveSector(sector);
+    setSelectedSector(sector);
     setSectorDropdownOpen(false);
   };
 
@@ -191,7 +198,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
             {sectors.map((sector) => (
               <motion.button
                 key={sector.sector}
-                onClick={() => setActiveSector(sector.sector)}
+                onClick={() => selectSector(sector.sector)}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.18 }}
@@ -221,7 +228,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           </div>
         )}
 
-        <aside className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-md">
+        <aside id="sector-drilldown" tabIndex={-1} className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] outline-none ring-0 backdrop-blur-md">
           <div ref={dropdownRef} className="relative z-30 mb-5">
             <button
               type="button"
@@ -237,6 +244,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Sector Drilldown</p>
               <h2 className="text-2xl font-semibold tracking-wide text-[#E6EDF3]">{active?.sector ?? activeSector}</h2>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Workspace Focus</p>
               </div>
               <ChevronDown className={`shrink-0 text-[#9BA7B4] transition ${sectorDropdownOpen ? "rotate-180" : ""}`} size={20} />
             </button>

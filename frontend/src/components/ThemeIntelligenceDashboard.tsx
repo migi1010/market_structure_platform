@@ -249,7 +249,7 @@ function ThemeDetailPanel({
 }) {
   if (loading) {
     return (
-      <section className={`${cardClass} mb-4`}>
+      <section id="theme-detail" tabIndex={-1} className={`${cardClass} mb-4 outline-none ring-0`}>
         <div className="grid gap-4 md:grid-cols-3">
           <ShimmerBlock className="h-24" />
           <ShimmerBlock className="h-24" />
@@ -264,7 +264,7 @@ function ThemeDetailPanel({
   const alpha = detail.top_alpha_stocks ?? related;
   const chainRoles = Object.entries(detail.supply_chain ?? {}).slice(0, 4);
   return (
-    <section className={`${cardClass} mb-4`}>
+    <section id="theme-detail" tabIndex={-1} className={`${cardClass} mb-4 outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]`}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Theme Detail / 主題拆解</p>
@@ -439,6 +439,15 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
     };
   }, [selectedTheme]);
 
+  useEffect(() => {
+    if (!selectedTheme || detailLoading) return;
+    window.setTimeout(() => {
+      const element = document.getElementById("theme-detail");
+      element?.scrollIntoView({ behavior: "smooth", block: "start" });
+      element?.focus({ preventScroll: true });
+    }, 80);
+  }, [detailLoading, selectedTheme, themeDetail]);
+
   const topThemes = top?.themes ?? [];
   const emergingThemes = emerging?.emerging_themes ?? [];
   const flowItems = flow?.capital_flow ?? topThemes;
@@ -455,6 +464,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Theme Intelligence / Market Themes</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#E6EDF3]">Universal Capital Flow Command</h1>
+          {selectedTheme && <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-amber-200">Focus: {selectedTheme}</p>}
           <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[#9BA7B4]">
             Cross-asset theme discovery across capital flow, supply chains, macro regime, narrative acceleration and institutional positioning.
           </p>

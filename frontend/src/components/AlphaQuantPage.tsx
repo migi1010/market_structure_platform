@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, BrainCircuit, Loader2, ShieldCheck, TrendingUp } from "lucide-react";
+import { useWorkspace } from "@/context/WorkspaceContext";
 import { fetchAlphaQuant } from "@/services/stockApi";
 import type { AlphaQuantResponse, AlphaQuantRow } from "@/types/stock";
 import { sanitizeCompanyName } from "@/lib/sanitize";
@@ -127,6 +128,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
 }
 
 export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) {
+  const { selectedAlphaView } = useWorkspace();
   const [universe, setUniverse] = useState("sp500");
   const [data, setData] = useState<AlphaQuantResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,6 +188,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#06B6D4]">Institutional Alpha Quant Screener</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#E6EDF3]">Alpha Intelligence Platform</h1>
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[#06B6D4]">Focus: {selectedAlphaView}</p>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#9BA7B4]">
             Market regime, sector rotation, smart money, earnings quality, bubble intelligence, and Qlib Alpha158-style factor ranking.
           </p>
@@ -236,7 +239,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
       </div>
 
       <div className="miji-alpha-main-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_440px]">
-        <section className="miji-alpha-table-wrap min-w-0">
+        <section id="alpha-momentum" tabIndex={-1} className="miji-alpha-table-wrap min-w-0 outline-none ring-0">
           <div className="mb-3 flex items-center gap-2 text-[#06B6D4]">
             <TrendingUp size={18} />
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[#E6EDF3]">Daily Top 10 Alpha Stocks</h2>

@@ -170,7 +170,7 @@ function PortfolioHome({
   }, [watchlist]);
 
   return (
-    <main className="miji-page p-5 text-[#E6EDF3]">
+    <main id="portfolio-watchlist" tabIndex={-1} className="miji-page p-5 text-[#E6EDF3] outline-none ring-0">
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Portfolio Command Center</p>
@@ -296,25 +296,29 @@ function DashboardApp() {
 
   const focusWorkspaceAction = useCallback((action: WorkspaceAction) => {
     window.setTimeout(() => {
+      const focusElement = (id: string) => {
+        const element = document.getElementById(id);
+        element?.scrollIntoView({ behavior: "smooth", block: "start" });
+        element?.focus({ preventScroll: true });
+      };
       if (action.focusTarget === "stock-workspace") {
-        document.getElementById("stock-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        document.getElementById("stock-analysis")?.focus({ preventScroll: true });
+        focusElement("stock-analysis");
         return;
       }
       if (action.focusTarget === "theme-detail" || action.focusTarget === "theme-workspace") {
-        document.getElementById("theme-intelligence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusElement(action.focusTarget === "theme-detail" ? "theme-detail" : "theme-intelligence");
         return;
       }
       if (action.focusTarget === "sector-drilldown") {
-        document.getElementById("sector-rotation")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusElement("sector-drilldown");
         return;
       }
       if (action.focusTarget === "alpha-momentum" || action.focusTarget === "alpha-workspace") {
-        document.getElementById("alpha-quant")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusElement(action.focusTarget === "alpha-momentum" ? "alpha-momentum" : "alpha-quant");
         return;
       }
       if (action.focusTarget === "portfolio-watchlist") {
-        document.getElementById("portfolio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        focusElement("portfolio-watchlist");
       }
     }, 120);
   }, []);
@@ -322,8 +326,12 @@ function DashboardApp() {
   const runWorkspaceAction = useCallback((action: WorkspaceAction) => {
     dispatchWorkspaceAction(action);
     setMobileMenuOpen(false);
-    focusWorkspaceAction(action);
-  }, [dispatchWorkspaceAction, focusWorkspaceAction]);
+  }, [dispatchWorkspaceAction]);
+
+  useEffect(() => {
+    if (!lastWorkspaceAction || lastWorkspaceAction.target_tab !== activeTab) return;
+    focusWorkspaceAction(lastWorkspaceAction);
+  }, [activeTab, focusWorkspaceAction, lastWorkspaceAction]);
 
   const openStock = useCallback((ticker: string) => {
     const symbol = normalizeSymbol(ticker);
@@ -345,8 +353,9 @@ function DashboardApp() {
     setMobileMenuOpen(false);
   }, [setActiveModule]);
 
+  const actionContextLabel = lastWorkspaceAction?.target_tab === activeTab ? lastWorkspaceAction.contextPayload?.label : null;
   const activeContextLabel =
-    lastWorkspaceAction?.contextPayload?.label
+    actionContextLabel
     ?? (activeTab === "stock-analysis" ? selectedTicker
       : activeTab === "theme-intelligence" ? selectedTheme || "Theme Intelligence"
         : activeTab === "market-intel" ? selectedSector
@@ -402,7 +411,7 @@ function DashboardApp() {
           </div>
           <div className="miji-header-actions flex w-full min-w-0 items-center gap-3 md:w-auto">
             <GlobalStockSearch onSelect={openStock} onSelectResult={openSearchResult} onAddToWatchlist={addToWatchlist} />
-            <div className="hidden min-w-0 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2 text-[11px] text-[#9BA7B4] xl:block">
+            <div className="hidden min-w-0 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2 text-[11px] text-[#9BA7B4] md:block">
               <span className="font-semibold uppercase tracking-wide text-[#6E7681]">Workspace</span>
               <span className="ml-2 font-mono text-[#C9D1D9]">{activeContextLabel}</span>
             </div>
@@ -414,10 +423,10 @@ function DashboardApp() {
       </header>
 
       <div className="miji-content min-h-0 flex-1 overflow-y-auto bg-[#0A0C10]">
-        {activeTab === "theme-intelligence" && <div id="theme-intelligence"><ThemeIntelligenceDashboard onTickerSelect={openStock} /></div>}
+        {activeTab === "theme-intelligence" && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeIntelligenceDashboard onTickerSelect={openStock} /></div>}
         {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
-        {activeTab === "alpha-quant" && <div id="alpha-quant"><AlphaQuantPage onTickerSelect={openStock} /></div>}
-        {activeTab === "market-intel" && <div id="sector-rotation"><SectorRotationPanel onTickerSelect={openStock} /></div>}
+        {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} /></div>}
+        {activeTab === "market-intel" && <div id="sector-rotation" tabIndex={-1} className="outline-none ring-0"><SectorRotationPanel onTickerSelect={openStock} /></div>}
         {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]"><StockAnalysisWorkspace /></div>}
       </div>
       {mobileMenuOpen && (
