@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Dict, List
 
 from quant_engine.bubble_engine import analyze_bubble
 from quant_engine.data_pipeline import get_history, get_news, get_quote, safe_float
 from quant_engine.earnings_quality_engine import analyze_earnings_quality
-from quant_engine.factors import FactorContext, build_composite_intelligence
 from quant_engine.regime_engine import detect_market_regime
 from quant_engine.smart_money_engine import analyze_smart_money
 
@@ -26,6 +26,8 @@ logger = logging.getLogger("miji.stock_service")
 #   - Memory impact: 4 threads × ~2MB stack = ~8MB — negligible vs Phase 2.6 savings
 _ENRICHMENT_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="miji.enrichment")
 _ENGINE_TIMEOUT_SECONDS = 9.0  # must be < CACHE_MISS_WAIT_SECONDS (12s in main.py)
+_COMPOSITE_MAX_SECONDS = 0.75
+_COMPOSITE_CIRCUIT_OPEN = False
 
 COMMON_METADATA: dict[str, dict[str, str]] = {
     "AAPL": {"company_name": "Apple Inc.", "sector": "Technology"},
@@ -393,37 +395,56 @@ def _news(symbol: str) -> List[Dict[str, Any]]:
     return items
 
 
+def _partial_composite_intelligence(reason: str) -> Dict[str, Any]:
+    return {
+        "available": False,
+        "status": "partial_data",
+        "lifecycle_state": "partial_live",
+        "reason": reason,
+        "confidence": 0.0,
+        "confidence_label": "Unavailable",
+        "composites": {},
+        "future_hooks": [
+            "narrative_acceleration",
+            "macro_regime_overlay",
+            "multi_timeframe_scoring",
+            "feature_store",
+            "universe_ranking",
+            "ai_narrative_engine",
+        ],
+    }
+
+
 def _composite_intelligence(symbol: str, quote: Dict[str, Any], sector: str) -> Dict[str, Any]:
+    global _COMPOSITE_CIRCUIT_OPEN
+    if _COMPOSITE_CIRCUIT_OPEN:
+        return _partial_composite_intelligence("Composite intelligence unavailable; price data is live.")
     try:
-        history = get_history(symbol, "3mo")
-        benchmark_history = get_history("SPY", "3mo")
+        from quant_engine.factors import FactorContext, build_composite_intelligence  # noqa: PLC0415
+
+        # Stock responses must never wait on Phase 4 history/model work. Passing no
+        # history keeps the factor layer quote-safe: unavailable factors report
+        # partial_data instead of fetching data or blocking the live quote response.
         context = FactorContext(
             symbol=symbol,
             quote=quote,
-            history=history,
-            benchmark_history=benchmark_history,
             metadata={"sector": sector},
             lifecycle_state="partial_live",
         )
-        return build_composite_intelligence(context)
+        started = time.perf_counter()
+        result = build_composite_intelligence(context)
+        elapsed = time.perf_counter() - started
+        if elapsed > _COMPOSITE_MAX_SECONDS:
+            _COMPOSITE_CIRCUIT_OPEN = True
+            logger.warning("composite intelligence exceeded stock budget symbol=%s elapsed=%.3fs", symbol, elapsed)
+            return _partial_composite_intelligence("Composite intelligence unavailable; price data is live.")
+        if result.get("available") is False and result.get("status") in {None, "unavailable"}:
+            return _partial_composite_intelligence("Composite intelligence unavailable; price data is live.")
+        return result
     except Exception as exc:
+        _COMPOSITE_CIRCUIT_OPEN = True
         logger.warning("composite intelligence failed symbol=%s error=%s", symbol, exc)
-        return {
-            "available": False,
-            "status": "partial_data",
-            "lifecycle_state": "partial_live",
-            "confidence": 0.0,
-            "confidence_label": "Low Confidence",
-            "composites": {},
-            "future_hooks": [
-                "narrative_acceleration",
-                "macro_regime_overlay",
-                "multi_timeframe_scoring",
-                "feature_store",
-                "universe_ranking",
-                "ai_narrative_engine",
-            ],
-        }
+        return _partial_composite_intelligence("Composite intelligence unavailable; price data is live.")
 
 
 def _collect_engine(future: Future, fallback_val: Any, name: str) -> Any:  # noqa: ANN001

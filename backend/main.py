@@ -20,7 +20,6 @@ from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
 from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
-from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -553,6 +552,8 @@ def _fallback_alpha(universe: str) -> dict:
     signalling partial_data to the frontend lifecycle system.
     True live scores will replace this once the background pipeline completes.
     """
+    from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking  # noqa: PLC0415
+
     universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
     rows = []
@@ -635,6 +636,8 @@ def _fallback_alpha(universe: str) -> dict:
 
 
 def _partial_alpha(universe: str, reason: str) -> dict:
+    from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking  # noqa: PLC0415
+
     universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
     rows = [
