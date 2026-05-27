@@ -13,6 +13,18 @@ import TradingViewChart from "./TradingViewChart";
 
 const DEFAULT_STOCK_TICKER = "NVDA";
 
+interface StockViewModel {
+  ticker: string;
+  companyName: string;
+  sector: string;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+  marketCap: number | null;
+  quoteStatus: string;
+  analysis: StockAnalysis | null;
+}
+
 function normalizeWorkspaceTicker(ticker: string | null | undefined): string {
   return ticker?.trim().toUpperCase() || DEFAULT_STOCK_TICKER;
 }
@@ -48,10 +60,40 @@ function formatMarketCap(value: number | null): string {
   return `$${value.toFixed(0)}`;
 }
 
+function createFallbackStockView(ticker: string): StockViewModel {
+  return {
+    ticker,
+    companyName: "",
+    sector: "US Equity",
+    price: null,
+    change: null,
+    changePercent: null,
+    marketCap: null,
+    quoteStatus: "unavailable",
+    analysis: null,
+  };
+}
+
+function createStockViewModel(ticker: string, analysis: StockAnalysis | null): StockViewModel {
+  if (!analysis) return createFallbackStockView(ticker);
+  const price = finiteNumber(analysis.canonicalPrice);
+  return {
+    ticker: analysis.ticker?.trim().toUpperCase() || ticker,
+    companyName: analysis.company_name ?? "",
+    sector: analysis.canonicalSector && analysis.canonicalSector !== "Unknown" ? analysis.canonicalSector : "US Equity",
+    price,
+    change: finiteNumber(analysis.canonicalChange),
+    changePercent: finiteNumber(analysis.canonicalChangePercent),
+    marketCap: finiteNumber(analysis.canonicalMarketCap),
+    quoteStatus: price !== null && analysis.canonicalQuoteStatus === "unavailable" ? "live_or_cached" : analysis.canonicalQuoteStatus || "unavailable",
+    analysis,
+  };
+}
+
 export default function StockAnalysisWorkspace() {
   const { selectedTicker, setSelectedTicker } = useWorkspace();
   const ticker = normalizeWorkspaceTicker(selectedTicker);
-  const [stock, setStock] = useState<StockAnalysis | null>(null);
+  const [stockView, setStockView] = useState<StockViewModel>(() => createFallbackStockView(ticker));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +110,7 @@ export default function StockAnalysisWorkspace() {
   useEffect(() => {
     hasFetchedOnce.current = false;
     retryFiredRef.current = false;
-    setStock((current) => (current?.ticker?.toUpperCase() === ticker ? current : null));
+    setStockView((current) => (current.ticker === ticker ? current : createFallbackStockView(ticker)));
   }, [ticker]);
 
   useEffect(() => {
@@ -80,7 +122,7 @@ export default function StockAnalysisWorkspace() {
         const result = await fetchStockAnalysis(ticker);
         if (!cancelled) {
           hasFetchedOnce.current = true;
-          setStock(result);
+          setStockView(createStockViewModel(ticker, result));
         }
       } catch (err) {
         if (!cancelled) {
@@ -104,23 +146,21 @@ export default function StockAnalysisWorkspace() {
     if (loading) return;
     if (!hasFetchedOnce.current) return;     // initial state — fetch not yet complete
     if (retryFiredRef.current) return;
-    const isFallback =
-      stock === null ||
-      ((stock.price === null || !Number.isFinite(stock.price as number)) &&
-        (stock.quote_status === "unavailable" || stock.quote?.status === "unavailable"));
+    const isFallback = stockView.price === null && stockView.quoteStatus === "unavailable";
     if (!isFallback) return;
     retryFiredRef.current = true;
     const handle = window.setTimeout(async () => {
       try {
         const result = await fetchStockAnalysis(ticker);
-        setStock(result);
+        setStockView(createStockViewModel(ticker, result));
       } catch {
         // Retry failure is silent — original fallback state remains.
       }
     }, 10_000);
     return () => window.clearTimeout(handle);
-  }, [loading, stock, ticker]);
+  }, [loading, stockView, ticker]);
 
+  const stock = stockView.analysis;
   const hmm = stock?.hmm_prediction;
   const bullProbability = typeof hmm?.bull_probability === "number" ? hmm.bull_probability : null;
   const bearProbability = typeof hmm?.bear_probability === "number" ? hmm.bear_probability : null;
@@ -130,12 +170,12 @@ export default function StockAnalysisWorkspace() {
   const bear = hmmAvailable ? (bearProbability * 100).toFixed(0) : "Awaiting";
   const bullWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bullProbability * 100))}%` : "50%";
   const bearWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bearProbability * 100))}%` : "50%";
-  const priceDisplay = formatPrice(finiteNumber(stock?.canonicalPrice));
-  const changeDisplay = formatSignedNumber(finiteNumber(stock?.canonicalChange));
-  const changePercentDisplay = formatSignedPercent(finiteNumber(stock?.canonicalChangePercent));
-  const marketCapDisplay = formatMarketCap(finiteNumber(stock?.canonicalMarketCap));
-  const quoteStatusDisplay = stock?.canonicalQuoteStatus ?? "unavailable";
-  const sectorDisplay = stock?.canonicalSector && stock.canonicalSector !== "Unknown" ? stock.canonicalSector : "US Equity";
+  const priceDisplay = formatPrice(stockView.price);
+  const changeDisplay = formatSignedNumber(stockView.change);
+  const changePercentDisplay = formatSignedPercent(stockView.changePercent);
+  const marketCapDisplay = formatMarketCap(stockView.marketCap);
+  const quoteStatusDisplay = stockView.quoteStatus;
+  const sectorDisplay = stockView.sector;
   const forecastTrend = hmm?.predicted_trend ?? "Calibrating model...";
   const regimeState = hmm?.regime_state ?? "Awaiting regime confirmation...";
   const regimeFallbackMessage = hmm?.message ?? "Using fallback market regime...";
@@ -147,7 +187,7 @@ export default function StockAnalysisWorkspace() {
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Stock Analysis Workspace</p>
           <h1 className="mt-1 break-words text-2xl font-semibold tracking-wide text-[#E6EDF3] sm:text-3xl">
-            {formatTickerCompanyLabel(stock?.ticker ?? ticker, stock?.company_name ?? "")}
+            {formatTickerCompanyLabel(stockView.ticker, stockView.companyName)}
           </h1>
           <p className="mt-1 text-sm text-[#9BA7B4]">{sectorDisplay} · {priceDisplay} · {changeDisplay} · {changePercentDisplay} · MCap {marketCapDisplay} · {quoteStatusDisplay}</p>
         </div>
@@ -158,7 +198,7 @@ export default function StockAnalysisWorkspace() {
 
       <div className="miji-stock-grid grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="miji-chart-column min-w-0 space-y-5">
-          <TradingViewChart ticker={ticker} />
+          <TradingViewChart ticker={stockView.ticker} />
           <BubbleDiagnosisPanel data={stock?.bubble_analysis_data} />
         </div>
         <aside className="miji-info-panel min-w-0 space-y-5">
