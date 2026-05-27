@@ -1,12 +1,12 @@
 ﻿from __future__ import annotations
 
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List
 
-import numpy as np
-
-from alpha_engine.scoring import bounded_score, calculate_sector_strength, calculate_stock_alpha, confidence_label
-from quant_engine.data_pipeline import get_history, get_quote, safe_float
+from alpha_engine.scoring import bounded_score, confidence_label
+from quant_engine.data_pipeline import get_quote, safe_float
+from quant_engine.factors.lightweight import score_basket, score_symbol, score_symbols
 from quant_engine.narrative_engine import enrich_sector_narrative
 from quant_engine.ranking_engine import enrich_universe_ranking
 from quant_engine.theme_engine import enrich_sector_leadership
@@ -33,138 +33,138 @@ SECTOR_UNIVERSE: List[Dict[str, Any]] = [
 ]
 
 
-def _etf_metrics(symbol: str, market_return: float) -> Dict[str, float]:
-    history = get_history(symbol, "9mo")
-    if history.empty or len(history) < 64:
-        quote = get_quote(symbol)
-        change = safe_float(quote.get("regularMarketChangePercent")) / 100.0
-        volume = safe_float(quote.get("regularMarketVolume") or quote.get("volume"))
-        avg_volume = safe_float(quote.get("averageVolume") or quote.get("averageDailyVolume10Day"))
-        rel_vol = volume / max(avg_volume, 1.0) if volume > 0 and avg_volume > 0 else 0.85
-        return {"momentum_1m": change, "momentum_3m": change * 3.0, "relative_strength": change * 3.0 - market_return, "relative_volume": rel_vol, "volatility": 0.38, "confidence": 35.0}
-    close = history["Close"].astype(float)
-    volume = history["Volume"].astype(float)
-    ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1.0)
-    ret_3m = float(close.iloc[-1] / close.iloc[-64] - 1.0)
-    rel_vol = float(volume.iloc[-1] / max(volume.tail(60).mean(), 1.0))
-    vol = float(close.pct_change().dropna().tail(64).std() * np.sqrt(252))
-    confidence = bounded_score(min(len(history), 189) / 189.0 * 70.0 + min(rel_vol, 2.0) / 2.0 * 15.0 + 15.0)
-    return {"momentum_1m": ret_1m, "momentum_3m": ret_3m, "relative_strength": ret_3m - market_return, "relative_volume": rel_vol, "volatility": vol, "confidence": confidence}
-
-
-def _company_metrics(symbol: str, market_return: float) -> Dict[str, Any]:
+def _company_metrics(symbol: str) -> Dict[str, Any]:
+    factors = score_symbol(symbol)
     quote = get_quote(symbol)
-    history = get_history(symbol, "9mo")
-    close = history["Close"].astype(float) if not history.empty and "Close" in history else None
-    momentum_1m = float(close.iloc[-1] / close.iloc[-22] - 1.0) if close is not None and len(close) > 22 else 0.0
-    momentum_3m = float(close.iloc[-1] / close.iloc[-64] - 1.0) if close is not None and len(close) > 64 else 0.0
-    momentum_6m = float(close.iloc[-1] / close.iloc[0] - 1.0) if close is not None and len(close) > 1 else 0.0
-    relative_volume = 1.0
-    if not history.empty and "Volume" in history:
-        volume = history["Volume"].astype(float)
-        relative_volume = float(volume.iloc[-1] / max(volume.tail(60).mean(), 1.0))
-
-    pe_ratio = safe_float(quote.get("trailingPE") or quote.get("forwardPE"))
-    ps_ratio = safe_float(quote.get("priceToSalesTrailing12Months"))
-    profit_margin = safe_float(quote.get("profitMargins"))
-    revenue_growth = safe_float(quote.get("revenueGrowth"))
-    debt_to_equity = safe_float(quote.get("debtToEquity")) / 100.0
-    bubble = bounded_score(
-        30.0
-        + max(0.0, pe_ratio - 25.0) * 0.6
-        + max(0.0, ps_ratio - 6.0) * 2.4
-        + max(0.0, momentum_6m - revenue_growth) * 45.0
-        + max(0.0, debt_to_equity - 0.7) * 18.0
-        - max(0.0, profit_margin) * 12.0
-    )
-    earnings_quality = bounded_score(50.0 + profit_margin * 80.0 + revenue_growth * 35.0 - debt_to_equity * 12.0)
-    smart_money = bounded_score(50.0 + momentum_3m * 110.0 + (relative_volume - 1.0) * 18.0 + (momentum_1m - momentum_3m / 3.0) * 80.0)
-    alpha = calculate_stock_alpha(
-        trend_strength=momentum_3m,
-        relative_volume=relative_volume,
-        price_acceleration=momentum_1m - momentum_3m / 3.0,
-        momentum=momentum_6m,
-        institutional_flow=smart_money,
-        earnings_surprise=(earnings_quality - 50.0) / 100.0,
-        hmm_prediction=bounded_score(50.0 + (momentum_3m - market_return) * 150.0),
-        bubble_index=bubble,
-    )
+    drawdown = _finite(factors.get("drawdown_pressure"))
+    bubble = bounded_score(100.0 - drawdown) if drawdown is not None else None
     return {
         "ticker": symbol,
         "company_name": quote.get("longName") or quote.get("shortName") or symbol,
         "market_cap": safe_float(quote.get("marketCap")),
-        "alpha_score": alpha,
+        "alpha_score": factors.get("alpha_score"),
         "bubble_score": bubble,
-        "relative_strength": bounded_score(50.0 + (momentum_3m - market_return) * 180.0),
-        "change_percent": safe_float(quote.get("regularMarketChangePercent")) or momentum_1m * 100.0,
+        "relative_strength": factors.get("relative_strength_spy"),
+        "change_percent": safe_float(quote.get("regularMarketChangePercent")),
+        "momentum_20d": factors.get("momentum_20d"),
+        "momentum_60d": factors.get("momentum_60d"),
+        "volume_participation": factors.get("volume_participation"),
+        "trend_consistency": factors.get("trend_consistency"),
+        "confidence_score": factors.get("confidence_score"),
+        "confidence_label": factors.get("confidence_label"),
+        "lifecycle_state": factors.get("lifecycle_state"),
     }
 
 
-def _sector_metrics(sector: Dict[str, Any], market_return: float) -> Dict[str, Any]:
-    etf = _etf_metrics(sector["etf"], market_return)
-    companies: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=min(6, len(sector["companies"]))) as executor:
-        futures = {executor.submit(_company_metrics, symbol, market_return): symbol for symbol in sector["companies"]}
-        for future in as_completed(futures):
-            symbol = futures[future]
-            try:
-                companies.append(future.result())
-            except Exception:
-                quote = get_quote(symbol)
-                companies.append({
-                    "ticker": symbol,
-                    "company_name": quote.get("longName") or quote.get("shortName") or symbol,
-                    "market_cap": safe_float(quote.get("marketCap")),
-                    "alpha_score": 42.0,
-                    "bubble_score": 48.0,
-                    "relative_strength": 42.0,
-                    "change_percent": safe_float(quote.get("regularMarketChangePercent")),
-                    "confidence_score": 25.0,
-                    "confidence_label": "Low Confidence",
-                })
-
-    cap_total = float(sum(item["market_cap"] for item in companies))
-    cap_flow = float(sum(item["market_cap"] * (item["change_percent"] / 100.0) for item in companies))
-    avg_alpha = float(np.mean([item["alpha_score"] for item in companies])) if companies else 50.0
-    avg_bubble = float(np.mean([item["bubble_score"] for item in companies])) if companies else 50.0
-    flow = cap_flow / cap_total if cap_total > 0 else etf["momentum_1m"]
-    score = calculate_sector_strength(
-        price_momentum=etf["momentum_3m"],
-        relative_strength=etf["relative_strength"],
-        volume_strength=etf["relative_volume"],
-        market_cap_flow=flow,
-        volatility=etf["volatility"],
-        earnings_growth=(avg_alpha - 50.0) / 100.0,
-        analyst_sentiment=avg_alpha,
-        bubble_risk=avg_bubble,
-    )
-    ranked = sorted(companies, key=lambda row: row["alpha_score"], reverse=True)
+def _sector_metrics(sector: Dict[str, Any]) -> Dict[str, Any]:
+    etf = score_symbol(sector["etf"])
+    basket = score_basket(sector["companies"], limit=6)
+    company_factor_rows = score_symbols(sector["companies"], limit=6)
+    companies = [_company_from_factor(row) for row in company_factor_rows]
+    ranked = sorted(companies, key=lambda row: _rankable(row.get("alpha_score")), reverse=True)
     for index, company in enumerate(ranked, start=1):
         company["sector_rank"] = index
-    confidence_score = bounded_score(etf.get("confidence", 40.0) * 0.45 + min(len(companies), len(sector["companies"])) / max(len(sector["companies"]), 1) * 35.0 + (100.0 - avg_bubble) * 0.20)
+    score = _weighted_optional([
+        (etf.get("alpha_score"), 0.38),
+        (basket.get("score"), 0.28),
+        (etf.get("relative_strength_spy"), 0.16),
+        (basket.get("participation_score"), 0.12),
+        (etf.get("trend_consistency"), 0.06),
+    ])
+    relative_strength = _weighted_optional([
+        (etf.get("relative_strength_spy"), 0.70),
+        (basket.get("relative_strength"), 0.30),
+    ])
+    flow = _weighted_optional([
+        (etf.get("volume_participation"), 0.45),
+        (basket.get("volume_participation"), 0.35),
+        (basket.get("participation_score"), 0.20),
+    ])
+    confidence_score = _weighted_optional([
+        (etf.get("confidence_score"), 0.55),
+        (basket.get("confidence_score"), 0.45),
+    ])
     return {
         "sector": sector["sector"],
         "score": score,
-        "relative_strength": bounded_score(50.0 + etf["relative_strength"] * 180.0),
-        "flow": bounded_score(50.0 + flow * 220.0),
+        "relative_strength": relative_strength,
+        "flow": flow,
         "companies": ranked,
-        "rotation_state": "Accumulation" if score >= 70 else "Weakening" if score < 45 else "Neutral",
+        "rotation_state": "Accumulation" if _rankable(score) >= 70 else "Weakening" if _rankable(score) < 45 else "Neutral",
         "confidence_score": confidence_score,
-        "confidence_label": confidence_label(confidence_score),
+        "confidence_label": confidence_label(confidence_score) if confidence_score is not None else "Unavailable",
+        "momentum_20d": etf.get("momentum_20d"),
+        "momentum_60d": etf.get("momentum_60d"),
+        "volume_participation": flow,
+        "trend_consistency": etf.get("trend_consistency"),
+        "participation_breadth": basket.get("participation_score"),
+        "lifecycle_state": "live" if confidence_score is not None and confidence_score >= 62.0 else "partial_live" if score is not None else "warming",
         "explanation": [
-            f"{sector['sector']} rotation score reflects relative strength, volume participation, capital flow, volatility-adjusted momentum, and breadth.",
-            "Confidence is reduced when ETF history or constituent coverage is partial.",
+            f"{sector['sector']} rotation uses Render-safe 3-month ETF and constituent lightweight factors.",
+            "Confidence is reduced when ETF history or constituent factor coverage is partial.",
         ],
     }
 
 
 def analyze_sector_rotation() -> List[Dict[str, Any]]:
-    spy = _etf_metrics("SPY", 0.0)
-    market_return = spy["momentum_3m"]
     sectors: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(_sector_metrics, sector, market_return): sector["sector"] for sector in SECTOR_UNIVERSE}
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(_sector_metrics, sector): sector["sector"] for sector in SECTOR_UNIVERSE[:12]}
         for future in as_completed(futures):
             sectors.append(future.result())
-    ranked = sorted(sectors, key=lambda row: row["score"], reverse=True)
+    ranked = sorted(sectors, key=lambda row: _rankable(row.get("score")), reverse=True)
     return [enrich_universe_ranking(enrich_sector_narrative(enrich_sector_leadership(row, index)), "sector", index) for index, row in enumerate(ranked, start=1)]
+
+
+def _company_from_factor(row: Dict[str, Any]) -> Dict[str, Any]:
+    symbol = str(row.get("symbol") or "").upper()
+    quote = get_quote(symbol)
+    drawdown = _finite(row.get("drawdown_pressure"))
+    return {
+        "ticker": symbol,
+        "company_name": quote.get("longName") or quote.get("shortName") or symbol,
+        "market_cap": safe_float(quote.get("marketCap")),
+        "alpha_score": row.get("alpha_score"),
+        "bubble_score": bounded_score(100.0 - drawdown) if drawdown is not None else None,
+        "relative_strength": row.get("relative_strength_spy"),
+        "change_percent": safe_float(quote.get("regularMarketChangePercent")),
+        "momentum_20d": row.get("momentum_20d"),
+        "momentum_60d": row.get("momentum_60d"),
+        "volume_participation": row.get("volume_participation"),
+        "trend_consistency": row.get("trend_consistency"),
+        "confidence_score": row.get("confidence_score"),
+        "confidence_label": row.get("confidence_label"),
+        "lifecycle_state": row.get("lifecycle_state"),
+    }
+
+
+def _finite(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if np_isfinite(parsed) else None
+
+
+def _weighted_optional(values: list[tuple[Any, float]]) -> float | None:
+    usable: list[tuple[float, float]] = []
+    for value, weight in values:
+        parsed = _finite(value)
+        if parsed is not None:
+            usable.append((parsed, weight))
+    if not usable:
+        return None
+    total = sum(weight for _, weight in usable) or 1.0
+    return bounded_score(sum(value * weight for value, weight in usable) / total)
+
+
+def _rankable(value: Any) -> float:
+    parsed = _finite(value)
+    return parsed if parsed is not None else -1.0
+
+
+def np_isfinite(value: float) -> bool:
+    try:
+        return math.isfinite(value)
+    except (TypeError, ValueError):
+        return False

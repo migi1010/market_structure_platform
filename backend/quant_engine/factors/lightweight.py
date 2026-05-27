@@ -61,6 +61,8 @@ def score_symbol(symbol: str, spy: LightweightSnapshot | None = None, qqq: Light
         "symbol": normalized,
         "available": True,
         "alpha_score": alpha_score,
+        "momentum_20d": _factor_score(factors, "momentum_20d"),
+        "momentum_60d": _factor_score(factors, "momentum_60d"),
         "momentum_strength": _factor_score(factors, "momentum_60d"),
         "relative_strength_spy": _factor_score(factors, "relative_strength_spy"),
         "relative_strength_qqq": _factor_score(factors, "relative_strength_qqq"),
@@ -71,7 +73,7 @@ def score_symbol(symbol: str, spy: LightweightSnapshot | None = None, qqq: Light
         "confidence_score": confidence,
         "confidence_label": confidence_label(confidence),
         "lifecycle_state": "live" if confidence >= 62.0 else "partial_live",
-        "status": "partial_data",
+        "status": "live" if confidence >= 62.0 else "partial_data",
         "factors": [factor.to_dict() for factor in factors],
         "explanation": _explain_score(normalized, alpha_score, factors),
     }

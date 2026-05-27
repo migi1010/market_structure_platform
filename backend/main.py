@@ -115,6 +115,36 @@ def _finite_number(value: Any) -> bool:
         return False
 
 
+def _finite_value(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _weighted_score(values: list[tuple[Any, float]]) -> float | None:
+    usable: list[tuple[float, float]] = []
+    for value, weight in values:
+        parsed = _finite_value(value)
+        if parsed is not None:
+            usable.append((parsed, weight))
+    if not usable:
+        return None
+    total = sum(weight for _, weight in usable) or 1.0
+    return bounded_score(sum(value * weight for value, weight in usable) / total)
+
+
+def _centered_ratio(value: Any) -> float | None:
+    parsed = _finite_value(value)
+    return round((bounded_score(parsed) - 50.0) / 100.0, 4) if parsed is not None else None
+
+
+def _volume_ratio(value: Any) -> float | None:
+    parsed = _finite_value(value)
+    return round(max(0.2, bounded_score(parsed) / 50.0), 4) if parsed is not None else None
+
+
 def _contains_non_finite(value: Any) -> bool:
     if isinstance(value, float):
         return not math.isfinite(value)
@@ -424,11 +454,12 @@ def _fallback_sector_rotation() -> list[dict]:
     ]
     rows: list[dict] = []
     for index, (sector, etf) in enumerate(sectors):
+        factors: dict[str, Any] = {}
         try:
             factors = score_symbol(etf)
-            score = bounded_score(factors.get("alpha_score") or 50.0)
-            flow = bounded_score((factors.get("volume_participation") or score) * 0.45 + (factors.get("momentum_strength") or score) * 0.55)
-            confidence = bounded_score(factors.get("confidence_score") or 25.0)
+            score = _weighted_score([(factors.get("alpha_score"), 0.55), (factors.get("momentum_60d"), 0.25), (factors.get("relative_strength_spy"), 0.20)])
+            flow = _weighted_score([(factors.get("volume_participation"), 0.45), (factors.get("momentum_60d"), 0.35), (score, 0.20)])
+            confidence = bounded_score(_finite_value(factors.get("confidence_score")) or 25.0)
         except Exception:
             score = None
             flow = None
@@ -436,14 +467,14 @@ def _fallback_sector_rotation() -> list[dict]:
         rows.append({
             "sector": sector,
             "score": score,
-            "relative_strength": score,
+            "relative_strength": factors.get("relative_strength_spy") or score,
             "flow": flow,
             "rotation_state": "Partial Data" if score is None else "Partial Data" if confidence < 55 else "Accumulation" if score >= 65 else "Weakening" if score < 42 else "Neutral",
             "confidence_score": confidence,
             "confidence_label": confidence_label(confidence),
             "companies": [],
             "fallback": True,
-            "status": "partial_data",
+            "status": "partial_data" if confidence < 62 else "live",
             "lifecycle_state": "partial_live",
             "message": "Using Render-safe 3-month ETF factor scores while live sector engine refreshes.",
         })
@@ -474,26 +505,32 @@ def _fallback_theme_top() -> dict:
     }
     rows = []
     for index, (theme, etf) in enumerate(theme_map):
+        factors: dict[str, Any] = {}
         try:
             factors = score_symbol(etf)
             adjustment = theme_specificity.get(theme, 0.0)
-            strength = bounded_score((factors.get("alpha_score") or 50.0) + adjustment)
-            flow = bounded_score((factors.get("volume_participation") or strength) * 0.45 + (factors.get("relative_strength_spy") or strength) * 0.55 + adjustment * 0.35)
-            emerging = bounded_score(strength * 0.50 + flow * 0.30 + (factors.get("trend_consistency") or strength) * 0.20)
+            base_strength = _finite_value(factors.get("alpha_score"))
+            strength = bounded_score(base_strength + adjustment) if base_strength is not None else None
+            flow = _weighted_score([(factors.get("volume_participation"), 0.35), (factors.get("relative_strength_spy"), 0.35), (strength, 0.30)])
+            if flow is not None:
+                flow = bounded_score(flow + adjustment * 0.35)
+            emerging = _weighted_score([(factors.get("momentum_20d"), 0.28), (factors.get("momentum_60d"), 0.24), (flow, 0.28), (factors.get("trend_consistency"), 0.20)])
             confidence = bounded_score(factors.get("confidence_score") or 24.0)
-            relative_momentum = ((factors.get("momentum_strength") or 50.0) - 50.0) / 100.0
-            etf_relative_strength = ((factors.get("relative_strength_spy") or 50.0) - 50.0) / 100.0
-            volume_expansion = max(0.2, (factors.get("volume_participation") or 50.0) / 50.0)
+            relative_momentum = _centered_ratio(factors.get("momentum_60d"))
+            etf_relative_strength = _centered_ratio(factors.get("relative_strength_spy"))
+            volume_expansion = _volume_ratio(factors.get("volume_participation"))
         except Exception:
             strength = None
             flow = None
             emerging = None
             confidence = 24.0
-            relative_momentum = 0.0
-            etf_relative_strength = 0.0
-            volume_expansion = 1.0
-        overheating = bounded_score(max(18.0, (strength or 50.0) - 16.0) + max(0.0, (flow or 50.0) - 70.0) * 0.40)
-        strength = bounded_score((strength or 50.0) - max(0.0, overheating - 70.0) * 0.12) if strength is not None else None
+            relative_momentum = None
+            etf_relative_strength = None
+            volume_expansion = None
+        overheating = _weighted_score([(strength, 0.55), (flow, 0.30), (100.0 - float(factors.get("volatility_quality")), 0.15) if factors.get("volatility_quality") is not None else (None, 0.15)])
+        if overheating is not None:
+            overheating = bounded_score(max(18.0, overheating - 16.0) + max(0.0, float(flow or 0.0) - 70.0) * 0.40)
+        strength = bounded_score(strength - max(0.0, float(overheating or 0.0) - 70.0) * 0.12) if strength is not None else None
         rows.append({
             "theme": theme,
             "category": "Universal Theme",
@@ -516,11 +553,14 @@ def _fallback_theme_top() -> dict:
             "smart_money_accumulation": flow,
             "narrative_strength": strength,
             "narrative_acceleration": emerging,
-            "narrative_saturation": 35.0,
-            "narrative_bubble_risk": 30.0,
+            "narrative_saturation": overheating,
+            "narrative_bubble_risk": _weighted_score([(overheating, 0.62), (max(0.0, float(emerging) - 72.0) if emerging is not None else None, 0.35)]),
             "breadth_participation": confidence,
             "leadership_concentration": 0.0,
-            "relative_strength_vs_spy": 0.0,
+            "relative_strength_vs_spy": factors.get("relative_strength_spy"),
+            "relative_strength_qqq": factors.get("relative_strength_qqq"),
+            "momentum_strength": factors.get("momentum_60d"),
+            "trend_consistency": factors.get("trend_consistency"),
             "options_activity": flow,
             "supply_chain_acceleration": emerging,
             "macro_alignment": strength,
@@ -530,7 +570,7 @@ def _fallback_theme_top() -> dict:
             "explainability": ["Theme engine is using ETF and liquidity proxies while full supply-chain scoring refreshes."],
             "risks": ["Confidence is reduced until full constituent, narrative, and macro data are refreshed."],
             "fallback": True,
-            "lifecycle_state": "partial_live",
+            "lifecycle_state": "live" if confidence >= 62 and strength is not None else "partial_live",
         })
     rows = sorted(rows, key=lambda row: row["theme_strength_score"] if row["theme_strength_score"] is not None else -1.0, reverse=True)
     rows = [enrich_theme_leadership(row) for row in rows]
@@ -538,15 +578,15 @@ def _fallback_theme_top() -> dict:
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "cross_asset_regime": {
             "risk_on_off": "Calibrating",
-            "risk_on_score": 50.0,
+            "risk_on_score": None,
             "liquidity_regime": "Calibrating",
-            "liquidity_score": 50.0,
+            "liquidity_score": None,
             "volatility_regime": "Calibrating",
-            "volatility_score": 50.0,
+            "volatility_score": None,
             "inflation_regime": "Calibrating",
-            "inflation_score": 50.0,
+            "inflation_score": None,
             "AI_capex_regime": "Calibrating",
-            "AI_capex_score": 50.0,
+            "AI_capex_score": None,
         },
         "themes": rows,
         "summary": "Using latest cached institutional intelligence while live theme data warms up.",
@@ -662,6 +702,8 @@ def _partial_alpha(universe: str, reason: str) -> dict:
         alpha_score = factor_row.get("alpha_score")
         confidence = factor_row.get("confidence_score")
         momentum = factor_row.get("momentum_strength")
+        momentum_20d = factor_row.get("momentum_20d")
+        momentum_60d = factor_row.get("momentum_60d")
         smart_money = factor_row.get("volume_participation")
         volatility_quality = factor_row.get("volatility_quality")
         drawdown_quality = factor_row.get("drawdown_pressure")
@@ -684,6 +726,14 @@ def _partial_alpha(universe: str, reason: str) -> dict:
             "universe": universe_key.upper(),
             "quality": volatility_quality,
             "growth": momentum,
+            "momentum_20d": momentum_20d,
+            "momentum_60d": momentum_60d,
+            "relative_strength_spy": factor_row.get("relative_strength_spy"),
+            "relative_strength_qqq": factor_row.get("relative_strength_qqq"),
+            "volatility_quality": volatility_quality,
+            "volume_participation": smart_money,
+            "drawdown_pressure": drawdown_quality,
+            "trend_consistency": trend,
             "smart_money": smart_money,
             "valuation": None,
             "earnings_quality": None,
@@ -694,7 +744,7 @@ def _partial_alpha(universe: str, reason: str) -> dict:
             "theme_strength": momentum,
             "theme_capital_flow": smart_money,
             "confidence_score": confidence,
-            "confidence_label": confidence_label(float(confidence or 0.0)) if confidence is not None else "Unavailable",
+            "confidence_label": confidence_label(float(confidence)) if confidence is not None else "Unavailable",
             "theme_explanation": [factor_row.get("explanation") or "Render-safe lightweight factor score."],
             "suggested_action": "Hold",
             "factor_importance": {
@@ -707,7 +757,7 @@ def _partial_alpha(universe: str, reason: str) -> dict:
             "bullish_factors": [],
             "risk_factors": [reason],
             "available": factor_row.get("available") is True,
-            "status": "partial_data",
+            "status": "live" if factor_row.get("lifecycle_state") == "live" else "partial_data",
             "lifecycle_state": factor_row.get("lifecycle_state") or "partial_live",
             "lightweight_factors": factor_row.get("factors") or [],
         }, "stock", index + 1))
@@ -716,12 +766,15 @@ def _partial_alpha(universe: str, reason: str) -> dict:
         row["rank_in_universe"] = index
         row["overall_rank"] = index
         row["universe_percentile"] = round((len(rows) - index) / max(len(rows) - 1, 1) * 100.0, 2)
+    finite_rows = [row for row in rows if row.get("alpha_score") is not None]
+    live_rows = [row for row in finite_rows if row.get("lifecycle_state") == "live"]
+    lifecycle_state = "live" if finite_rows and len(live_rows) == len(finite_rows) else "partial_live" if finite_rows else "warming"
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "universe": universe_key.upper(),
-        "available": any(row.get("alpha_score") is not None for row in rows),
-        "status": "partial_data",
-        "lifecycle_state": "partial_live",
+        "available": bool(finite_rows),
+        "status": "live" if lifecycle_state == "live" else "partial_data",
+        "lifecycle_state": lifecycle_state,
         "qlib_engine": {
             "available": False,
             "mode": "disabled",
@@ -759,7 +812,7 @@ def _partial_regime(reason: str) -> dict:
 
 def _alpha_top_response(universe: str) -> dict:
     normalized = universe.strip().lower()
-    cache_key = _schema_cache_key("alpha_v4", normalized)
+    cache_key = _schema_cache_key("alpha_v5", normalized)
     cached = get_cached_value(cache_key)
     if cached is not None:
         return cached
@@ -930,50 +983,50 @@ def get_market_overview() -> list[dict]:
 
 @app.get("/sector/rotation")
 def get_sector_rotation() -> list[dict]:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("sector_rotation"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("sector_rotation_v2"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
 
 
 @app.get("/theme/top")
 def get_theme_top() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "top"), settings.theme_ttl_seconds, get_top_themes, _fallback_theme_top))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "top"), settings.theme_ttl_seconds, get_top_themes, _fallback_theme_top))
 
 
 @app.get("/theme/emerging")
 def get_theme_emerging() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "emerging"), settings.theme_ttl_seconds, get_emerging_themes, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "emerging_themes": _fallback_theme_top()["themes"][:6], "summary": "Theme engine calibrating. No active emerging signal confirmed yet.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "emerging"), settings.theme_ttl_seconds, get_emerging_themes, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "emerging_themes": _fallback_theme_top()["themes"][:6], "summary": "Theme engine calibrating. No active emerging signal confirmed yet.", "fallback": True}))
 
 
 @app.get("/theme/rotation")
 def get_theme_rotation_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "rotation"), settings.theme_ttl_seconds, get_theme_rotation, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "rotation_map": _fallback_theme_top()["themes"], "strengthening": [], "weakening": [], "overheated_themes": [], "undervalued_themes": [], "summary": "Theme rotation matrix is calibrating.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "rotation"), settings.theme_ttl_seconds, get_theme_rotation, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "rotation_map": _fallback_theme_top()["themes"], "strengthening": [], "weakening": [], "overheated_themes": [], "undervalued_themes": [], "summary": "Theme rotation matrix is calibrating.", "fallback": True}))
 
 
 @app.get("/theme/capital-flow")
 def get_theme_capital_flow_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "capital_flow"), settings.theme_ttl_seconds, get_theme_capital_flow, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "capital_flow": _fallback_theme_top()["themes"][:8], "summary": "Capital flow temporarily unavailable. Using latest cached institutional intelligence.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "capital_flow"), settings.theme_ttl_seconds, get_theme_capital_flow, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "capital_flow": _fallback_theme_top()["themes"][:8], "summary": "Capital flow engine warming. Awaiting finite lightweight factor inputs.", "fallback": True}))
 
 
 @app.get("/theme/supply-chain")
 def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
-    key = _schema_cache_key("theme_v3", "supply_chain", theme or "all")
+    key = _schema_cache_key("theme_v4", "supply_chain", theme or "all")
     return _guard(lambda: _fast_cached_response(key, settings.theme_ttl_seconds, lambda: get_theme_supply_chain(theme), lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "themes": [], "summary": "Supply chain map calibrating.", "fallback": True}))
 
 
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
 
 
 @app.get("/theme/{theme_id:path}/stocks")
 def get_theme_stocks_endpoint(theme_id: str) -> dict:
     normalized = theme_id.strip().lower()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "stocks", normalized), settings.theme_ttl_seconds, lambda: get_theme_stocks(theme_id), lambda: get_theme_stocks_static(theme_id)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "stocks", normalized), settings.theme_ttl_seconds, lambda: get_theme_stocks(theme_id), lambda: get_theme_stocks_static(theme_id)))
 
 
 @app.get("/theme/{theme_id:path}/detail")
 def get_theme_detail_endpoint(theme_id: str) -> dict:
     normalized = theme_id.strip().lower()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v3", "detail", normalized), settings.theme_ttl_seconds, lambda: get_theme_detail(theme_id), lambda: get_theme_detail_static(theme_id)))
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "detail", normalized), settings.theme_ttl_seconds, lambda: get_theme_detail(theme_id), lambda: get_theme_detail_static(theme_id)))
 
 
 @app.get("/smart-money/{ticker}")

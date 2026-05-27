@@ -39,10 +39,12 @@ def build_universe_ranking(rows: Iterable[Mapping[str, Any]], entity_type: str =
     )
     for index, row in enumerate(ranked, start=1):
         row["overall_rank"] = index
+    finite_ranked = [row for row in ranked if row.get("ranking_score") is not None]
+    lifecycle_state = _aggregate_lifecycle(finite_ranked)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "status": "partial_data" if screener else "unavailable",
-        "lifecycle_state": _aggregate_lifecycle(screener),
+        "status": "live" if lifecycle_state == "live" else "partial_data" if finite_ranked else "unavailable",
+        "lifecycle_state": lifecycle_state,
         "screener": ranked[:limit],
         "strongest_leadership": _classification_bucket(ranked, "strongest_leadership", limit),
         "accelerating": _classification_bucket(ranked, "accelerating", limit),

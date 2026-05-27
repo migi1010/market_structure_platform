@@ -69,10 +69,12 @@ def build_cross_theme_ranking(rows: Iterable[Mapping[str, Any]], limit: int = 8)
     weakening = _rank_state(narratives, {"weakening"}, "acceleration_velocity", limit, reverse=False)
     crowded = _rank_state(narratives, {"crowded"}, "narrative_strength", limit)
     defensive = _rank_state(narratives, {"defensive_rotation"}, "institutional_alignment", limit)
+    finite_ranked = [item for item in ranked if item.get("narrative_strength") is not None]
+    lifecycle_state = _aggregate_lifecycle(finite_ranked)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "status": "partial_data" if narratives else "unavailable",
-        "lifecycle_state": _aggregate_lifecycle(narratives),
+        "status": "live" if lifecycle_state == "live" else "partial_data" if finite_ranked else "unavailable",
+        "lifecycle_state": lifecycle_state,
         "top_narratives": ranked[:limit],
         "emerging_narratives": emerging,
         "weakening_narratives": weakening,
@@ -104,9 +106,10 @@ def build_narrative_signal(row: Mapping[str, Any]) -> dict[str, Any]:
     momentum = _first_score(_composite_score(composites, "momentum_composite"), row.get("relative_momentum"), row.get("theme_strength_score"))
     smart_money = _first_score(_composite_score(composites, "smart_money_composite"), row.get("theme_capital_flow_score"), row.get("smart_money_accumulation"))
     sector_leadership = _first_score(_composite_score(composites, "sector_leadership_composite"), row.get("macro_alignment"))
-    volatility_context = bounded_score(100.0 - _score(row.get("overheating_score")))
-    saturation = _score(row.get("narrative_saturation"), 45.0)
-    confidence = _first_score(leadership.get("confidence"), row.get("confidence_score"), 35.0)
+    overheating = _first_score(row.get("overheating_score"))
+    volatility_context = bounded_score(100.0 - overheating) if overheating is not None else None
+    saturation = _first_score(row.get("narrative_saturation"), row.get("narrative_bubble_risk"))
+    confidence = _first_score(leadership.get("confidence"), row.get("confidence_score"))
 
     narrative_strength = _weighted_score([
         (leadership_score, 0.28),
@@ -139,7 +142,7 @@ def build_narrative_signal(row: Mapping[str, Any]) -> dict[str, Any]:
         "narrative_strength": narrative_strength,
         "narrative_acceleration": acceleration_velocity,
         "narrative_saturation": saturation,
-        "narrative_bubble_risk": bounded_score(saturation * 0.62 + max(0.0, acceleration_velocity - 72.0) * 0.35),
+        "narrative_bubble_risk": _bubble_risk(saturation, acceleration_velocity),
         "acceleration_velocity": acceleration_velocity,
         "participation_breadth": participation_breadth,
         "institutional_alignment": institutional_alignment,
@@ -147,7 +150,7 @@ def build_narrative_signal(row: Mapping[str, Any]) -> dict[str, Any]:
         "representative_themes": [theme_name],
         "representative_symbols": _representative_symbols(row),
         "confidence": confidence,
-        "confidence_label": confidence_label(confidence),
+        "confidence_label": confidence_label(confidence) if confidence is not None else "Unavailable",
         "lifecycle_state": lifecycle_state,
         "explanation": _explanation(theme_name, state, narrative_strength, acceleration_velocity, participation_breadth, institutional_alignment),
         "capital_flow_semantics": _capital_flow_semantics(theme_name, state, acceleration_velocity, participation_breadth, institutional_alignment),
@@ -170,26 +173,30 @@ def _number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _score(value: Any, default: float = 50.0) -> float:
-    return bounded_score(_number(value, default))
-
-
-def _first_score(*values: Any) -> float:
+def _first_score(*values: Any) -> float | None:
     for value in values:
         if value is None:
             continue
         parsed = _number(value, math.nan)
         if math.isfinite(parsed):
             return bounded_score(parsed)
-    return 50.0
+    return None
 
 
-def _weighted_score(values: list[tuple[float | None, float]]) -> float:
+def _weighted_score(values: list[tuple[float | None, float]]) -> float | None:
     usable = [(score, weight) for score, weight in values if score is not None and math.isfinite(float(score))]
     if not usable:
-        return 50.0
+        return None
     total = sum(max(weight, 0.0) for _, weight in usable) or 1.0
     return bounded_score(sum(float(score) * max(weight, 0.0) for score, weight in usable) / total)
+
+
+def _bubble_risk(saturation: float | None, acceleration_velocity: float | None) -> float | None:
+    if saturation is None and acceleration_velocity is None:
+        return None
+    sat = float(saturation or 0.0)
+    accel = float(acceleration_velocity or 0.0)
+    return bounded_score(sat * 0.62 + max(0.0, accel - 72.0) * 0.35)
 
 
 def _composite_score(composites: Mapping[str, Any], composite_id: str) -> float | None:
@@ -201,26 +208,33 @@ def _composite_score(composites: Mapping[str, Any], composite_id: str) -> float 
     return bounded_score(parsed) if math.isfinite(parsed) else None
 
 
-def _narrative_state(theme: str, strength: float, velocity: float, breadth: float, alignment: float, saturation: float) -> str:
-    if saturation >= 72 and strength >= 62:
-        return "crowded"
-    if _is_defensive_theme(theme) and alignment >= 58 and breadth >= 52:
-        return "defensive_rotation"
-    if strength >= 70 and breadth >= 58:
-        return "leadership"
-    if velocity >= 66 and breadth >= 50:
-        return "accelerating"
-    if velocity >= 58 and strength < 66:
+def _narrative_state(theme: str, strength: float | None, velocity: float | None, breadth: float | None, alignment: float | None, saturation: float | None) -> str:
+    strength_v = float(strength or 0.0)
+    velocity_v = float(velocity or 0.0)
+    breadth_v = float(breadth or 0.0)
+    alignment_v = float(alignment or 0.0)
+    saturation_v = float(saturation or 0.0)
+    if not any(value is not None for value in (strength, velocity, breadth, alignment)):
         return "emerging"
-    if velocity <= 42 or breadth <= 40:
+    if saturation_v >= 72 and strength_v >= 62:
+        return "crowded"
+    if _is_defensive_theme(theme) and alignment_v >= 58 and breadth_v >= 52:
+        return "defensive_rotation"
+    if strength_v >= 70 and breadth_v >= 58:
+        return "leadership"
+    if velocity_v >= 66 and breadth_v >= 50:
+        return "accelerating"
+    if velocity_v >= 58 and strength_v < 66:
+        return "emerging"
+    if velocity_v <= 42 or breadth_v <= 40:
         return "weakening"
-    return "emerging" if strength >= 52 else "weakening"
+    return "emerging" if strength_v >= 52 else "weakening"
 
 
-def _lifecycle(confidence: float, scores: list[float | None]) -> str:
+def _lifecycle(confidence: float | None, scores: list[float | None]) -> str:
     if not any(score is not None for score in scores):
         return "warming"
-    if confidence >= 62:
+    if confidence is not None and confidence >= 62:
         return "live"
     return "partial_live"
 
@@ -263,7 +277,8 @@ def _is_defensive_theme(theme: str) -> bool:
     return any(token in lowered for token in ("utility", "utilities", "healthcare", "consumer staples", "defensive", "nuclear", "grid"))
 
 
-def _explanation(theme: str, state: str, strength: float, velocity: float, breadth: float, alignment: float) -> str:
+def _explanation(theme: str, state: str, strength: float | None, velocity: float | None, breadth: float | None, alignment: float | None) -> str:
+    alignment_v = float(alignment or 0.0)
     if state == "accelerating":
         return f"{theme} participation broadening with improving acceleration across leadership factors."
     if state == "leadership":
@@ -274,22 +289,25 @@ def _explanation(theme: str, state: str, strength: float, velocity: float, bread
         return "Defensive capital rotation increasing."
     if state == "weakening":
         return "Narrative momentum weakening as participation narrows."
-    if alignment >= 60:
+    if alignment_v >= 60:
         return "Institutional alignment improving across leadership factors."
     return f"{theme} narrative is emerging with partial factor confirmation."
 
 
-def _capital_flow_semantics(theme: str, state: str, velocity: float, breadth: float, alignment: float) -> str:
+def _capital_flow_semantics(theme: str, state: str, velocity: float | None, breadth: float | None, alignment: float | None) -> str:
     lowered = theme.lower()
-    if "ai" in lowered and breadth >= 52:
+    breadth_v = float(breadth or 0.0)
+    velocity_v = float(velocity or 0.0)
+    alignment_v = float(alignment or 0.0)
+    if "ai" in lowered and breadth_v >= 52:
         return "AI infrastructure participation broadening."
-    if "semiconductor" in lowered and velocity >= 58:
+    if "semiconductor" in lowered and velocity_v >= 58:
         return "Semiconductor momentum leadership accelerating."
     if state == "defensive_rotation":
         return "Defensive capital rotation increasing."
     if state == "weakening":
         return "Narrative momentum weakening as participation narrows."
-    if alignment >= 60:
+    if alignment_v >= 60:
         return "Institutional alignment improving across leadership factors."
     return f"{theme} narrative confirmation remains mixed."
 

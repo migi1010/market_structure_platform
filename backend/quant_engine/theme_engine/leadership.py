@@ -13,11 +13,14 @@ def enrich_theme_leadership(row: Mapping[str, Any]) -> dict[str, Any]:
     acceleration = _score(row.get("emerging_score"))
     participation = _score(row.get("breadth_participation"))
     flow = _score(row.get("theme_capital_flow_score"))
-    relative_strength = bounded_score(50.0 + _number(row.get("relative_strength_vs_spy")) * 1.4)
-    volume_anomaly = bounded_score(50.0 + (_number(row.get("volume_expansion"), 1.0) - 1.0) * 24.0)
-    volatility_context = bounded_score(100.0 - _score(row.get("overheating_score")))
+    rs_value = _number(row.get("relative_strength_vs_spy"), math.nan)
+    volume_value = _number(row.get("volume_expansion"), math.nan)
+    relative_strength = bounded_score(50.0 + rs_value * 1.4) if math.isfinite(rs_value) else None
+    volume_anomaly = bounded_score(50.0 + (volume_value - 1.0) * 24.0) if math.isfinite(volume_value) else None
+    overheating = _score(row.get("overheating_score"))
+    volatility_context = bounded_score(100.0 - overheating) if overheating is not None else None
     sector_context = _score(row.get("macro_alignment"))
-    confidence = _score(row.get("confidence_score"), 35.0)
+    confidence = _score(row.get("confidence_score"), 35.0) or 35.0
     lifecycle_state = _lifecycle(confidence, [strength, acceleration, participation, flow])
 
     factors = {
@@ -90,7 +93,9 @@ def enrich_sector_leadership(row: Mapping[str, Any], rank: int | None = None) ->
     participation = bounded_score(positive / max(len(companies), 1) * 100.0) if companies else confidence
     lifecycle_state = _lifecycle(confidence, [score, relative_strength, flow, participation])
     leadership_state = _sector_state(score, flow)
-    momentum_direction = "strengthening" if score >= 62 and flow >= 55 else "weakening" if score <= 42 or flow <= 42 else "neutral"
+    score_v = score or 0.0
+    flow_v = flow or 0.0
+    momentum_direction = "strengthening" if score_v >= 62 and flow_v >= 55 else "weakening" if score_v <= 42 or flow_v <= 42 else "neutral"
     enriched = {
         **dict(row),
         "sector_rank": rank,
@@ -134,8 +139,10 @@ def _number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _score(value: Any, default: float = 50.0) -> float:
-    return bounded_score(_number(value, default))
+def _score(value: Any, default: float | None = None) -> float | None:
+    fallback = math.nan if default is None else default
+    parsed = _number(value, fallback)
+    return bounded_score(parsed) if math.isfinite(parsed) else None
 
 
 def _weighted_score(values: list[tuple[float | None, float]]) -> float | None:
@@ -169,57 +176,69 @@ def _representative_symbols(row: Mapping[str, Any]) -> list[str]:
     return symbols
 
 
-def _theme_explanation(theme: str, leadership: float | None, acceleration: float, participation: float, flow: float) -> str:
+def _theme_explanation(theme: str, leadership: float | None, acceleration: float | None, participation: float | None, flow: float | None) -> str:
+    acceleration_v = acceleration or 0.0
+    participation_v = participation or 0.0
+    flow_v = flow or 0.0
     if leadership is None:
         return f"{theme} leadership is partial because confirming factor inputs are unavailable."
-    if leadership >= 70 and acceleration >= 60:
+    if leadership >= 70 and acceleration_v >= 60:
         return f"Capital rotating into {theme} with accelerating leadership participation."
     if leadership >= 62:
         return f"{theme} leadership strengthening with improving participation."
-    if participation <= 42:
+    if participation_v <= 42:
         return "Momentum participation weakening."
-    if flow >= 62:
+    if flow_v >= 62:
         return f"Capital rotating into {theme}, but confirmation remains partial."
     return f"{theme} remains watchlist-level with mixed leadership confirmation."
 
 
-def _capital_rotation_theme(theme: str, leadership: float | None, acceleration: float, participation: float) -> str:
+def _capital_rotation_theme(theme: str, leadership: float | None, acceleration: float | None, participation: float | None) -> str:
+    acceleration_v = acceleration or 0.0
+    participation_v = participation or 0.0
     if leadership is not None and leadership >= 70:
         return f"Capital rotating into {theme}."
-    if acceleration >= 62:
+    if acceleration_v >= 62:
         return f"{theme} acceleration improving."
-    if participation <= 42:
+    if participation_v <= 42:
         return "Momentum participation weakening."
     return f"{theme} capital rotation is mixed."
 
 
-def _sector_state(score: float, flow: float) -> str:
-    if score >= 72 and flow >= 60:
+def _sector_state(score: float | None, flow: float | None) -> str:
+    score_v = score or 0.0
+    flow_v = flow or 0.0
+    if score_v >= 72 and flow_v >= 60:
         return "Leadership"
-    if score >= 58:
+    if score_v >= 58:
         return "Accumulation"
-    if score <= 42 or flow <= 40:
+    if score_v <= 42 or flow_v <= 40:
         return "Weakening"
     return "Neutral"
 
 
-def _capital_rotation_sector(sector: str, state: str, direction: str, participation: float) -> str:
+def _capital_rotation_sector(sector: str, state: str, direction: str, participation: float | None) -> str:
+    participation_v = participation or 0.0
     if "semiconductor" in sector.lower() and direction == "strengthening":
         return "Semiconductor leadership strengthening."
     if state == "Leadership":
         return f"Capital rotating into {sector}."
-    if participation >= 62 and sector.lower() in {"utilities", "healthcare", "consumer staples"}:
+    if participation_v >= 62 and sector.lower() in {"utilities", "healthcare", "consumer staples"}:
         return "Defensive sector participation increasing."
     if direction == "weakening":
         return "Momentum participation weakening."
     return f"{sector} rotation remains mixed."
 
 
-def _sector_explanation(sector: str, score: float, relative_strength: float, flow: float, participation: float) -> str:
-    if score >= 70:
+def _sector_explanation(sector: str, score: float | None, relative_strength: float | None, flow: float | None, participation: float | None) -> str:
+    score_v = score or 0.0
+    rs_v = relative_strength or 0.0
+    flow_v = flow or 0.0
+    participation_v = participation or 0.0
+    if score_v >= 70:
         return f"{sector} is leading on relative strength, flow, and participation."
-    if relative_strength >= 60 and flow >= 55:
+    if rs_v >= 60 and flow_v >= 55:
         return f"{sector} leadership is improving with relative strength support."
-    if participation <= 42:
+    if participation_v <= 42:
         return "Momentum participation weakening."
     return f"{sector} leadership is neutral with partial confirmation."

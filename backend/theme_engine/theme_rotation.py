@@ -24,19 +24,17 @@ def _time_bucket(seconds: int = 900) -> int:
 
 @lru_cache(maxsize=4)
 def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
-    spy = symbol_market_snapshot("SPY", use_history=True)
-    macro = detect_cross_asset_regime()
     definitions = get_theme_definitions()
     rows: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        future_map = {executor.submit(score_theme, theme, spy, macro): theme for theme in definitions}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_map = {executor.submit(_lightweight_theme_row, theme): theme for theme in definitions}
         for future in as_completed(future_map):
             try:
                 rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(future.result())), "theme"))
             except Exception:
                 theme = future_map[future]
                 rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(_fallback_theme_row(theme))), "theme"))
-    rows.sort(key=lambda item: safe_float(item.get("theme_strength_score")), reverse=True)
+    rows.sort(key=lambda item: safe_float(item.get("ranking_score") or item.get("theme_strength_score")), reverse=True)
     return rows
 
 
@@ -135,17 +133,39 @@ def theme_alignment_for_symbol(symbol: str, sector: str | None = None) -> Dict[s
     }
 
 
+def _lightweight_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
+    return _fallback_theme_row(theme)
+
+
 def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
     from quant_engine.factors.lightweight import score_basket, score_symbol  # noqa: PLC0415
 
     etf = theme.etf_symbols[0] if theme.etf_symbols else "SPY"
     factors = score_symbol(etf)
-    basket = score_basket(theme.tickers, limit=3)
+    basket = score_basket(theme.tickers, limit=6)
     strength = _avg_optional(factors.get("alpha_score"), basket.get("score"), weights=(0.55, 0.45))
-    flow = bounded_score((factors.get("volume_participation") or strength or 50.0) * 0.45 + (factors.get("relative_strength_spy") or strength or 50.0) * 0.55)
-    emerging = bounded_score((strength or 50.0) * 0.50 + flow * 0.30 + (factors.get("trend_consistency") or 50.0) * 0.20)
-    overheating = bounded_score(max(18.0, (strength or 50.0) - 16.0) + max(0.0, flow - 70.0) * 0.40)
+    flow = _weighted_optional([
+        (factors.get("volume_participation"), 0.35),
+        (factors.get("relative_strength_spy"), 0.35),
+        (basket.get("volume_participation"), 0.20),
+        (strength, 0.10),
+    ])
+    emerging = _weighted_optional([
+        (factors.get("momentum_20d"), 0.26),
+        (factors.get("momentum_60d"), 0.24),
+        (factors.get("trend_consistency"), 0.20),
+        (flow, 0.18),
+        (basket.get("participation_score"), 0.12),
+    ])
+    overheating = _weighted_optional([
+        (strength, 0.50),
+        (flow, 0.30),
+        (100.0 - float(factors.get("volatility_quality")), 0.20) if factors.get("volatility_quality") is not None else (None, 0.20),
+    ])
+    if overheating is not None:
+        overheating = bounded_score(max(18.0, overheating - 16.0) + max(0.0, float(flow or 0.0) - 70.0) * 0.40)
     confidence = bounded_score(min(58.0, ((factors.get("confidence_score") or 24.0) + (basket.get("confidence_score") or 24.0)) / 2.0))
+    participation = basket.get("participation_score")
     return {
         "theme": theme.name,
         "category": theme.category,
@@ -154,9 +174,9 @@ def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
         "theme_capital_flow_score": flow,
         "emerging_score": emerging,
         "overheating_score": overheating,
-        "relative_momentum": ((factors.get("momentum_strength") or 50.0) - 50.0) / 100.0,
-        "etf_relative_strength": ((factors.get("relative_strength_spy") or 50.0) - 50.0) / 100.0,
-        "volume_expansion": max(0.2, (factors.get("volume_participation") or 50.0) / 50.0),
+        "relative_momentum": _centered_ratio(factors.get("momentum_60d")),
+        "etf_relative_strength": _centered_ratio(factors.get("relative_strength_spy")),
+        "volume_expansion": _volume_ratio(factors.get("volume_participation")),
         "institutional_accumulation": flow,
         "earnings_acceleration": 0.0,
         "revenue_acceleration": 0.0,
@@ -165,10 +185,14 @@ def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
         "narrative_strength": strength,
         "narrative_acceleration": emerging,
         "narrative_saturation": overheating,
-        "narrative_bubble_risk": bounded_score(overheating * 0.62 + max(0.0, emerging - 72.0) * 0.35),
-        "breadth_participation": confidence,
+        "narrative_bubble_risk": _weighted_optional([(overheating, 0.62), (max(0.0, float(emerging) - 72.0) if emerging is not None else None, 0.35)]),
+        "breadth_participation": participation,
         "leadership_concentration": 0.0,
         "relative_strength_vs_spy": factors.get("relative_strength_spy"),
+        "relative_strength_qqq": factors.get("relative_strength_qqq"),
+        "momentum_strength": factors.get("momentum_60d"),
+        "trend_consistency": factors.get("trend_consistency"),
+        "sector_leadership": strength,
         "options_activity": flow,
         "supply_chain_acceleration": emerging,
         "macro_alignment": strength,
@@ -177,8 +201,8 @@ def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
                 "ticker": str(row.get("symbol") or "").upper(),
                 "alpha_score": row.get("alpha_score"),
                 "momentum_3m": row.get("momentum_strength"),
-                "relative_volume": (row.get("volume_participation") or 50.0) / 50.0,
-                "day_change_percent": 0.0,
+                "relative_volume": _volume_ratio(row.get("volume_participation")),
+                "day_change_percent": None,
             }
             for row in (basket.get("leaders") or [])[:4]
         ],
@@ -204,6 +228,37 @@ def _avg_optional(first: Any, second: Any, weights: tuple[float, float] = (0.5, 
         return None
     total = sum(weight for _, weight in values) or 1.0
     return bounded_score(sum(value * weight for value, weight in values) / total)
+
+
+def _weighted_optional(values: list[tuple[Any, float]]) -> float | None:
+    usable: list[tuple[float, float]] = []
+    for value, weight in values:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(parsed):
+            usable.append((parsed, weight))
+    if not usable:
+        return None
+    total = sum(weight for _, weight in usable) or 1.0
+    return bounded_score(sum(value * weight for value, weight in usable) / total)
+
+
+def _centered_ratio(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round((bounded_score(parsed) - 50.0) / 100.0, 4) if math.isfinite(parsed) else None
+
+
+def _volume_ratio(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(max(0.2, bounded_score(parsed) / 50.0), 4) if math.isfinite(parsed) else None
 
 
 def _summary(themes: List[Dict[str, Any]]) -> str:
