@@ -22,6 +22,7 @@ interface StockViewModel {
   changePercent: number | null;
   marketCap: number | null;
   quoteStatus: string;
+  requestFailed: boolean;
   analysis: StockAnalysis | null;
 }
 
@@ -60,7 +61,7 @@ function formatMarketCap(value: number | null): string {
   return `$${value.toFixed(0)}`;
 }
 
-function createFallbackStockView(ticker: string): StockViewModel {
+function createFallbackStockView(ticker: string, requestFailed = false): StockViewModel {
   return {
     ticker,
     companyName: "",
@@ -69,14 +70,16 @@ function createFallbackStockView(ticker: string): StockViewModel {
     change: null,
     changePercent: null,
     marketCap: null,
-    quoteStatus: "unavailable",
+    quoteStatus: requestFailed ? "unavailable" : "updating",
+    requestFailed,
     analysis: null,
   };
 }
 
-function createStockViewModel(ticker: string, analysis: StockAnalysis | null): StockViewModel {
-  if (!analysis) return createFallbackStockView(ticker);
+function createStockViewModel(ticker: string, analysis: StockAnalysis | null, requestFailed = false): StockViewModel {
+  if (!analysis) return createFallbackStockView(ticker, requestFailed);
   const price = finiteNumber(analysis.canonicalPrice);
+  const rawStatus = analysis.canonicalQuoteStatus || "";
   return {
     ticker: analysis.ticker?.trim().toUpperCase() || ticker,
     companyName: analysis.company_name ?? "",
@@ -85,7 +88,8 @@ function createStockViewModel(ticker: string, analysis: StockAnalysis | null): S
     change: finiteNumber(analysis.canonicalChange),
     changePercent: finiteNumber(analysis.canonicalChangePercent),
     marketCap: finiteNumber(analysis.canonicalMarketCap),
-    quoteStatus: price !== null && analysis.canonicalQuoteStatus === "unavailable" ? "live_or_cached" : analysis.canonicalQuoteStatus || "unavailable",
+    quoteStatus: price !== null ? (rawStatus === "unavailable" ? "live_or_cached" : rawStatus || "live_or_cached") : requestFailed ? "unavailable" : "updating",
+    requestFailed,
     analysis,
   };
 }
@@ -122,11 +126,13 @@ export default function StockAnalysisWorkspace() {
         const result = await fetchStockAnalysis(ticker);
         if (!cancelled) {
           hasFetchedOnce.current = true;
-          setStockView(createStockViewModel(ticker, result));
+          const failed = result.canonicalPrice === null && result.canonicalQuoteStatus === "unavailable";
+          setStockView(createStockViewModel(ticker, result, failed));
         }
       } catch (err) {
         if (!cancelled) {
           hasFetchedOnce.current = true;
+          setStockView(createFallbackStockView(ticker, true));
           setError(err instanceof Error ? err.message : "Analysis failed");
         }
       } finally {
@@ -146,13 +152,14 @@ export default function StockAnalysisWorkspace() {
     if (loading) return;
     if (!hasFetchedOnce.current) return;     // initial state — fetch not yet complete
     if (retryFiredRef.current) return;
-    const isFallback = stockView.price === null && stockView.quoteStatus === "unavailable";
+    const isFallback = stockView.price === null && (stockView.quoteStatus === "unavailable" || stockView.quoteStatus === "updating");
     if (!isFallback) return;
     retryFiredRef.current = true;
     const handle = window.setTimeout(async () => {
       try {
         const result = await fetchStockAnalysis(ticker);
-        setStockView(createStockViewModel(ticker, result));
+        const failed = result.canonicalPrice === null && result.canonicalQuoteStatus === "unavailable";
+        setStockView(createStockViewModel(ticker, result, failed));
       } catch {
         // Retry failure is silent — original fallback state remains.
       }
@@ -238,7 +245,7 @@ export default function StockAnalysisWorkspace() {
               </div>
             </div>
           </section>
-          <AnalystForecastPanel targets={stock?.analyst_targets} consensus={stock?.analyst_consensus} price={stock?.price ?? undefined} />
+          <AnalystForecastPanel targets={stock?.analyst_targets} consensus={stock?.analyst_consensus} price={stockView.price ?? undefined} />
           <NewsIntelligencePanel news={stock?.news ?? []} />
         </aside>
       </div>
