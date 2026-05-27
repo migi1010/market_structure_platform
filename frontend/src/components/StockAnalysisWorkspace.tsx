@@ -17,6 +17,37 @@ function normalizeWorkspaceTicker(ticker: string | null | undefined): string {
   return ticker?.trim().toUpperCase() || DEFAULT_STOCK_TICKER;
 }
 
+function finiteNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number.parseFloat(value.replace(/[$,%\s,]/g, ""));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function formatPrice(value: number | null): string {
+  return value !== null && value > 0 ? `$${value.toFixed(2)}` : "--";
+}
+
+function formatSignedNumber(value: number | null): string {
+  return value !== null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}` : "--";
+}
+
+function formatSignedPercent(value: number | null): string {
+  return value !== null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "--";
+}
+
+function formatMarketCap(value: number | null): string {
+  if (value === null || value <= 0) return "--";
+  if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(1)}T`;
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  return `$${value.toFixed(0)}`;
+}
+
 export default function StockAnalysisWorkspace() {
   const { selectedTicker, setSelectedTicker } = useWorkspace();
   const ticker = normalizeWorkspaceTicker(selectedTicker);
@@ -99,10 +130,10 @@ export default function StockAnalysisWorkspace() {
   const bear = hmmAvailable ? (bearProbability * 100).toFixed(0) : "Awaiting";
   const bullWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bullProbability * 100))}%` : "50%";
   const bearWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bearProbability * 100))}%` : "50%";
-  const priceDisplay = typeof stock?.price === "number" && Number.isFinite(stock.price) && stock.price > 0 ? `$${stock.price.toFixed(2)}` : "--";
-  const changeDisplay = typeof stock?.change === "number" && Number.isFinite(stock.change) ? `${stock.change >= 0 ? "+" : ""}${stock.change.toFixed(2)}` : "--";
-  const changePercentDisplay = typeof stock?.change_percent === "number" && Number.isFinite(stock.change_percent) ? `${stock.change_percent >= 0 ? "+" : ""}${stock.change_percent.toFixed(2)}%` : "--";
-  const marketCapDisplay = typeof stock?.market_cap === "number" && Number.isFinite(stock.market_cap) && stock.market_cap > 0 ? `$${(stock.market_cap / 1_000_000_000).toFixed(1)}B` : "--";
+  const priceDisplay = formatPrice(finiteNumber(stock?.price, stock?.quote?.price));
+  const changeDisplay = formatSignedNumber(finiteNumber(stock?.change, stock?.quote?.change));
+  const changePercentDisplay = formatSignedPercent(finiteNumber(stock?.change_percent, stock?.quote?.change_percent));
+  const marketCapDisplay = formatMarketCap(finiteNumber(stock?.market_cap, stock?.quote?.market_cap));
   const quoteStatusDisplay = stock?.quote_status ?? stock?.quote?.status ?? "unavailable";
   const sectorDisplay = stock?.sector && stock.sector !== "Unknown" ? stock.sector : "US Equity";
   const forecastTrend = hmm?.predicted_trend ?? "Calibrating model...";

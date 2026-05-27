@@ -369,7 +369,7 @@ function DashboardApp() {
         <nav className="miji-header-nav flex min-h-16 flex-wrap items-center justify-between gap-4 overflow-x-hidden px-5 py-3">
           <div className="miji-header-brand flex shrink-0 items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-amber-400/20 bg-[#161B22] text-amber-200" style={{ width: 40, height: 40, display: "flex" }}>
-              <img src="/logo.png" alt="Miji Quant" className="h-full w-full object-contain" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+              <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
             </div>
             <div>
               <div className="miji-header-title text-lg font-semibold uppercase tracking-wide text-[#E6EDF3]">MIJI TERMINAL</div>
@@ -456,7 +456,7 @@ function DashboardApp() {
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 overflow-hidden rounded-xl border border-amber-400/20 bg-[#161B22]">
-                  <img src="/logo.png" alt="Miji Quant" className="h-full w-full object-contain" />
+                  <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-wide text-[#E6EDF3]">MIJI</p>

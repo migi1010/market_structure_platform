@@ -460,8 +460,17 @@ async function fetchFreshJson<T>(cacheKey: string, url: string, fallback: T): Pr
   }
 }
 
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/[$,%\s,]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function validNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return coerceNumber(value);
 }
 
 function validPrice(value: unknown): number | null {
@@ -473,13 +482,14 @@ function normalizeQuote(data: Partial<StockAnalysis> | null | undefined, symbol:
   const raw = data?.quote;
   // Coerce to number: the backend always emits JSON numbers, but guard against string
   // serialization edge cases (e.g., some proxies or CDN rewrites) where price arrives as "215.33".
-  const rawPrice = raw?.price ?? data?.price;
-  const price = validPrice(typeof rawPrice === "string" ? parseFloat(rawPrice) : rawPrice);
-  const rawChange = raw?.change ?? data?.change;
-  const change = validNumber(typeof rawChange === "string" ? parseFloat(rawChange) : rawChange);
-  const rawChangePercent = raw?.change_percent ?? data?.change_percent;
-  const changePercent = validNumber(typeof rawChangePercent === "string" ? parseFloat(rawChangePercent) : rawChangePercent);
-  const marketCap = validPrice(raw?.market_cap ?? data?.market_cap);
+  const rawPrice = data?.price ?? raw?.price;
+  const price = validPrice(rawPrice);
+  const rawChange = data?.change ?? raw?.change;
+  const change = validNumber(rawChange);
+  const rawChangePercent = data?.change_percent ?? raw?.change_percent;
+  const changePercent = validNumber(rawChangePercent);
+  const marketCap = validPrice(data?.market_cap ?? raw?.market_cap);
+  const status = [data?.quote_status, raw?.status].find((item) => item && item !== "unavailable");
   return {
     ticker: (raw?.ticker ?? data?.ticker ?? symbol).trim().toUpperCase(),
     price,
@@ -490,7 +500,7 @@ function normalizeQuote(data: Partial<StockAnalysis> | null | undefined, symbol:
     pe_ratio: validNumber(raw?.pe_ratio),
     ps_ratio: validNumber(raw?.ps_ratio),
     currency: raw?.currency ?? "USD",
-    status: price !== null ? raw?.status ?? data?.quote_status ?? "live_or_cached" : "unavailable",
+    status: price !== null ? status ?? "live_or_cached" : data?.quote_status ?? raw?.status ?? "unavailable",
     source: raw?.source,
   };
 }
