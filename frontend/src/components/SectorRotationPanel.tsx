@@ -90,10 +90,32 @@ function averageFinite(values: Array<number | null | undefined>): number | null 
   return finite.reduce((sum, value) => sum + value, 0) / finite.length;
 }
 
+function firstFiniteScore(...values: Array<number | null | undefined>): number | null {
+  for (const value of values) {
+    const score = finiteScore(value);
+    if (score !== null) return score;
+  }
+  return null;
+}
+
+function sectorFactorScore(sector: SectorRotation | undefined): number | null {
+  if (!sector) return null;
+  return firstFiniteScore(
+    sector.score,
+    sector.sector_score,
+    sector.ranking_score,
+    sector.leadership_intelligence?.confidence,
+    sector.participation_breadth,
+    sector.acceleration_velocity,
+    sector.institutional_alignment,
+    sector.narrative_intelligence?.narrative_strength,
+  );
+}
+
 function sectorExplanation(sector: SectorRotation | undefined, name: string): string {
   if (!sector) return `${name} live rotation data is calibrating.`;
   if (sector.capital_rotation) return sector.capital_rotation;
-  const score = finiteScore(sector.score);
+  const score = sectorFactorScore(sector);
   if (score === null) return `${sector.sector} rotation factors are warming.`;
   if (score >= 75) return `${sector.sector} is showing leadership with positive capital flow and relative momentum.`;
   if (score >= 50) return `${sector.sector} remains balanced; monitor breadth and institutional flow for confirmation.`;
@@ -204,7 +226,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Avg Strength</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(sectors.map((item) => item.score)))}</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(sectors.map(sectorFactorScore)))}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Across institutional sector universe</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
@@ -238,7 +260,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                 transition={{ duration: 0.18 }}
                 className={`miji-card relative overflow-hidden rounded-2xl border p-5 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition ${
                   activeSector === sector.sector ? "border-amber-400/30" : "border-[#2B313C]"
-                } bg-gradient-to-br ${gradient(sector.score)}`}
+                } bg-gradient-to-br ${gradient(sectorFactorScore(sector))}`}
               >
                 <div className="absolute inset-0 bg-[#0A0C10]/20" />
                 <div className="relative flex h-full flex-col justify-between">
@@ -248,8 +270,8 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                   </div>
                   <div>
                     <div className="flex items-end justify-between">
-                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
-                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{scoreLabel(sector.score)}</span>
+                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sectorFactorScore(sector))}</p>
+                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{scoreLabel(sectorFactorScore(sector))}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
                       <span>RS {formatOptionalScore(sector.relative_strength)}</span>
@@ -319,7 +341,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
             )}
             <div className="mt-4 space-y-3">
               {[
-                ["Strength", active?.score],
+                ["Strength", sectorFactorScore(active)],
                 ["Capital Flow", active?.flow],
                 ["Relative Momentum", active?.relative_strength],
                 ["Narrative Velocity", active?.acceleration_velocity],

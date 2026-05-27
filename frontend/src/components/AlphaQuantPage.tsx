@@ -69,6 +69,23 @@ function alphaFactors(row: AlphaQuantRow) {
   ] as const;
 }
 
+function primaryAlphaScore(row: AlphaQuantRow): number | null {
+  const factorCandidates = [
+    row.ranking_score,
+    row.alpha_score,
+    rowFactorValue(row, "momentum_20d"),
+    rowFactorValue(row, "momentum_60d"),
+    rowFactorValue(row, "relative_strength_spy"),
+    rowFactorValue(row, "volatility_quality"),
+    row.theme_strength,
+  ];
+  for (const value of factorCandidates) {
+    const score = finiteScore(value);
+    if (score !== null) return score;
+  }
+  return null;
+}
+
 const UNIVERSE_OPTIONS = [
   { value: "sp500", label: "S&P 500" },
   { value: "nasdaq100", label: "Nasdaq 100" },
@@ -110,7 +127,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
   const open = useCallback(() => onOpen(row.ticker), [onOpen, row.ticker]);
   const price = typeof row.price === "number" && Number.isFinite(row.price) && row.price > 0 ? row.price : null;
   const change = typeof row.change_percent === "number" && Number.isFinite(row.change_percent) ? row.change_percent : null;
-  const alphaScore = finiteScore(row.ranking_score) ?? finiteScore(row.alpha_score);
+  const alphaScore = primaryAlphaScore(row);
   const ranking = row.universe_ranking;
   return (
     <button onClick={open} className="miji-card w-full rounded-2xl border border-[#2A2F3D] bg-[#151922]/95 p-4 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition hover:border-[#06B6D4]/40">
@@ -133,7 +150,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         </div>
         <div className="text-right">
           <p className={`font-mono text-3xl font-semibold ${scoreColor(alphaScore)}`}>{formatScore(alphaScore)}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{finiteScore(row.ranking_score) !== null ? "Ranking Score" : "Alpha Score"}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{finiteScore(row.ranking_score) !== null ? "Ranking Score" : finiteScore(row.alpha_score) !== null ? "Alpha Score" : "Factor Score"}</p>
           <p className="mt-1 text-[10px] font-medium text-[#9BA7B4]">
             Rank in {row?.universe ?? "Universe"}: <span className="font-mono text-[#C9D1D9]">#{row?.rank_in_universe ?? "--"}</span>
           </p>

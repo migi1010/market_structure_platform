@@ -154,6 +154,7 @@ export interface SectorCompany {
 export interface SectorRotation {
   sector: string;
   score: number | null;
+  sector_score?: number | null;
   relative_strength: number | null;
   flow: number | null;
   companies: SectorCompany[];
@@ -216,6 +217,14 @@ export interface AlphaQuantRow {
   theme_alignment?: number | null;
   theme_strength?: number | null;
   theme_capital_flow?: number | null;
+  momentum_20d?: number | null;
+  momentum_60d?: number | null;
+  relative_strength_spy?: number | null;
+  relative_strength_qqq?: number | null;
+  volatility_quality?: number | null;
+  volume_participation?: number | null;
+  drawdown_pressure?: number | null;
+  trend_consistency?: number | null;
   theme_explanation?: string[];
   confidence_score?: number | null;
   confidence_label?: string;

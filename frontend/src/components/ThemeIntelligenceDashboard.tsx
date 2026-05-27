@@ -89,6 +89,14 @@ function formatOptionalScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(0) : "--";
 }
 
+function firstFiniteScore(...values: Array<number | null | undefined>): number | null {
+  for (const value of values) {
+    const score = finiteScore(value);
+    if (score !== null) return score;
+  }
+  return null;
+}
+
 function isNarrativeIntelligence(value: ThemeScore["narrative_intelligence"]): value is NarrativeIntelligence {
   return Boolean(value?.narrative_id && value?.narrative_name);
 }
@@ -184,9 +192,20 @@ function ThemeRow({
   onTickerSelect: (ticker: string) => void;
   onThemeSelect: (theme: string) => void;
 }) {
-  const score = finiteScore(theme?.ranking_score) ?? finiteScore(theme?.theme_strength_score);
   const leadership = theme.leadership_intelligence;
-  const leadershipScore = typeof theme.leadership_score === "number" ? theme.leadership_score : leadership?.leadership_score;
+  const leadershipScore = firstFiniteScore(theme.leadership_score, leadership?.leadership_score);
+  const narrative = isNarrativeIntelligence(theme.narrative_intelligence) ? theme.narrative_intelligence : null;
+  const score = firstFiniteScore(
+    theme?.ranking_score,
+    theme?.theme_strength_score,
+    leadershipScore,
+    theme?.narrative_strength,
+    narrative?.narrative_strength,
+    theme?.acceleration_velocity,
+    narrative?.acceleration_velocity,
+    theme?.institutional_alignment,
+    narrative?.institutional_alignment,
+  );
   const ranking = theme.universe_ranking;
   const leaders = relatedStocksForTheme(theme);
   return (
@@ -554,7 +573,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                   <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.narrative_name}</p>
                   <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">{item.narrative_state.replaceAll("_", " ")}</p>
                 </div>
-                <p className={`font-mono text-lg font-semibold ${scoreTone(item.narrative_strength)}`}>{formatOptionalScore(item.narrative_strength)}</p>
+                <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(item.narrative_strength, item.acceleration_velocity, item.institutional_alignment, item.participation_breadth))}`}>
+                  {formatOptionalScore(firstFiniteScore(item.narrative_strength, item.acceleration_velocity, item.institutional_alignment, item.participation_breadth))}
+                </p>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{item.capital_flow_semantics ?? item.explanation}</p>
             </div>
@@ -602,7 +623,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                     <p className="truncate text-sm font-semibold text-[#E6EDF3]">{theme.theme}</p>
                     <p className="mt-1 text-xs text-[#9BA7B4]">{theme.category}</p>
                   </div>
-                  <p className={`font-mono text-lg font-semibold ${scoreTone(theme.emerging_score)}`}>{formatOptionalScore(theme.emerging_score)}</p>
+                  <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(theme.emerging_score, theme.acceleration_velocity, theme.narrative_strength, theme.ranking_score, theme.theme_strength_score))}`}>
+                    {formatOptionalScore(firstFiniteScore(theme.emerging_score, theme.acceleration_velocity, theme.narrative_strength, theme.ranking_score, theme.theme_strength_score))}
+                  </p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-[#9BA7B4]">{theme.explainability?.[0] ?? "Acceleration detected across theme proxies."}</p>
               </div>
