@@ -130,12 +130,12 @@ export default function StockAnalysisWorkspace() {
   const bear = hmmAvailable ? (bearProbability * 100).toFixed(0) : "Awaiting";
   const bullWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bullProbability * 100))}%` : "50%";
   const bearWidth = hmmAvailable ? `${Math.max(8, Math.min(100, bearProbability * 100))}%` : "50%";
-  const priceDisplay = formatPrice(finiteNumber(stock?.price, stock?.quote?.price));
-  const changeDisplay = formatSignedNumber(finiteNumber(stock?.change, stock?.quote?.change));
-  const changePercentDisplay = formatSignedPercent(finiteNumber(stock?.change_percent, stock?.quote?.change_percent));
-  const marketCapDisplay = formatMarketCap(finiteNumber(stock?.market_cap, stock?.quote?.market_cap));
-  const quoteStatusDisplay = stock?.quote_status ?? stock?.quote?.status ?? "unavailable";
-  const sectorDisplay = stock?.sector && stock.sector !== "Unknown" ? stock.sector : "US Equity";
+  const priceDisplay = formatPrice(finiteNumber(stock?.canonicalPrice));
+  const changeDisplay = formatSignedNumber(finiteNumber(stock?.canonicalChange));
+  const changePercentDisplay = formatSignedPercent(finiteNumber(stock?.canonicalChangePercent));
+  const marketCapDisplay = formatMarketCap(finiteNumber(stock?.canonicalMarketCap));
+  const quoteStatusDisplay = stock?.canonicalQuoteStatus ?? "unavailable";
+  const sectorDisplay = stock?.canonicalSector && stock.canonicalSector !== "Unknown" ? stock.canonicalSector : "US Equity";
   const forecastTrend = hmm?.predicted_trend ?? "Calibrating model...";
   const regimeState = hmm?.regime_state ?? "Awaiting regime confirmation...";
   const regimeFallbackMessage = hmm?.message ?? "Using fallback market regime...";

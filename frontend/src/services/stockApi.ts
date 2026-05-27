@@ -31,6 +31,15 @@ interface LocalCacheEnvelope<T> {
   data: T;
 }
 
+interface CanonicalQuoteFields {
+  canonicalPrice: number | null;
+  canonicalChange: number | null;
+  canonicalChangePercent: number | null;
+  canonicalMarketCap: number | null;
+  canonicalQuoteStatus: string;
+  canonicalSector: string;
+}
+
 const POPULAR_SYMBOLS: SearchResult[] = [
   { symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", type: "Equity" },
   { symbol: "NVDA", name: "NVIDIA Corporation", exchange: "NASDAQ", type: "Equity" },
@@ -333,6 +342,34 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function xhrRequest(input: string, init?: RequestInit): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init?.method ?? "GET", input, true);
+    xhr.timeout = REQUEST_TIMEOUT_MS;
+    if (init?.headers) {
+      new Headers(init.headers).forEach((value, key) => xhr.setRequestHeader(key, value));
+    }
+    xhr.onload = () => {
+      resolve(new Response(xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: { "content-type": xhr.getResponseHeader("content-type") ?? "application/json" },
+      }));
+    };
+    xhr.onerror = () => reject(new Error("Network request failed"));
+    xhr.ontimeout = () => reject(new Error("Network request timed out"));
+    xhr.onabort = () => reject(new Error("Network request aborted"));
+    xhr.send(typeof init?.body === "string" ? init.body : null);
+  });
+}
+
+async function browserRequest(input: string, init?: RequestInit): Promise<Response> {
+  const fetcher = typeof window !== "undefined" && typeof window.fetch === "function" ? window.fetch.bind(window) : null;
+  if (fetcher) return fetcher(input, init);
+  return xhrRequest(input, init);
+}
+
 async function fetchWithRetry(input: string, init?: RequestInit): Promise<Response> {
   let lastError: unknown;
   const deadline = Date.now() + REQUEST_TIMEOUT_MS;
@@ -342,7 +379,7 @@ async function fetchWithRetry(input: string, init?: RequestInit): Promise<Respon
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), remaining);
     try {
-      return await fetch(input, {
+      return await browserRequest(input, {
         ...init,
         signal: controller.signal,
       });
@@ -392,30 +429,49 @@ function isCacheableLocalPayload(key: string, value: unknown): boolean {
   return true;
 }
 
-function readLocalCache<T>(key: string): T | null {
+function getLocalStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(key);
+    return window.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function removeLocalCacheItem(storage: Storage | null, key: string): void {
+  try {
+    storage?.removeItem(key);
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+}
+
+function readLocalCache<T>(key: string): T | null {
+  const storage = getLocalStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!isRecord(parsed) || parsed.schema_version !== CLIENT_CACHE_SCHEMA_VERSION || !("data" in parsed)) {
-      window.localStorage.removeItem(key);
+      removeLocalCacheItem(storage, key);
       return null;
     }
     const data = (parsed as unknown as LocalCacheEnvelope<T>).data;
     if (!isCacheableLocalPayload(key, data)) {
-      window.localStorage.removeItem(key);
+      removeLocalCacheItem(storage, key);
       return null;
     }
     return data;
   } catch {
-    window.localStorage.removeItem(key);
+    removeLocalCacheItem(storage, key);
     return null;
   }
 }
 
 function writeLocalCache<T>(key: string, value: T): void {
-  if (typeof window === "undefined") return;
+  const storage = getLocalStorage();
+  if (!storage) return;
   try {
     if (!isCacheableLocalPayload(key, value)) return;
     const envelope: LocalCacheEnvelope<T> = {
@@ -423,10 +479,29 @@ function writeLocalCache<T>(key: string, value: T): void {
       cached_at: new Date().toISOString(),
       data: value,
     };
-    window.localStorage.setItem(key, JSON.stringify(envelope));
+    storage.setItem(key, JSON.stringify(envelope));
   } catch {
     // Local cache is best effort and should never block the terminal.
   }
+}
+
+function clearLocalCache(key: string): void {
+  removeLocalCacheItem(getLocalStorage(), key);
+}
+
+function unwrapStockPayload(payload: unknown): StockAnalysis {
+  if (!isRecord(payload)) return payload as StockAnalysis;
+  for (const key of ["stock", "data", "result", "analysis"]) {
+    const value = payload[key];
+    if (isRecord(value) && (value.ticker || value.quote || value.price || value.currentPrice || value.regularMarketPrice)) {
+      return value as unknown as StockAnalysis;
+    }
+  }
+  return payload as unknown as StockAnalysis;
+}
+
+function hasCanonicalPrice(value: unknown, symbol: string): boolean {
+  return normalizeCanonicalQuote(isRecord(value) ? value : null, symbol).canonicalPrice !== null;
 }
 
 async function fetchCachedJson<T>(cacheKey: string, url: string, fallback: T): Promise<T> {
@@ -478,30 +553,91 @@ function validPrice(value: unknown): number | null {
   return number !== null && number > 0 ? number : null;
 }
 
-function normalizeQuote(data: Partial<StockAnalysis> | null | undefined, symbol: string): StockQuote {
-  const raw = data?.quote;
-  // Coerce to number: the backend always emits JSON numbers, but guard against string
-  // serialization edge cases (e.g., some proxies or CDN rewrites) where price arrives as "215.33".
-  const rawPrice = data?.price ?? raw?.price;
-  const price = validPrice(rawPrice);
-  const rawChange = data?.change ?? raw?.change;
-  const change = validNumber(rawChange);
-  const rawChangePercent = data?.change_percent ?? raw?.change_percent;
-  const changePercent = validNumber(rawChangePercent);
-  const marketCap = validPrice(data?.market_cap ?? raw?.market_cap);
-  const status = [data?.quote_status, raw?.status].find((item) => item && item !== "unavailable");
+function firstValidNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const number = validNumber(value);
+    if (number !== null) return number;
+  }
+  return null;
+}
+
+function firstValidPrice(...values: unknown[]): number | null {
+  for (const value of values) {
+    const price = validPrice(value);
+    if (price !== null) return price;
+  }
+  return null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function quoteRecord(data: Partial<StockAnalysis> | Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return isRecord(data?.quote) ? data.quote : {};
+}
+
+function normalizeCanonicalQuote(data: Partial<StockAnalysis> | Record<string, unknown> | null | undefined, symbol: string): CanonicalQuoteFields {
+  const source = (isRecord(data) ? data : {}) as Record<string, unknown>;
+  const quote = quoteRecord(source);
+  const canonicalPrice = firstValidPrice(
+    source.price,
+    quote.price,
+    source.currentPrice,
+    source.regularMarketPrice,
+    quote.currentPrice,
+    quote.regularMarketPrice,
+  );
+  const canonicalChange = firstValidNumber(
+    source.change,
+    quote.change,
+    source.regularMarketChange,
+    quote.regularMarketChange,
+  );
+  const canonicalChangePercent = firstValidNumber(
+    source.change_percent,
+    source.changePercent,
+    quote.change_percent,
+    quote.changePercent,
+    source.regularMarketChangePercent,
+    quote.regularMarketChangePercent,
+  );
+  const canonicalMarketCap = firstValidPrice(
+    source.market_cap,
+    source.marketCap,
+    quote.market_cap,
+    quote.marketCap,
+  );
+  const status = firstString(source.quote_status, quote.status, quote.quoteStatus);
+  const canonicalSector = firstString(source.sector, quote.sector) ?? "US Equity";
   return {
-    ticker: (raw?.ticker ?? data?.ticker ?? symbol).trim().toUpperCase(),
-    price,
-    change,
-    change_percent: changePercent,
-    previous_close: validPrice(raw?.previous_close),
-    market_cap: marketCap,
-    pe_ratio: validNumber(raw?.pe_ratio),
-    ps_ratio: validNumber(raw?.ps_ratio),
-    currency: raw?.currency ?? "USD",
-    status: price !== null ? status ?? "live_or_cached" : data?.quote_status ?? raw?.status ?? "unavailable",
-    source: raw?.source,
+    canonicalPrice,
+    canonicalChange,
+    canonicalChangePercent,
+    canonicalMarketCap,
+    canonicalQuoteStatus: canonicalPrice !== null && (!status || status === "unavailable") ? "live_or_cached" : status ?? "unavailable",
+    canonicalSector,
+  };
+}
+
+function normalizeQuote(data: Partial<StockAnalysis> | Record<string, unknown> | null | undefined, symbol: string): StockQuote {
+  const raw = quoteRecord(data);
+  const canonical = normalizeCanonicalQuote(data, symbol);
+  return {
+    ticker: (firstString(raw.ticker, isRecord(data) ? data.ticker : null) ?? symbol).toUpperCase(),
+    price: canonical.canonicalPrice,
+    change: canonical.canonicalChange,
+    change_percent: canonical.canonicalChangePercent,
+    previous_close: firstValidPrice(raw.previous_close, raw.previousClose),
+    market_cap: canonical.canonicalMarketCap,
+    pe_ratio: validNumber(raw.pe_ratio),
+    ps_ratio: validNumber(raw.ps_ratio),
+    currency: firstString(raw.currency) ?? "USD",
+    status: canonical.canonicalQuoteStatus,
+    source: firstString(raw.source) ?? undefined,
   };
 }
 
@@ -514,6 +650,12 @@ function fallbackStock(symbol: string): StockAnalysis {
     change: null,
     change_percent: null,
     market_cap: null,
+    canonicalPrice: null,
+    canonicalChange: null,
+    canonicalChangePercent: null,
+    canonicalMarketCap: null,
+    canonicalQuoteStatus: "unavailable",
+    canonicalSector: "US Equity",
     sector: "US Equity",
     quote_status: "unavailable",
     quote,
@@ -576,9 +718,10 @@ function fallbackStock(symbol: string): StockAnalysis {
 
 function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnalysis {
   const fallback = fallbackStock(symbol);
+  const canonical = normalizeCanonicalQuote(data, symbol);
   const quote = normalizeQuote(data, symbol);
   const company = data?.company_name && data.company_name !== "Unknown" ? data.company_name : fallback.company_name;
-  const sector = data?.sector && data.sector !== "Unknown" ? data.sector : fallback.sector;
+  const sector = canonical.canonicalSector && canonical.canonicalSector !== "Unknown" ? canonical.canonicalSector : fallback.sector;
   const hmm = data?.hmm_prediction ?? fallback.hmm_prediction;
   const trend = typeof hmm?.predicted_trend === "string" ? hmm.predicted_trend : "";
   const hmmAvailable = hmm?.available !== false && trend !== "Neutral" && !trend.toLowerCase().includes("calibrating") && validNumber(hmm?.confidence) !== null && validNumber(hmm?.bull_probability) !== null;
@@ -588,11 +731,17 @@ function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnaly
     ticker: (data?.ticker ?? symbol).trim().toUpperCase(),
     company_name: company,
     sector,
-    price: quote.price ?? (typeof data?.price === "number" && Number.isFinite(data.price) && data.price > 0 ? data.price : null),
-    change: quote.change ?? (typeof data?.change === "number" && Number.isFinite(data.change) ? data.change : null),
-    change_percent: quote.change_percent ?? (typeof data?.change_percent === "number" && Number.isFinite(data.change_percent) ? data.change_percent : null),
-    market_cap: quote.market_cap,
-    quote_status: quote.status,
+    price: canonical.canonicalPrice,
+    change: canonical.canonicalChange,
+    change_percent: canonical.canonicalChangePercent,
+    market_cap: canonical.canonicalMarketCap,
+    canonicalPrice: canonical.canonicalPrice,
+    canonicalChange: canonical.canonicalChange,
+    canonicalChangePercent: canonical.canonicalChangePercent,
+    canonicalMarketCap: canonical.canonicalMarketCap,
+    canonicalQuoteStatus: canonical.canonicalQuoteStatus,
+    canonicalSector: sector,
+    quote_status: canonical.canonicalQuoteStatus,
     quote,
     hmm_prediction: {
       ...fallback.hmm_prediction,
@@ -781,15 +930,18 @@ export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis>
   const symbol = ticker.trim().toUpperCase() || "NVDA";
   const cacheKey = `miji:stock:${symbol}`;
   const cached = readLocalCache<StockAnalysis>(cacheKey);
-  const fallback = cached ? normalizeStockAnalysis(cached, symbol) : fallbackStock(symbol);
+  const normalizedCached = cached ? normalizeStockAnalysis(cached, symbol) : null;
+  if (cached && !hasCanonicalPrice(cached, symbol)) clearLocalCache(cacheKey);
+  const fallback = normalizedCached?.canonicalPrice !== null && normalizedCached ? normalizedCached : fallbackStock(symbol);
   try {
     const response = await fetchWithRetry(`${API_URL}/stock/${encodeURIComponent(symbol)}`, {
       cache: "no-store",
     });
-    const data = normalizeStockAnalysis(await readJson<StockAnalysis>(response), symbol);
+    const data = normalizeStockAnalysis(unwrapStockPayload(await readJson<unknown>(response)), symbol);
     writeLocalCache(cacheKey, data);
     return data;
   } catch {
+    if (!fallback.canonicalPrice) clearLocalCache(cacheKey);
     return fallback;
   }
 }

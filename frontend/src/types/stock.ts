@@ -62,6 +62,12 @@ export interface StockAnalysis {
   change?: number | null;
   change_percent: number | null;
   market_cap: number | null;
+  canonicalPrice: number | null;
+  canonicalChange: number | null;
+  canonicalChangePercent: number | null;
+  canonicalMarketCap: number | null;
+  canonicalQuoteStatus: string;
+  canonicalSector: string;
   sector: string;
   quote_status?: "live_or_cached" | "unavailable" | string;
   /** Backend lifecycle state embedded in every /stock/ response. */
