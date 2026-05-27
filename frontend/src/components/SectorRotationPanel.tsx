@@ -41,27 +41,37 @@ const FALLBACK_COMPANIES: Record<string, string[]> = {
   "Communication Services": ["META", "GOOGL", "GOOG", "NFLX", "DIS", "TMUS"],
 };
 
-function money(value: number): string {
-  const abs = Math.abs(value);
+function finiteScore(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function money(value: number | null | undefined): string {
+  const numeric = finiteScore(value);
+  if (numeric === null) return "--";
+  const abs = Math.abs(numeric);
   if (abs >= 1e12) return `$${(abs / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `$${(abs / 1e6).toFixed(2)}M`;
   return `$${abs.toFixed(0)}`;
 }
 
-function gradient(score: number): string {
-  if (score >= 90) return "from-emerald-300 to-teal-400";
-  if (score >= 75) return "from-emerald-500 to-cyan-500";
-  if (score >= 50) return "from-slate-500 to-slate-700";
-  if (score >= 25) return "from-orange-500 to-rose-500";
+function gradient(score: number | null | undefined): string {
+  const value = finiteScore(score);
+  if (value === null) return "from-[#1C2128] to-[#111318]";
+  if (value >= 90) return "from-emerald-300 to-teal-400";
+  if (value >= 75) return "from-emerald-500 to-cyan-500";
+  if (value >= 50) return "from-slate-500 to-slate-700";
+  if (value >= 25) return "from-orange-500 to-rose-500";
   return "from-rose-600 to-red-700";
 }
 
-function scoreLabel(score: number): string {
-  if (score >= 90) return "Exceptional";
-  if (score >= 75) return "Strong";
-  if (score >= 50) return "Neutral";
-  if (score >= 25) return "Weak";
+function scoreLabel(score: number | null | undefined): string {
+  const value = finiteScore(score);
+  if (value === null) return "Partial Data";
+  if (value >= 90) return "Exceptional";
+  if (value >= 75) return "Strong";
+  if (value >= 50) return "Neutral";
+  if (value >= 25) return "Weak";
   return "Distressed";
 }
 
@@ -69,11 +79,24 @@ function formatOptionalScore(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "--";
 }
 
+function formatPercent(value: number | null | undefined): string {
+  const numeric = finiteScore(value);
+  return numeric === null ? "--" : `${numeric >= 0 ? "+" : ""}${numeric.toFixed(2)}%`;
+}
+
+function averageFinite(values: Array<number | null | undefined>): number | null {
+  const finite = values.map(finiteScore).filter((value): value is number => value !== null);
+  if (finite.length === 0) return null;
+  return finite.reduce((sum, value) => sum + value, 0) / finite.length;
+}
+
 function sectorExplanation(sector: SectorRotation | undefined, name: string): string {
   if (!sector) return `${name} live rotation data is calibrating.`;
   if (sector.capital_rotation) return sector.capital_rotation;
-  if (sector.score >= 75) return `${sector.sector} is showing leadership with positive capital flow and relative momentum.`;
-  if (sector.score >= 50) return `${sector.sector} remains balanced; monitor breadth and institutional flow for confirmation.`;
+  const score = finiteScore(sector.score);
+  if (score === null) return `${sector.sector} rotation factors are warming.`;
+  if (score >= 75) return `${sector.sector} is showing leadership with positive capital flow and relative momentum.`;
+  if (score >= 50) return `${sector.sector} remains balanced; monitor breadth and institutional flow for confirmation.`;
   return `${sector.sector} is lagging the market with weaker flow and momentum conditions.`;
 }
 
@@ -143,11 +166,11 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
     return (FALLBACK_COMPANIES[activeSector] ?? []).map((ticker, index) => ({
       ticker,
       company_name: ticker,
-      market_cap: 0,
-      alpha_score: 50,
-      bubble_score: 50,
-      relative_strength: 50,
-      change_percent: 0,
+      market_cap: null,
+      alpha_score: null,
+      bubble_score: null,
+      relative_strength: null,
+      change_percent: null,
       sector_rank: index + 1,
     }));
   }, [active?.companies, activeSector]);
@@ -181,12 +204,12 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Avg Strength</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{(sectors.reduce((sum, item) => sum + item.score, 0) / Math.max(sectors.length, 1)).toFixed(1)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(sectors.map((item) => item.score)))}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Across institutional sector universe</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Flow Bias</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-emerald-300">{(active?.flow ?? 50).toFixed(1)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-emerald-300">{formatOptionalScore(active?.flow)}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">{active?.sector ?? activeSector} capital flow score</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
@@ -196,7 +219,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Rotation State</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? active?.rotation_state ?? scoreLabel(active?.score ?? 50)}</p>
+          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? active?.rotation_state ?? scoreLabel(active?.score)}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Momentum and risk-adjusted sector status</p>
         </div>
       </div>
@@ -225,12 +248,12 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                   </div>
                   <div>
                     <div className="flex items-end justify-between">
-                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{sector.score.toFixed(1)}</p>
+                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
                       <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{scoreLabel(sector.score)}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
-                      <span>RS {sector.relative_strength.toFixed(1)}</span>
-                      <span>Flow {sector.flow.toFixed(1)}</span>
+                      <span>RS {formatOptionalScore(sector.relative_strength)}</span>
+                      <span>Flow {formatOptionalScore(sector.flow)}</span>
                     </div>
                   </div>
                 </div>
@@ -296,19 +319,19 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
             )}
             <div className="mt-4 space-y-3">
               {[
-                ["Strength", active?.score ?? 50],
-                ["Capital Flow", active?.flow ?? 50],
-                ["Relative Momentum", active?.relative_strength ?? 50],
-                ["Narrative Velocity", active?.acceleration_velocity ?? 50],
-                ["Bubble Risk", activeCompanies.reduce((sum, item) => sum + item.bubble_score, 0) / Math.max(activeCompanies.length, 1)],
+                ["Strength", active?.score],
+                ["Capital Flow", active?.flow],
+                ["Relative Momentum", active?.relative_strength],
+                ["Narrative Velocity", active?.acceleration_velocity],
+                ["Bubble Risk", averageFinite(activeCompanies.map((item) => item.bubble_score))],
               ].map(([label, value]) => (
                 <div key={label as string}>
                   <div className="mb-1 flex justify-between text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
                     <span>{label}</span>
-                    <span className="font-mono text-[#C9D1D9]">{(value as number).toFixed(1)}</span>
+                    <span className="font-mono text-[#C9D1D9]">{formatOptionalScore(value as number | null | undefined)}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-[#0A0C10]">
-                    <div className="h-full rounded-full bg-amber-200" style={{ width: `${Math.min(100, Math.max(0, value as number))}%` }} />
+                    <div className="h-full rounded-full bg-amber-200" style={{ width: `${finiteScore(value as number | null | undefined) === null ? 0 : Math.min(100, Math.max(0, Number(value)))}%` }} />
                   </div>
                 </div>
               ))}
@@ -334,15 +357,15 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                     </div>
                     <p className="mt-1 truncate text-sm text-[#9BA7B4]">{sanitizeCompanyName(company.company_name)}</p>
                   </div>
-                  <span className={company.change_percent >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
-                    {company.change_percent >= 0 ? "+" : ""}{company.change_percent.toFixed(2)}%
+                  <span className={finiteScore(company.change_percent) === null ? "font-mono text-sm font-semibold text-[#6E7681]" : Number(company.change_percent) >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
+                    {formatPercent(company.change_percent)}
                   </span>
                 </div>
                 <div className="mt-4 grid grid-cols-4 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
                   <span>Cap <b className="block text-[#C9D1D9]">{money(company.market_cap)}</b></span>
-                  <span>Alpha <b className="block text-amber-200">{company.alpha_score.toFixed(1)}</b></span>
-                  <span>Bubble <b className={company.bubble_score >= 70 ? "block text-rose-300" : "block text-[#C9D1D9]"}>{company.bubble_score.toFixed(1)}</b></span>
-                  <span>RS <b className="block text-emerald-300">{company.relative_strength.toFixed(1)}</b></span>
+                  <span>Alpha <b className="block text-amber-200">{formatOptionalScore(company.alpha_score)}</b></span>
+                  <span>Bubble <b className={Number(company.bubble_score) >= 70 ? "block text-rose-300" : "block text-[#C9D1D9]"}>{formatOptionalScore(company.bubble_score)}</b></span>
+                  <span>RS <b className="block text-emerald-300">{formatOptionalScore(company.relative_strength)}</b></span>
                 </div>
               </button>
             ))}

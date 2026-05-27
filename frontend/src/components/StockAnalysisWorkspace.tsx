@@ -245,7 +245,13 @@ export default function StockAnalysisWorkspace() {
               </div>
             </div>
           </section>
-          <AnalystForecastPanel targets={stock?.analyst_targets} consensus={stock?.analyst_consensus} price={stockView.price ?? undefined} />
+          <AnalystForecastPanel
+            targets={stock?.analyst_targets}
+            consensus={stock?.analyst_consensus}
+            price={stockView.price ?? undefined}
+            lifecycleState={stock?.lifecycle_state}
+            quoteStatus={stockView.quoteStatus}
+          />
           <NewsIntelligencePanel news={stock?.news ?? []} />
         </aside>
       </div>

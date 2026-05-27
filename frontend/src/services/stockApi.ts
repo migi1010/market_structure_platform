@@ -44,7 +44,7 @@ const API_URL = resolveApiBaseUrl(RAW_API_URL);
 const STOCK_PROXY_URL = "/api/stock";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
-const CLIENT_CACHE_SCHEMA_VERSION = "stock_v6";
+const CLIENT_CACHE_SCHEMA_VERSION = "stock_v7_factor_ui";
 
 interface LocalCacheEnvelope<T> {
   schema_version: string;
@@ -702,7 +702,7 @@ function fallbackStock(symbol: string): StockAnalysis {
       accrual_ratio: undefined,
       net_income_quality: undefined,
       confidence_score: undefined,
-      confidence_label: "Unavailable",
+      confidence_label: "Warming",
       ai_summary: "Bubble intelligence is unavailable until central enrichment returns live fundamentals.",
     },
     analyst_targets: {
@@ -779,49 +779,14 @@ function normalizeStockAnalysis(data: StockAnalysis, symbol: string): StockAnaly
 }
 
 function fallbackAlpha(universe: string): AlphaQuantResponse {
-  const alphaFallbackUniverses: Record<string, string[]> = {
-    sp500: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "V"],
-    nasdaq100: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "GOOGL", "COST", "TSLA", "AMD"],
-    sox: ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MU"],
-    smh: ["NVDA", "TSM", "AVGO", "ASML", "AMD", "QCOM", "AMAT", "TXN", "LRCX", "MU"],
-    soxx: ["NVDA", "AVGO", "AMD", "QCOM", "AMAT", "LRCX", "KLAC", "MU", "INTC", "TXN"],
-  };
-  const normalizedUniverse = universe.trim().toLowerCase().replace(/[ /-]+/g, "_");
-  const symbols = alphaFallbackUniverses[normalizedUniverse] ?? alphaFallbackUniverses.sp500;
-  const rows = symbols.map((symbol, index) => ({
-    ticker: symbol,
-    company_name: symbol,
-    sector: "Calibrating",
-    alpha_score: 50,
-    base_alpha_score: 50,
-    universe_context_score: 50,
-    universe_adjustment: 0,
-    universe_percentile: symbols.length > 1 ? ((symbols.length - index - 1) / (symbols.length - 1)) * 100 : 100,
-    rank_in_universe: index + 1,
-    universe: universe.toUpperCase(),
-    quality: 50,
-    growth: 50,
-    smart_money: 50,
-    valuation: 50,
-    earnings_quality: 50,
-    market_structure: 50,
-    bubble_risk: 50,
-    sector_alignment: 50,
-    theme_alignment: 50,
-    theme_strength: 50,
-    theme_capital_flow: 50,
-    theme_explanation: ["Live engine delayed. Showing cached institutional intelligence."],
-    suggested_action: "Hold" as const,
-    factor_importance: { quality: 0.2, growth: 0.2, smart_money: 0.2, valuation: 0.15, earnings_quality: 0.15, market_structure: 0.1 },
-  }));
   return {
     generated_at: new Date().toISOString(),
     universe: universe.toUpperCase(),
     qlib_engine: { available: false, mode: "fallback", provider: "Miji Quant", factor_set: "Cached Alpha Fallback" },
-    market_regime: { name: "Calibrating", confidence: 50 },
-    factor_importance: rows[0]?.factor_importance ?? {},
-    top_alpha: rows,
-    recommendations: rows.slice(0, 5),
+    market_regime: { name: "Calibrating", confidence: null },
+    factor_importance: {},
+    top_alpha: [],
+    recommendations: [],
     summary: "Live engine delayed. Showing cached institutional intelligence.",
   };
 }
@@ -831,9 +796,9 @@ const FALLBACK_SECTORS: SectorRotation[] = [
   "Consumer Discretionary", "Consumer Staples", "Materials", "Real Estate", "Communication Services",
 ].map((sector) => ({
   sector,
-  score: 50,
-  relative_strength: 50,
-  flow: 50,
+  score: null,
+  relative_strength: null,
+  flow: null,
   companies: [],
 }));
 
@@ -857,28 +822,28 @@ function fallbackThemeTop(): ThemeTopResponse {
     theme,
     category: "Calibrating",
     description: "Live theme signal is calibrating.",
-    theme_strength_score: 50,
-    theme_capital_flow_score: 50,
-    emerging_score: 45,
-    overheating_score: 35,
-    relative_momentum: 0,
-    etf_relative_strength: 0,
-    volume_expansion: 1,
-    institutional_accumulation: 50,
-    earnings_acceleration: 0,
-    revenue_acceleration: 0,
-    capex_trend: 50,
-    smart_money_accumulation: 50,
-    narrative_strength: 45,
-    narrative_acceleration: 45,
-    narrative_saturation: 35,
-    narrative_bubble_risk: 30,
-    breadth_participation: 50,
-    leadership_concentration: 0,
-    relative_strength_vs_spy: 0,
-    options_activity: 50,
-    supply_chain_acceleration: 50,
-    macro_alignment: 50,
+    theme_strength_score: null,
+    theme_capital_flow_score: null,
+    emerging_score: null,
+    overheating_score: null,
+    relative_momentum: null,
+    etf_relative_strength: null,
+    volume_expansion: null,
+    institutional_accumulation: null,
+    earnings_acceleration: null,
+    revenue_acceleration: null,
+    capex_trend: null,
+    smart_money_accumulation: null,
+    narrative_strength: null,
+    narrative_acceleration: null,
+    narrative_saturation: null,
+    narrative_bubble_risk: null,
+    breadth_participation: null,
+    leadership_concentration: null,
+    relative_strength_vs_spy: null,
+    options_activity: null,
+    supply_chain_acceleration: null,
+    macro_alignment: null,
     leaders: [],
     etfs: [],
     macro_tags: [],
@@ -888,15 +853,15 @@ function fallbackThemeTop(): ThemeTopResponse {
     generated_at: new Date().toISOString(),
     cross_asset_regime: {
       risk_on_off: "Calibrating",
-      risk_on_score: 50,
+      risk_on_score: undefined,
       liquidity_regime: "Calibrating",
-      liquidity_score: 50,
+      liquidity_score: undefined,
       volatility_regime: "Calibrating",
-      volatility_score: 50,
+      volatility_score: undefined,
       inflation_regime: "Calibrating",
-      inflation_score: 50,
+      inflation_score: undefined,
       AI_capex_regime: "Calibrating",
-      AI_capex_score: 50,
+      AI_capex_score: undefined,
     },
     themes,
     summary: "Using latest cached institutional intelligence while live theme data warms up.",
@@ -1041,7 +1006,7 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
 }
 
 export async function fetchSectorRotation(): Promise<SectorRotation[]> {
-  return fetchCachedJson<SectorRotation[]>("miji:sector-rotation", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
+  return fetchCachedJson<SectorRotation[]>("miji:sector-rotation:v2", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
 }
 
 export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {
@@ -1066,17 +1031,17 @@ export async function warmupQuantEngine(): Promise<void> {
 }
 
 export async function fetchAlphaQuant(universe = "sp500"): Promise<AlphaQuantResponse> {
-  const data = await fetchFreshJson<AlphaQuantResponse>(`miji:alpha:v3:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
+  const data = await fetchFreshJson<AlphaQuantResponse>(`miji:alpha:v4:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
   return normalizeAlphaQuantResponse(data);
 }
 
 export async function fetchThemeTop(): Promise<ThemeTopResponse> {
-  return fetchFreshJson<ThemeTopResponse>("miji:theme-top:v2", `${API_URL}/theme/top`, fallbackThemeTop());
+  return fetchFreshJson<ThemeTopResponse>("miji:theme-top:v3", `${API_URL}/theme/top`, fallbackThemeTop());
 }
 
 export async function fetchThemeEmerging(): Promise<EmergingThemeResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<EmergingThemeResponse>("miji:theme-emerging", `${API_URL}/theme/emerging`, {
+  return fetchCachedJson<EmergingThemeResponse>("miji:theme-emerging:v2", `${API_URL}/theme/emerging`, {
     generated_at: fallback.generated_at,
     emerging_themes: fallback.themes.slice(0, 6),
     summary: "Theme engine calibrating. No active emerging signal confirmed yet.",
@@ -1085,7 +1050,7 @@ export async function fetchThemeEmerging(): Promise<EmergingThemeResponse> {
 
 export async function fetchThemeRotation(): Promise<ThemeRotationResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<ThemeRotationResponse>("miji:theme-rotation", `${API_URL}/theme/rotation`, {
+  return fetchCachedJson<ThemeRotationResponse>("miji:theme-rotation:v2", `${API_URL}/theme/rotation`, {
     generated_at: fallback.generated_at,
     rotation_map: fallback.themes,
     strengthening: [],
@@ -1098,10 +1063,10 @@ export async function fetchThemeRotation(): Promise<ThemeRotationResponse> {
 
 export async function fetchThemeCapitalFlow(): Promise<ThemeCapitalFlowResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<ThemeCapitalFlowResponse>("miji:theme-flow", `${API_URL}/theme/capital-flow`, {
+  return fetchCachedJson<ThemeCapitalFlowResponse>("miji:theme-flow:v2", `${API_URL}/theme/capital-flow`, {
     generated_at: fallback.generated_at,
     capital_flow: fallback.themes,
-    summary: "Capital flow temporarily unavailable. Using latest cached institutional intelligence.",
+    summary: "Capital flow engine warming. Awaiting finite lightweight factor inputs.",
   });
 }
 
@@ -1124,8 +1089,10 @@ export async function fetchThemeSupplyChain(theme?: string): Promise<ThemeSupply
 }
 
 export async function fetchThemeNarrative(): Promise<ThemeNarrativeResponse> {
-  return fetchCachedJson<ThemeNarrativeResponse>("miji:theme-narrative", `${API_URL}/theme/narrative`, {
+  return fetchCachedJson<ThemeNarrativeResponse>("miji:theme-narrative:v2", `${API_URL}/theme/narrative`, {
     generated_at: new Date().toISOString(),
+    status: "partial_data",
+    lifecycle_state: "warming",
     narratives: [],
   });
 }

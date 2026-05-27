@@ -11,10 +11,12 @@ interface AlphaQuantPageProps {
   onTickerSelect: (ticker: string) => void;
 }
 
-function scoreColor(score: number): string {
-  if (score >= 85) return "text-[#10B981]";
-  if (score >= 70) return "text-[#06B6D4]";
-  if (score >= 55) return "text-amber-200";
+function scoreColor(score: number | null | undefined): string {
+  const value = finiteScore(score);
+  if (value === null) return "text-[#6E7681]";
+  if (value >= 85) return "text-[#10B981]";
+  if (value >= 70) return "text-[#06B6D4]";
+  if (value >= 55) return "text-amber-200";
   return "text-red-400";
 }
 
@@ -34,19 +36,38 @@ function actionClass(action: AlphaQuantRow["suggested_action"]): string {
   return "border-amber-400/25 bg-amber-400/10 text-amber-200";
 }
 
-const FactorBar = memo(function FactorBar({ label, value }: { label: string; value: number }) {
+const FactorBar = memo(function FactorBar({ label, value }: { label: string; value: number | null | undefined }) {
+  const score = finiteScore(value);
   return (
     <div>
       <div className="mb-1 flex justify-between text-[11px] font-medium text-[#9BA7B4]">
         <span>{label}</span>
-        <span className="font-mono text-[#C9D1D9]">{value.toFixed(0)}</span>
+        <span className="font-mono text-[#C9D1D9]">{formatScore(score, 0)}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[#1C2128]">
-        <div className="h-full rounded-full bg-[#06B6D4]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+        <div className={`h-full rounded-full ${score === null ? "bg-[#2A2F3D]" : "bg-[#06B6D4]"}`} style={{ width: `${score === null ? 0 : Math.min(100, Math.max(0, score))}%` }} />
       </div>
     </div>
   );
 });
+
+function rowFactorValue(row: AlphaQuantRow, factorId: string, fallback?: number | null): number | null {
+  const factor = row.lightweight_factors?.find((item) => item.factor_id === factorId);
+  return finiteScore(factor?.score) ?? finiteScore((row as unknown as Record<string, number | null | undefined>)[factorId]) ?? finiteScore(fallback);
+}
+
+function alphaFactors(row: AlphaQuantRow) {
+  return [
+    ["20D Momentum", rowFactorValue(row, "momentum_20d", row.growth)],
+    ["60D Momentum", rowFactorValue(row, "momentum_60d", row.theme_strength)],
+    ["RS vs SPY", rowFactorValue(row, "relative_strength_spy", row.sector_alignment)],
+    ["RS vs QQQ", rowFactorValue(row, "relative_strength_qqq", row.theme_alignment)],
+    ["Vol Quality", rowFactorValue(row, "volatility_quality", row.quality)],
+    ["Volume", rowFactorValue(row, "volume_participation", row.smart_money)],
+    ["Drawdown", rowFactorValue(row, "drawdown_pressure", row.bubble_risk)],
+    ["Trend", rowFactorValue(row, "trend_consistency", row.market_structure)],
+  ] as const;
+}
 
 const UNIVERSE_OPTIONS = [
   { value: "sp500", label: "S&P 500" },
@@ -89,7 +110,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
   const open = useCallback(() => onOpen(row.ticker), [onOpen, row.ticker]);
   const price = typeof row.price === "number" && Number.isFinite(row.price) && row.price > 0 ? row.price : null;
   const change = typeof row.change_percent === "number" && Number.isFinite(row.change_percent) ? row.change_percent : null;
-  const alphaScore = finiteScore(row.alpha_score);
+  const alphaScore = finiteScore(row.ranking_score) ?? finiteScore(row.alpha_score);
   const ranking = row.universe_ranking;
   return (
     <button onClick={open} className="miji-card w-full rounded-2xl border border-[#2A2F3D] bg-[#151922]/95 p-4 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition hover:border-[#06B6D4]/40">
@@ -111,22 +132,22 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
           </p>
         </div>
         <div className="text-right">
-          <p className={`font-mono text-3xl font-semibold ${scoreColor(alphaScore ?? 0)}`}>{formatScore(alphaScore)}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Alpha Score</p>
+          <p className={`font-mono text-3xl font-semibold ${scoreColor(alphaScore)}`}>{formatScore(alphaScore)}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{finiteScore(row.ranking_score) !== null ? "Ranking Score" : "Alpha Score"}</p>
           <p className="mt-1 text-[10px] font-medium text-[#9BA7B4]">
             Rank in {row?.universe ?? "Universe"}: <span className="font-mono text-[#C9D1D9]">#{row?.rank_in_universe ?? "--"}</span>
           </p>
           <p className="text-[10px] font-medium text-[#9BA7B4]">
-            Percentile: <span className="font-mono text-[#C9D1D9]">{typeof row?.universe_percentile === "number" ? `${row.universe_percentile.toFixed(0)}%` : "--"}</span>
+            Percentile: <span className="font-mono text-[#C9D1D9]">{formatScore(row?.universe_percentile, 0)}{finiteScore(row?.universe_percentile) !== null ? "%" : ""}</span>
           </p>
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-[#9BA7B4]">
         <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
-          Base <b className="font-mono text-[#C9D1D9]">{typeof row?.base_alpha_score === "number" ? row.base_alpha_score.toFixed(1) : "--"}</b>
+          Base <b className="font-mono text-[#C9D1D9]">{formatScore(row?.base_alpha_score)}</b>
         </span>
         <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
-          Adj <b className="font-mono text-[#C9D1D9]">{typeof row?.universe_adjustment === "number" ? `${row.universe_adjustment >= 0 ? "+" : ""}${row.universe_adjustment.toFixed(1)}` : "--"}</b>
+          Adj <b className="font-mono text-[#C9D1D9]">{finiteScore(row?.universe_adjustment) !== null ? `${Number(row.universe_adjustment) >= 0 ? "+" : ""}${Number(row.universe_adjustment).toFixed(1)}` : "--"}</b>
         </span>
         {ranking && (
           <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-2 py-1">
@@ -135,9 +156,9 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         )}
       </div>
       <div className="miji-factor-grid mt-4 grid gap-3 md:grid-cols-3">
-        <FactorBar label="Smart Money" value={row?.smart_money ?? 0} />
-        <FactorBar label="Earnings Quality" value={row?.earnings_quality ?? 0} />
-        <FactorBar label="Bubble Risk" value={row?.bubble_risk ?? 0} />
+        {alphaFactors(row).slice(0, 6).map(([label, value]) => (
+          <FactorBar key={label} label={label} value={value} />
+        ))}
       </div>
     </button>
   );
@@ -235,7 +256,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
           <p className="text-sm leading-relaxed text-[#C9D1D9]">{data?.summary ?? "Preparing institutional alpha intelligence."}</p>
           <div className="mt-4 flex flex-wrap gap-3 text-xs text-[#9BA7B4]">
             <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-3 py-2">Regime: <b className="text-[#E6EDF3]">{data?.market_regime?.name ?? "Unknown"}</b></span>
-            <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-3 py-2">Confidence: <b className="text-[#10B981]">{(data?.market_regime?.confidence ?? 0).toFixed(1)}</b></span>
+            <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-3 py-2">Confidence: <b className="text-[#10B981]">{formatScore(data?.market_regime?.confidence)}</b></span>
             <span className="rounded-lg border border-[#2A2F3D] bg-[#0B0E14] px-3 py-2">Qlib: <b className="text-[#06B6D4]">{data?.qlib_engine?.factor_set ?? "Alpha158"}</b></span>
           </div>
         </section>
@@ -246,11 +267,13 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
           </div>
           <div className="miji-factor-grid grid gap-3 md:grid-cols-2">
             {factorImportance.map(([factor, weight]) => (
-              <FactorBar key={factor} label={factor.replace("_", " ").toUpperCase()} value={(weight ?? 0) * 100} />
+              <FactorBar key={factor} label={factor.replace("_", " ").toUpperCase()} value={finiteScore(weight) === null ? null : Number(weight) * 100} />
             ))}
-            {factorImportance.length === 0 && ["Quality", "Growth", "Smart Money", "Theme"].map((factor) => (
-              <FactorBar key={factor} label={factor.toUpperCase()} value={50} />
-            ))}
+            {factorImportance.length === 0 && (
+              <div className="rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3 text-sm text-[#9BA7B4] md:col-span-2">
+                Factor weights are warming. No neutral placeholder weights are displayed until backend inputs are finite.
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -268,7 +291,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
                   <p className="truncate font-mono text-sm font-semibold text-[#E6EDF3]">{row.symbol}</p>
                   <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-[#06B6D4]">{row.market_classification.replaceAll("_", " ")}</p>
                 </div>
-                <p className={`font-mono text-lg font-semibold ${scoreColor(row.ranking_score ?? 0)}`}>{formatScore(row.ranking_score)}</p>
+                <p className={`font-mono text-lg font-semibold ${scoreColor(row.ranking_score)}`}>{formatScore(row.ranking_score)}</p>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{row.explanation}</p>
             </div>
@@ -306,12 +329,12 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
               <button key={row.ticker} onClick={() => onTickerSelect(row.ticker)} className="w-full rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3 text-left transition hover:border-[#10B981]/35">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-lg font-semibold text-[#E6EDF3]">{row.ticker}</span>
-                  <span className={scoreColor(finiteScore(row.alpha_score) ?? 0)}>{formatScore(row.alpha_score)}</span>
+                  <span className={scoreColor(row.alpha_score)}>{formatScore(row.alpha_score)}</span>
                 </div>
                 <p className="mt-1 truncate text-xs text-[#9BA7B4]">{sanitizeCompanyName(row.company_name)}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-wide text-[#9BA7B4]">
-                  <span>Smart <b className="block text-[#10B981]">{row.smart_money.toFixed(0)}</b></span>
-                  <span>Bubble <b className="block text-red-400">{row.bubble_risk.toFixed(0)}</b></span>
+                  <span>Smart <b className="block text-[#10B981]">{formatScore(row.smart_money, 0)}</b></span>
+                  <span>Bubble <b className="block text-red-400">{formatScore(row.bubble_risk, 0)}</b></span>
                 </div>
               </button>
             ))}

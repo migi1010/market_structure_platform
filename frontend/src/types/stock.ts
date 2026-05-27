@@ -2,14 +2,16 @@ import type { BubbleAnalysisData } from "./bubble";
 
 export interface AnalystTargets {
   available?: boolean;
-  high: number | null;
-  average: number | null;
-  low: number | null;
+  high?: number | null;
+  high_target?: number | null;
+  average?: number | null;
   average_target?: number | null;
+  low?: number | null;
+  low_target?: number | null;
   implied_upside?: number | null;
-  buy: number | null;
-  hold: number | null;
-  sell: number | null;
+  buy?: number | null;
+  hold?: number | null;
+  sell?: number | null;
 }
 
 export interface AnalystConsensus {
@@ -141,22 +143,22 @@ export interface SearchResult {
 export interface SectorCompany {
   ticker: string;
   company_name: string;
-  market_cap: number;
-  alpha_score: number;
-  bubble_score: number;
-  relative_strength: number;
-  change_percent: number;
+  market_cap?: number | null;
+  alpha_score?: number | null;
+  bubble_score?: number | null;
+  relative_strength?: number | null;
+  change_percent?: number | null;
   sector_rank?: number;
 }
 
 export interface SectorRotation {
   sector: string;
-  score: number;
-  relative_strength: number;
-  flow: number;
+  score: number | null;
+  relative_strength: number | null;
+  flow: number | null;
   companies: SectorCompany[];
   rotation_state?: string;
-  confidence_score?: number;
+  confidence_score?: number | null;
   confidence_label?: string;
   explanation?: string[];
   fallback?: boolean;
@@ -164,13 +166,13 @@ export interface SectorRotation {
   sector_rank?: number;
   leadership_state?: string;
   momentum_direction?: string;
-  participation_strength?: number;
+  participation_strength?: number | null;
   lifecycle_state?: string;
   capital_rotation?: string;
   narrative_state?: string;
-  acceleration_velocity?: number;
-  participation_breadth?: number;
-  institutional_alignment?: number;
+  acceleration_velocity?: number | null;
+  participation_breadth?: number | null;
+  institutional_alignment?: number | null;
   ranking_score?: number | null;
   overall_rank?: number | null;
   market_classification?: string;
@@ -180,8 +182,8 @@ export interface SectorRotation {
     sector_rank?: number;
     leadership_state?: string;
     momentum_direction?: string;
-    participation_strength?: number;
-    confidence?: number;
+    participation_strength?: number | null;
+    confidence?: number | null;
     confidence_label?: string;
     lifecycle_state?: string;
     explanation?: string;
@@ -196,26 +198,26 @@ export interface AlphaQuantRow {
   change?: number | null;
   change_percent?: number | null;
   quote_status?: string;
-  alpha_score: number;
-  base_alpha_score?: number;
-  universe_context_score?: number;
-  universe_adjustment?: number;
-  universe_percentile?: number;
+  alpha_score: number | null;
+  base_alpha_score?: number | null;
+  universe_context_score?: number | null;
+  universe_adjustment?: number | null;
+  universe_percentile?: number | null;
   rank_in_universe?: number;
   universe?: string;
-  quality: number;
-  growth: number;
-  smart_money: number;
-  valuation: number;
-  earnings_quality: number;
-  market_structure: number;
-  bubble_risk: number;
-  sector_alignment: number;
-  theme_alignment?: number;
-  theme_strength?: number;
-  theme_capital_flow?: number;
+  quality: number | null;
+  growth: number | null;
+  smart_money: number | null;
+  valuation: number | null;
+  earnings_quality: number | null;
+  market_structure: number | null;
+  bubble_risk: number | null;
+  sector_alignment: number | null;
+  theme_alignment?: number | null;
+  theme_strength?: number | null;
+  theme_capital_flow?: number | null;
   theme_explanation?: string[];
-  confidence_score?: number;
+  confidence_score?: number | null;
   confidence_label?: string;
   bullish_factors?: string[];
   risk_factors?: string[];
@@ -225,6 +227,19 @@ export interface AlphaQuantRow {
   ranking_score?: number | null;
   overall_rank?: number | null;
   market_classification?: string;
+  lifecycle_state?: string;
+  lightweight_factors?: FactorResult[];
+}
+
+export interface FactorResult {
+  factor_id: string;
+  score: number | null;
+  confidence?: number | null;
+  status?: string;
+  source?: string;
+  freshness?: string;
+  explanation?: string;
+  lifecycle_state?: string;
 }
 
 export interface AlphaQuantResponse {
@@ -235,7 +250,7 @@ export interface AlphaQuantResponse {
     /**
      * "qlib"          — Microsoft Qlib is installed and active.
      * "live_pipeline" — Qlib not installed; Alpha158-compatible pipeline ran successfully.
-     * "fallback"      — True fallback (_fallback_alpha); all scores are neutral placeholders.
+     * "fallback"      — Endpoint fallback; score fields remain null until finite live inputs arrive.
      */
     mode?: "qlib" | "live_pipeline" | "fallback";
     provider: string;
@@ -245,7 +260,7 @@ export interface AlphaQuantResponse {
   };
   market_regime: {
     name: string;
-    confidence: number;
+    confidence: number | null;
   };
   factor_importance: Record<string, number>;
   top_alpha: AlphaQuantRow[];
@@ -278,28 +293,32 @@ export interface ThemeScore {
   theme: string;
   category: string;
   description?: string;
-  theme_strength_score: number;
-  theme_capital_flow_score: number;
-  emerging_score: number;
-  overheating_score: number;
-  relative_momentum: number;
-  etf_relative_strength: number;
-  volume_expansion: number;
-  institutional_accumulation: number;
-  earnings_acceleration: number;
-  revenue_acceleration: number;
-  capex_trend: number;
-  smart_money_accumulation: number;
-  narrative_strength: number;
-  narrative_acceleration: number;
-  narrative_saturation: number;
-  narrative_bubble_risk: number;
-  breadth_participation: number;
-  leadership_concentration: number;
-  relative_strength_vs_spy: number;
-  options_activity: number;
-  supply_chain_acceleration: number;
-  macro_alignment: number;
+  theme_strength_score: number | null;
+  theme_capital_flow_score: number | null;
+  emerging_score: number | null;
+  overheating_score: number | null;
+  relative_momentum: number | null;
+  etf_relative_strength: number | null;
+  volume_expansion: number | null;
+  institutional_accumulation: number | null;
+  earnings_acceleration: number | null;
+  revenue_acceleration: number | null;
+  capex_trend: number | null;
+  smart_money_accumulation: number | null;
+  narrative_strength: number | null;
+  narrative_acceleration: number | null;
+  narrative_saturation: number | null;
+  narrative_bubble_risk: number | null;
+  breadth_participation: number | null;
+  leadership_concentration: number | null;
+  relative_strength_vs_spy: number | null;
+  relative_strength_qqq?: number | null;
+  momentum_strength?: number | null;
+  trend_consistency?: number | null;
+  sector_leadership?: number | null;
+  options_activity: number | null;
+  supply_chain_acceleration: number | null;
+  macro_alignment: number | null;
   leaders: ThemeLeader[];
   related_stocks?: ThemeLeader[];
   top_alpha_stocks?: ThemeLeader[];
@@ -308,18 +327,18 @@ export interface ThemeScore {
   explainability: string[];
   risks?: string[];
   status?: "Emerging" | "Accumulating" | "Leadership" | "Overheated" | "Cooling" | "Weak" | "Watchlist" | string;
-  confidence_score?: number;
+  confidence_score?: number | null;
   confidence_label?: string;
   data_completeness?: number;
   theme_id?: string;
   leadership_score?: number | null;
-  acceleration_score?: number;
-  participation_score?: number;
+  acceleration_score?: number | null;
+  participation_score?: number | null;
   lifecycle_state?: string;
   narrative_state?: string;
-  acceleration_velocity?: number;
-  participation_breadth?: number;
-  institutional_alignment?: number;
+  acceleration_velocity?: number | null;
+  participation_breadth?: number | null;
+  institutional_alignment?: number | null;
   ranking_score?: number | null;
   overall_rank?: number | null;
   market_classification?: string;
@@ -329,11 +348,11 @@ export interface ThemeScore {
     theme_id: string;
     theme_name: string;
     leadership_score: number | null;
-    acceleration_score: number;
-    participation_score: number;
+    acceleration_score: number | null;
+    participation_score: number | null;
     participating_sectors: string[];
     representative_symbols: string[];
-    confidence: number;
+    confidence: number | null;
     confidence_label: string;
     lifecycle_state: string;
     status: string;
@@ -346,17 +365,17 @@ export interface NarrativeIntelligence {
   narrative_id: string;
   narrative_name: string;
   theme?: string;
-  narrative_strength: number;
-  narrative_acceleration?: number;
-  narrative_saturation?: number;
-  narrative_bubble_risk?: number;
-  acceleration_velocity: number;
-  participation_breadth: number;
-  institutional_alignment: number;
+  narrative_strength: number | null;
+  narrative_acceleration?: number | null;
+  narrative_saturation?: number | null;
+  narrative_bubble_risk?: number | null;
+  acceleration_velocity: number | null;
+  participation_breadth: number | null;
+  institutional_alignment: number | null;
   narrative_state: string;
   representative_themes: string[];
   representative_symbols: string[];
-  confidence: number;
+  confidence: number | null;
   confidence_label?: string;
   lifecycle_state: string;
   explanation: string;

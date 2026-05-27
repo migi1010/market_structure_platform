@@ -48,23 +48,35 @@ const warmupMessages = [
   "Theme Intelligence Online",
 ];
 
-function scoreTone(score: number | undefined): string {
-  const value = score ?? 0;
+function finiteScore(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function scoreTone(score: number | null | undefined): string {
+  const value = finiteScore(score);
+  if (value === null) return "text-[#6E7681]";
   if (value >= 75) return "text-emerald-300";
   if (value >= 55) return "text-amber-200";
   return "text-rose-300";
 }
 
-function barTone(score: number | undefined): string {
-  const value = score ?? 0;
+function barTone(score: number | null | undefined): string {
+  const value = finiteScore(score);
+  if (value === null) return "bg-[#2B313C]";
   if (value >= 75) return "bg-emerald-300";
   if (value >= 55) return "bg-amber-200";
   return "bg-rose-300";
 }
 
-function pct(value: number | undefined): string {
-  const numeric = value ?? 0;
+function pct(value: number | null | undefined): string {
+  const numeric = finiteScore(value);
+  if (numeric === null) return "--";
   return `${numeric >= 0 ? "+" : ""}${numeric.toFixed(1)}%`;
+}
+
+function ratio(value: number | null | undefined): string {
+  const numeric = finiteScore(value);
+  return numeric === null ? "--" : `${numeric.toFixed(2)}x`;
 }
 
 function relatedStocksForTheme(theme: ThemeScore): ThemeLeader[] {
@@ -172,7 +184,7 @@ function ThemeRow({
   onTickerSelect: (ticker: string) => void;
   onThemeSelect: (theme: string) => void;
 }) {
-  const score = theme?.theme_strength_score ?? 0;
+  const score = finiteScore(theme?.ranking_score) ?? finiteScore(theme?.theme_strength_score);
   const leadership = theme.leadership_intelligence;
   const leadershipScore = typeof theme.leadership_score === "number" ? theme.leadership_score : leadership?.leadership_score;
   const ranking = theme.universe_ranking;
@@ -192,15 +204,15 @@ function ThemeRow({
           <p className="truncate text-sm font-semibold tracking-wide text-[#E6EDF3]">{theme?.theme ?? "Theme"}</p>
           <p className="mt-1 truncate text-xs text-[#9BA7B4]">{theme?.category ?? "Universal Market Theme"}</p>
         </div>
-        <div className={`font-mono text-xl font-semibold ${scoreTone(score)}`}>{score.toFixed(0)}</div>
+        <div className={`font-mono text-xl font-semibold ${scoreTone(score)}`}>{formatOptionalScore(score)}</div>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#0A0C10]">
-        <div className={`h-full rounded-full ${barTone(score)}`} style={{ width: `${Math.min(100, Math.max(0, score))}%` }} />
+        <div className={`h-full rounded-full ${barTone(score)}`} style={{ width: `${score === null ? 0 : Math.min(100, Math.max(0, score))}%` }} />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
         <div>
           <p className="text-[#6E7681]">Flow</p>
-          <p className={`font-mono font-semibold ${scoreTone(theme?.theme_capital_flow_score)}`}>{(theme?.theme_capital_flow_score ?? 0).toFixed(0)}</p>
+          <p className={`font-mono font-semibold ${scoreTone(theme?.theme_capital_flow_score)}`}>{formatOptionalScore(theme?.theme_capital_flow_score)}</p>
         </div>
         <div>
           <p className="text-[#6E7681]">RS vs SPY</p>
@@ -208,14 +220,14 @@ function ThemeRow({
         </div>
         <div>
           <p className="text-[#6E7681]">Breadth</p>
-          <p className="font-mono font-semibold text-[#C9D1D9]">{(theme?.breadth_participation ?? 0).toFixed(0)}%</p>
+          <p className="font-mono font-semibold text-[#C9D1D9]">{formatOptionalScore(theme?.breadth_participation)}{finiteScore(theme?.breadth_participation) !== null ? "%" : ""}</p>
         </div>
       </div>
       {leadership && (
         <div className="mt-3 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">Leadership</p>
-            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{typeof leadershipScore === "number" ? leadershipScore.toFixed(0) : "--"}</p>
+            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{formatOptionalScore(leadershipScore)}</p>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[#9BA7B4]">{leadership.capital_rotation}</p>
         </div>
@@ -334,8 +346,8 @@ function ThemeDetailPanel({
                   </div>
                   <div className="text-right">
                     <p className="font-mono text-sm font-semibold text-[#C9D1D9]">{typeof stock.price === "number" ? `$${stock.price.toFixed(2)}` : "--"}</p>
-                    <p className={(stock.change_percent ?? 0) >= 0 ? "font-mono text-[11px] text-emerald-300" : "font-mono text-[11px] text-rose-300"}>
-                      {typeof stock.change_percent === "number" ? pct(stock.change_percent) : "--"}
+                    <p className={finiteScore(stock.change_percent) === null ? "font-mono text-[11px] text-[#6E7681]" : Number(stock.change_percent) >= 0 ? "font-mono text-[11px] text-emerald-300" : "font-mono text-[11px] text-rose-300"}>
+                      {pct(stock.change_percent)}
                     </p>
                   </div>
                 </div>
@@ -380,7 +392,7 @@ function ThemeDetailPanel({
             </div>
             <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
               <p className="text-[11px] text-[#6E7681]">Bubble Risk</p>
-              <p className={`font-mono text-lg font-semibold ${scoreTone(100 - (detail.bubble_risk ?? 50))}`}>{formatOptionalScore(detail.bubble_risk)}</p>
+              <p className={`font-mono text-lg font-semibold ${scoreTone(finiteScore(detail.bubble_risk) === null ? null : 100 - Number(detail.bubble_risk))}`}>{formatOptionalScore(detail.bubble_risk)}</p>
             </div>
           </div>
         </div>
@@ -520,10 +532,10 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
       )}
 
       <div className="miji-card-grid mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Risk Regime" value={regime?.risk_on_off ?? "Warming"} sublabel={`Risk score ${(regime?.risk_on_score ?? 0).toFixed(0)} - liquidity ${regime?.liquidity_regime ?? "pending"}`} icon={<Activity size={17} />} />
-        <MetricCard label="AI CapEx Regime" value={regime?.AI_capex_regime ?? "Warming"} sublabel={`AI capex score ${(regime?.AI_capex_score ?? 0).toFixed(0)} from SOXX, QQQ and growth proxies`} icon={<BrainCircuit size={17} />} />
-        <MetricCard label="Volatility" value={regime?.volatility_regime ?? "Warming"} sublabel={`Volatility score ${(regime?.volatility_score ?? 0).toFixed(0)} using VIX proxy and equity vol`} icon={<ShieldAlert size={17} />} />
-        <MetricCard label="Inflation" value={regime?.inflation_regime ?? "Warming"} sublabel={`Inflation score ${(regime?.inflation_score ?? 0).toFixed(0)} from oil, gold and yields`} icon={<RadioTower size={17} />} />
+        <MetricCard label="Risk Regime" value={regime?.risk_on_off ?? "Warming"} sublabel={`Risk score ${formatOptionalScore(regime?.risk_on_score)} - liquidity ${regime?.liquidity_regime ?? "pending"}`} icon={<Activity size={17} />} />
+        <MetricCard label="AI CapEx Regime" value={regime?.AI_capex_regime ?? "Warming"} sublabel={`AI capex score ${formatOptionalScore(regime?.AI_capex_score)} from SOXX, QQQ and growth proxies`} icon={<BrainCircuit size={17} />} />
+        <MetricCard label="Volatility" value={regime?.volatility_regime ?? "Warming"} sublabel={`Volatility score ${formatOptionalScore(regime?.volatility_score)} using VIX proxy and equity vol`} icon={<ShieldAlert size={17} />} />
+        <MetricCard label="Inflation" value={regime?.inflation_regime ?? "Warming"} sublabel={`Inflation score ${formatOptionalScore(regime?.inflation_score)} from oil, gold and yields`} icon={<RadioTower size={17} />} />
       </div>
 
       <section className={`${cardClass} mb-4`}>
@@ -542,7 +554,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                   <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.narrative_name}</p>
                   <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">{item.narrative_state.replaceAll("_", " ")}</p>
                 </div>
-                <p className={`font-mono text-lg font-semibold ${scoreTone(item.narrative_strength)}`}>{item.narrative_strength.toFixed(0)}</p>
+                <p className={`font-mono text-lg font-semibold ${scoreTone(item.narrative_strength)}`}>{formatOptionalScore(item.narrative_strength)}</p>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{item.capital_flow_semantics ?? item.explanation}</p>
             </div>
@@ -590,7 +602,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                     <p className="truncate text-sm font-semibold text-[#E6EDF3]">{theme.theme}</p>
                     <p className="mt-1 text-xs text-[#9BA7B4]">{theme.category}</p>
                   </div>
-                  <p className={`font-mono text-lg font-semibold ${scoreTone(theme.emerging_score)}`}>{theme.emerging_score.toFixed(0)}</p>
+                  <p className={`font-mono text-lg font-semibold ${scoreTone(theme.emerging_score)}`}>{formatOptionalScore(theme.emerging_score)}</p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-[#9BA7B4]">{theme.explainability?.[0] ?? "Acceleration detected across theme proxies."}</p>
               </div>
@@ -617,9 +629,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.theme}</p>
-                  <p className="text-xs text-[#9BA7B4]">Volume {(item.volume_expansion ?? 1).toFixed(2)}x - Breadth {(item.breadth_participation ?? 0).toFixed(0)}%</p>
+                  <p className="text-xs text-[#9BA7B4]">Volume {ratio(item.volume_expansion)} - Breadth {formatOptionalScore(item.breadth_participation)}{finiteScore(item.breadth_participation) !== null ? "%" : ""}</p>
                 </div>
-                <p className={`font-mono font-semibold ${scoreTone(item.theme_capital_flow_score)}`}>{(item.theme_capital_flow_score ?? 0).toFixed(0)}</p>
+                <p className={`font-mono font-semibold ${scoreTone(item.theme_capital_flow_score)}`}>{formatOptionalScore(item.theme_capital_flow_score)}</p>
               </div>
             ))}
             {loading && flowItems.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-16" />)}
@@ -673,7 +685,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               {overheatedThemes.slice(0, 4).map((theme) => (
                 <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
                   <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-rose-300">{theme.overheating_score.toFixed(0)}</span>
+                  <span className="font-mono text-sm font-semibold text-rose-300">{formatOptionalScore(theme.overheating_score)}</span>
                 </div>
               ))}
               {loading && overheatedThemes.length === 0 && <ShimmerBlock className="h-20" />}
@@ -686,7 +698,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               {undervaluedThemes.slice(0, 4).map((theme) => (
                 <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
                   <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-emerald-300">{theme.theme_strength_score.toFixed(0)}</span>
+                  <span className="font-mono text-sm font-semibold text-emerald-300">{formatOptionalScore(theme.theme_strength_score)}</span>
                 </div>
               ))}
               {loading && undervaluedThemes.length === 0 && <ShimmerBlock className="h-20" />}
