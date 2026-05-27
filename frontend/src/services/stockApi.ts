@@ -20,7 +20,28 @@ import type {
 } from "@/types/stock";
 import { enabledTerminalModules } from "@/modules/terminalModules";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://market-structure-platform.onrender.com";
+const RENDER_API_URL = "https://market-structure-platform.onrender.com";
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL;
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+
+function resolveApiBaseUrl(value: string | undefined): string {
+  const trimmed = value?.trim().replace(/\/+$/, "");
+  if (!trimmed) return RENDER_API_URL;
+  try {
+    const parsed = new URL(trimmed);
+    if (!/^https?:$/.test(parsed.protocol)) return RENDER_API_URL;
+    if (IS_PRODUCTION && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1")) {
+      return RENDER_API_URL;
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return RENDER_API_URL;
+  }
+}
+
+const API_URL = resolveApiBaseUrl(RAW_API_URL);
+const STOCK_PROXY_URL = "/api/stock";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_ATTEMPTS = 3;
 const CLIENT_CACHE_SCHEMA_VERSION = "stock_v6";
@@ -933,14 +954,28 @@ export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis>
   const normalizedCached = cached ? normalizeStockAnalysis(cached, symbol) : null;
   if (cached && !hasCanonicalPrice(cached, symbol)) clearLocalCache(cacheKey);
   const fallback = normalizedCached?.canonicalPrice !== null && normalizedCached ? normalizedCached : fallbackStock(symbol);
+  const url = `${API_URL}/stock/${encodeURIComponent(symbol)}`;
+  const proxyUrl = `${STOCK_PROXY_URL}?ticker=${encodeURIComponent(symbol)}`;
   try {
-    const response = await fetchWithRetry(`${API_URL}/stock/${encodeURIComponent(symbol)}`, {
+    if (IS_DEVELOPMENT) console.debug("[stockApi] fetchStockAnalysis", { symbol, url });
+    const response = await fetchWithRetry(url, {
       cache: "no-store",
     });
     const data = normalizeStockAnalysis(unwrapStockPayload(await readJson<unknown>(response)), symbol);
     writeLocalCache(cacheKey, data);
+    if (IS_DEVELOPMENT) console.debug("[stockApi] stock response", { symbol, price: data.canonicalPrice, status: data.canonicalQuoteStatus });
     return data;
-  } catch {
+  } catch (error) {
+    if (IS_DEVELOPMENT) console.debug("[stockApi] stock fetch failed", { symbol, url, error });
+    try {
+      const response = await fetchWithRetry(proxyUrl, { cache: "no-store" });
+      const data = normalizeStockAnalysis(unwrapStockPayload(await readJson<unknown>(response)), symbol);
+      writeLocalCache(cacheKey, data);
+      if (IS_DEVELOPMENT) console.debug("[stockApi] stock proxy response", { symbol, price: data.canonicalPrice, status: data.canonicalQuoteStatus });
+      return data;
+    } catch (proxyError) {
+      if (IS_DEVELOPMENT) console.debug("[stockApi] stock proxy failed", { symbol, proxyUrl, proxyError });
+    }
     if (!fallback.canonicalPrice) clearLocalCache(cacheKey);
     return fallback;
   }
