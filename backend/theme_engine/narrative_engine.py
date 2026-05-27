@@ -20,22 +20,12 @@ def analyze_theme_narrative(theme: ThemeDefinition, news_limit_per_symbol: int =
 
 
 def analyze_all_narratives(limit: int = 12) -> Dict[str, Any]:
-    from .theme_rotation import get_cached_theme_snapshot
+    from .theme_rotation import _fallback_theme_row, get_cached_theme_snapshot
 
     snapshot = get_cached_theme_snapshot()
     if not snapshot:
-        return {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "status": "partial_data",
-            "lifecycle_state": "partial_live",
-            "top_narratives": [],
-            "emerging_narratives": [],
-            "weakening_narratives": [],
-            "crowded_narratives": [],
-            "defensive_narratives": [],
-            "narratives": [],
-            "summary": "Narrative acceleration awaits warmed theme leadership inputs.",
-        }
+        definitions = get_theme_definitions()[:limit]
+        snapshot = [_fallback_theme_row(theme) for theme in definitions]
     ranking = build_cross_theme_ranking(snapshot, limit=limit)
     universe = build_universe_ranking(snapshot, entity_type="theme", limit=limit)
     return {

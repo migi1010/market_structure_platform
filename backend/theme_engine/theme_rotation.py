@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
 
+from alpha_engine.scoring import bounded_score, confidence_label
 from quant_engine.data_pipeline import safe_float
 from quant_engine.narrative_engine import build_cross_theme_ranking, enrich_theme_narrative
 from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking
@@ -134,37 +136,74 @@ def theme_alignment_for_symbol(symbol: str, sector: str | None = None) -> Dict[s
 
 
 def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
+    from quant_engine.factors.lightweight import score_basket, score_symbol  # noqa: PLC0415
+
+    etf = theme.etf_symbols[0] if theme.etf_symbols else "SPY"
+    factors = score_symbol(etf)
+    basket = score_basket(theme.tickers, limit=3)
+    strength = _avg_optional(factors.get("alpha_score"), basket.get("score"), weights=(0.55, 0.45))
+    flow = bounded_score((factors.get("volume_participation") or strength or 50.0) * 0.45 + (factors.get("relative_strength_spy") or strength or 50.0) * 0.55)
+    emerging = bounded_score((strength or 50.0) * 0.50 + flow * 0.30 + (factors.get("trend_consistency") or 50.0) * 0.20)
+    overheating = bounded_score(max(18.0, (strength or 50.0) - 16.0) + max(0.0, flow - 70.0) * 0.40)
+    confidence = bounded_score(min(58.0, ((factors.get("confidence_score") or 24.0) + (basket.get("confidence_score") or 24.0)) / 2.0))
     return {
         "theme": theme.name,
         "category": theme.category,
         "description": theme.description,
-        "theme_strength_score": 50.0,
-        "theme_capital_flow_score": 50.0,
-        "emerging_score": 45.0,
-        "overheating_score": 45.0,
-        "relative_momentum": 0.0,
-        "etf_relative_strength": 0.0,
-        "volume_expansion": 1.0,
-        "institutional_accumulation": 50.0,
+        "theme_strength_score": strength,
+        "theme_capital_flow_score": flow,
+        "emerging_score": emerging,
+        "overheating_score": overheating,
+        "relative_momentum": ((factors.get("momentum_strength") or 50.0) - 50.0) / 100.0,
+        "etf_relative_strength": ((factors.get("relative_strength_spy") or 50.0) - 50.0) / 100.0,
+        "volume_expansion": max(0.2, (factors.get("volume_participation") or 50.0) / 50.0),
+        "institutional_accumulation": flow,
         "earnings_acceleration": 0.0,
         "revenue_acceleration": 0.0,
-        "capex_trend": 50.0,
-        "smart_money_accumulation": 50.0,
-        "narrative_strength": 50.0,
-        "narrative_acceleration": 45.0,
-        "narrative_saturation": 45.0,
-        "narrative_bubble_risk": 40.0,
-        "breadth_participation": 50.0,
+        "capex_trend": strength,
+        "smart_money_accumulation": flow,
+        "narrative_strength": strength,
+        "narrative_acceleration": emerging,
+        "narrative_saturation": overheating,
+        "narrative_bubble_risk": bounded_score(overheating * 0.62 + max(0.0, emerging - 72.0) * 0.35),
+        "breadth_participation": confidence,
         "leadership_concentration": 0.0,
-        "relative_strength_vs_spy": 0.0,
-        "options_activity": 50.0,
-        "supply_chain_acceleration": 50.0,
-        "macro_alignment": 50.0,
-        "leaders": [{"ticker": symbol, "momentum_3m": 0.0, "relative_volume": 1.0, "day_change_percent": 0.0} for symbol in theme.tickers[:4]],
+        "relative_strength_vs_spy": factors.get("relative_strength_spy"),
+        "options_activity": flow,
+        "supply_chain_acceleration": emerging,
+        "macro_alignment": strength,
+        "leaders": [
+            {
+                "ticker": str(row.get("symbol") or "").upper(),
+                "alpha_score": row.get("alpha_score"),
+                "momentum_3m": row.get("momentum_strength"),
+                "relative_volume": (row.get("volume_participation") or 50.0) / 50.0,
+                "day_change_percent": 0.0,
+            }
+            for row in (basket.get("leaders") or [])[:4]
+        ],
         "etfs": list(theme.etf_symbols),
         "macro_tags": list(theme.macro_alignment),
-        "explainability": ["Fallback row served because live market data was unavailable for this theme."],
+        "confidence_score": confidence,
+        "confidence_label": confidence_label(confidence),
+        "lifecycle_state": "partial_live",
+        "explainability": [f"Fallback row uses Render-safe 3-month ETF factors for {etf}."],
     }
+
+
+def _avg_optional(first: Any, second: Any, weights: tuple[float, float] = (0.5, 0.5)) -> float | None:
+    values: list[tuple[float, float]] = []
+    for value, weight in ((first, weights[0]), (second, weights[1])):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(parsed):
+            values.append((parsed, weight))
+    if not values:
+        return None
+    total = sum(weight for _, weight in values) or 1.0
+    return bounded_score(sum(value * weight for value, weight in values) / total)
 
 
 def _summary(themes: List[Dict[str, Any]]) -> str:

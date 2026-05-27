@@ -19,7 +19,6 @@ from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMid
 from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
-from qlib_engine.pipeline import SP500_UNIVERSE, UNIVERSE_PRESETS
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -41,6 +40,16 @@ BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 CACHE_MISS_WAIT_SECONDS = 12.0
 LIFECYCLE_STATES = {"cold_start", "warming", "partial_live", "live", "degraded", "recovery"}
 UNCACHEABLE_LIFECYCLES = {"cold_start", "warming", "partial_live", "degraded"}
+SP500_UNIVERSE = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "UNH"]
+UNIVERSE_PRESETS = {
+    "sp500": SP500_UNIVERSE,
+    "nasdaq100": ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "GOOGL", "COST", "TSLA", "AMD"],
+    "sox": ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MRVL"],
+    "ai_infrastructure": ["NVDA", "AMD", "AVGO", "ANET", "VRT", "ETN", "DELL", "SMCI", "PWR", "TT"],
+    "semiconductor": ["NVDA", "AMD", "AVGO", "QCOM", "AMAT", "LRCX", "KLAC", "TSM", "ASML", "MRVL"],
+    "energy": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "WMB"],
+    "defense": ["LMT", "RTX", "NOC", "GD", "LHX", "BA", "HII", "TXT", "TDG", "GE"],
+}
 ALPHA_ENDPOINT_LOCK = Lock()
 REGIME_ENDPOINT_LOCK = Lock()
 _HEAVY_CIRCUITS: dict[str, dict[str, Any]] = {
@@ -403,6 +412,8 @@ def _quote_aware_stock_fallback(symbol: str) -> dict:
 
 
 def _fallback_sector_rotation() -> list[dict]:
+    from quant_engine.factors.lightweight import score_symbol  # noqa: PLC0415
+
     sectors = [
         ("Technology", "XLK"), ("Energy", "XLE"), ("Healthcare", "XLV"), ("Financials", "XLF"),
         ("Industrials", "XLI"), ("Utilities", "XLU"), ("Consumer Discretionary", "XLY"),
@@ -414,35 +425,35 @@ def _fallback_sector_rotation() -> list[dict]:
     rows: list[dict] = []
     for index, (sector, etf) in enumerate(sectors):
         try:
-            history = get_history(etf, "3mo")
-            close = history["Close"].astype(float) if history is not None and not history.empty and "Close" in history else None
-            volume = history["Volume"].astype(float) if history is not None and not history.empty and "Volume" in history else None
-            ret = float(close.iloc[-1] / close.iloc[0] - 1.0) if close is not None and len(close) > 1 else 0.0
-            ret_1m = float(close.iloc[-1] / close.iloc[-22] - 1.0) if close is not None and len(close) > 22 else ret / 2.0
-            rel_volume = float(volume.iloc[-1] / max(volume.tail(45).mean(), 1.0)) if volume is not None and len(volume) > 10 else 1.0
-            score = bounded_score(48.0 + ret * 165.0 + (rel_volume - 1.0) * 18.0)
-            flow = bounded_score(48.0 + ret_1m * 180.0 + (rel_volume - 1.0) * 20.0)
-            confidence = bounded_score(35.0 + (65.0 if close is not None and len(close) > 44 else 15.0))
+            factors = score_symbol(etf)
+            score = bounded_score(factors.get("alpha_score") or 50.0)
+            flow = bounded_score((factors.get("volume_participation") or score) * 0.45 + (factors.get("momentum_strength") or score) * 0.55)
+            confidence = bounded_score(factors.get("confidence_score") or 25.0)
         except Exception:
-            score = bounded_score(40.0 + index * 2.3)
-            flow = bounded_score(38.0 + index * 1.7)
+            score = None
+            flow = None
             confidence = 25.0
         rows.append({
             "sector": sector,
             "score": score,
             "relative_strength": score,
             "flow": flow,
-            "rotation_state": "Partial Data" if confidence < 55 else "Accumulation" if score >= 65 else "Weakening" if score < 42 else "Neutral",
+            "rotation_state": "Partial Data" if score is None else "Partial Data" if confidence < 55 else "Accumulation" if score >= 65 else "Weakening" if score < 42 else "Neutral",
             "confidence_score": confidence,
             "confidence_label": confidence_label(confidence),
             "companies": [],
             "fallback": True,
-            "message": "Using cached ETF rotation proxies while live sector engine refreshes.",
+            "status": "partial_data",
+            "lifecycle_state": "partial_live",
+            "message": "Using Render-safe 3-month ETF factor scores while live sector engine refreshes.",
         })
-    return sorted(rows, key=lambda row: row["score"], reverse=True)
+    return sorted(rows, key=lambda row: row["score"] if row["score"] is not None else -1.0, reverse=True)
 
 
 def _fallback_theme_top() -> dict:
+    from quant_engine.factors.lightweight import score_symbol  # noqa: PLC0415
+    from quant_engine.theme_engine import enrich_theme_leadership  # noqa: PLC0415
+
     theme_map = [
         ("AI Infrastructure", "SMH"), ("Semiconductor", "SMH"), ("HBM", "SMH"), ("Glass Substrate", "SMH"),
         ("Electric Grid", "XLU"), ("Nuclear Energy", "URA"), ("Energy", "XLE"), ("Defense", "ITA"),
@@ -464,24 +475,25 @@ def _fallback_theme_top() -> dict:
     rows = []
     for index, (theme, etf) in enumerate(theme_map):
         try:
-            history = get_history(etf, "3mo")
-            close = history["Close"].astype(float) if history is not None and not history.empty and "Close" in history else None
-            volume = history["Volume"].astype(float) if history is not None and not history.empty and "Volume" in history else None
-            ret = float(close.iloc[-1] / close.iloc[0] - 1.0) if close is not None and len(close) > 1 else 0.0
-            acceleration = float(close.iloc[-1] / close.iloc[-22] - 1.0) - ret / 3.0 if close is not None and len(close) > 22 else 0.0
-            rel_volume = float(volume.iloc[-1] / max(volume.tail(45).mean(), 1.0)) if volume is not None and len(volume) > 10 else 1.0
+            factors = score_symbol(etf)
             adjustment = theme_specificity.get(theme, 0.0)
-            strength = bounded_score(46.0 + ret * 72.0 + acceleration * 35.0 + (rel_volume - 1.0) * 10.0 + adjustment)
-            flow = bounded_score(44.0 + ret * 30.0 + acceleration * 72.0 + (rel_volume - 1.0) * 18.0 + adjustment * 0.45)
-            emerging = bounded_score((strength * 0.56 + flow * 0.44) + max(0.0, acceleration) * 36.0 - max(0.0, ret - 0.34) * 18.0)
-            confidence = bounded_score(32.0 + (62.0 if close is not None and len(close) > 44 else 15.0))
+            strength = bounded_score((factors.get("alpha_score") or 50.0) + adjustment)
+            flow = bounded_score((factors.get("volume_participation") or strength) * 0.45 + (factors.get("relative_strength_spy") or strength) * 0.55 + adjustment * 0.35)
+            emerging = bounded_score(strength * 0.50 + flow * 0.30 + (factors.get("trend_consistency") or strength) * 0.20)
+            confidence = bounded_score(factors.get("confidence_score") or 24.0)
+            relative_momentum = ((factors.get("momentum_strength") or 50.0) - 50.0) / 100.0
+            etf_relative_strength = ((factors.get("relative_strength_spy") or 50.0) - 50.0) / 100.0
+            volume_expansion = max(0.2, (factors.get("volume_participation") or 50.0) / 50.0)
         except Exception:
-            strength = bounded_score(41.0 + index * 2.4)
-            flow = bounded_score(39.0 + index * 1.9)
-            emerging = bounded_score(38.0 + index * 2.1)
+            strength = None
+            flow = None
+            emerging = None
             confidence = 24.0
-        overheating = bounded_score(max(18.0, strength - 16.0) + max(0.0, flow - 70.0) * 0.40)
-        strength = bounded_score(strength - max(0.0, overheating - 70.0) * 0.12)
+            relative_momentum = 0.0
+            etf_relative_strength = 0.0
+            volume_expansion = 1.0
+        overheating = bounded_score(max(18.0, (strength or 50.0) - 16.0) + max(0.0, (flow or 50.0) - 70.0) * 0.40)
+        strength = bounded_score((strength or 50.0) - max(0.0, overheating - 70.0) * 0.12) if strength is not None else None
         rows.append({
             "theme": theme,
             "category": "Universal Theme",
@@ -490,20 +502,20 @@ def _fallback_theme_top() -> dict:
             "theme_capital_flow_score": flow,
             "emerging_score": emerging,
             "overheating_score": overheating,
-            "status": "Leadership" if strength >= 78 and flow >= 65 else "Emerging" if emerging >= 65 else "Accumulating" if strength >= 58 else "Cooling" if strength < 42 else "Watchlist",
+            "status": "Partial Data" if strength is None else "Leadership" if strength >= 78 and (flow or 0.0) >= 65 else "Emerging" if (emerging or 0.0) >= 65 else "Accumulating" if strength >= 58 else "Cooling" if strength < 42 else "Watchlist",
             "confidence_score": confidence,
             "confidence_label": confidence_label(confidence),
             "data_completeness": confidence,
-            "relative_momentum": 0.0,
-            "etf_relative_strength": 0.0,
-            "volume_expansion": 1.0,
+            "relative_momentum": relative_momentum,
+            "etf_relative_strength": etf_relative_strength,
+            "volume_expansion": volume_expansion,
             "institutional_accumulation": flow,
             "earnings_acceleration": 0.0,
             "revenue_acceleration": 0.0,
             "capex_trend": strength,
             "smart_money_accumulation": flow,
-            "narrative_strength": 45.0,
-            "narrative_acceleration": 45.0,
+            "narrative_strength": strength,
+            "narrative_acceleration": emerging,
             "narrative_saturation": 35.0,
             "narrative_bubble_risk": 30.0,
             "breadth_participation": confidence,
@@ -518,8 +530,10 @@ def _fallback_theme_top() -> dict:
             "explainability": ["Theme engine is using ETF and liquidity proxies while full supply-chain scoring refreshes."],
             "risks": ["Confidence is reduced until full constituent, narrative, and macro data are refreshed."],
             "fallback": True,
+            "lifecycle_state": "partial_live",
         })
-    rows = sorted(rows, key=lambda row: row["theme_strength_score"], reverse=True)
+    rows = sorted(rows, key=lambda row: row["theme_strength_score"] if row["theme_strength_score"] is not None else -1.0, reverse=True)
+    rows = [enrich_theme_leadership(row) for row in rows]
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "cross_asset_regime": {
@@ -636,12 +650,24 @@ def _fallback_alpha(universe: str) -> dict:
 
 
 def _partial_alpha(universe: str, reason: str) -> dict:
+    from quant_engine.factors.lightweight import score_symbols  # noqa: PLC0415
     from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking  # noqa: PLC0415
 
     universe_key = universe.lower().strip().replace(" ", "_").replace("/", "_").replace("-", "_")
     symbols = list(dict.fromkeys(UNIVERSE_PRESETS.get(universe_key, SP500_UNIVERSE)))[:10]
-    rows = [
-        enrich_universe_ranking({
+    scored = score_symbols(symbols, limit=10)
+    rows = []
+    for index, factor_row in enumerate(scored):
+        symbol = str(factor_row.get("symbol") or symbols[index]).upper()
+        alpha_score = factor_row.get("alpha_score")
+        confidence = factor_row.get("confidence_score")
+        momentum = factor_row.get("momentum_strength")
+        smart_money = factor_row.get("volume_participation")
+        volatility_quality = factor_row.get("volatility_quality")
+        drawdown_quality = factor_row.get("drawdown_pressure")
+        trend = factor_row.get("trend_consistency")
+        relative_strength = factor_row.get("relative_strength_spy")
+        rows.append(enrich_universe_ranking({
             "ticker": symbol,
             "company_name": symbol,
             "sector": "Partial Data",
@@ -649,53 +675,70 @@ def _partial_alpha(universe: str, reason: str) -> dict:
             "change": None,
             "change_percent": None,
             "quote_status": "unavailable",
-            "alpha_score": None,
-            "base_alpha_score": None,
-            "universe_context_score": None,
+            "alpha_score": alpha_score,
+            "base_alpha_score": alpha_score,
+            "universe_context_score": alpha_score,
             "universe_adjustment": None,
             "universe_percentile": None,
             "rank_in_universe": index + 1,
             "universe": universe_key.upper(),
-            "quality": None,
-            "growth": None,
-            "smart_money": None,
+            "quality": volatility_quality,
+            "growth": momentum,
+            "smart_money": smart_money,
             "valuation": None,
             "earnings_quality": None,
-            "market_structure": None,
-            "bubble_risk": None,
-            "sector_alignment": None,
-            "theme_alignment": None,
-            "theme_strength": None,
-            "theme_capital_flow": None,
-            "confidence_score": None,
-            "confidence_label": "Unavailable",
-            "theme_explanation": ["Heavy alpha pipeline is disabled for this runtime."],
+            "market_structure": trend,
+            "bubble_risk": bounded_score(100.0 - float(drawdown_quality)) if drawdown_quality is not None else None,
+            "sector_alignment": relative_strength,
+            "theme_alignment": relative_strength,
+            "theme_strength": momentum,
+            "theme_capital_flow": smart_money,
+            "confidence_score": confidence,
+            "confidence_label": confidence_label(float(confidence or 0.0)) if confidence is not None else "Unavailable",
+            "theme_explanation": [factor_row.get("explanation") or "Render-safe lightweight factor score."],
             "suggested_action": "Hold",
-            "factor_importance": {},
+            "factor_importance": {
+                "momentum": 0.33,
+                "relative_strength": 0.28,
+                "volatility_quality": 0.16,
+                "volume_participation": 0.13,
+                "risk_overlay": 0.10,
+            },
             "bullish_factors": [],
             "risk_factors": [reason],
-            "available": False,
+            "available": factor_row.get("available") is True,
             "status": "partial_data",
-        }, "stock", index + 1)
-        for index, symbol in enumerate(symbols)
-    ]
+            "lifecycle_state": factor_row.get("lifecycle_state") or "partial_live",
+            "lightweight_factors": factor_row.get("factors") or [],
+        }, "stock", index + 1))
+    rows = sorted(rows, key=lambda row: row.get("ranking_score") if row.get("ranking_score") is not None else row.get("alpha_score") or -1.0, reverse=True)
+    for index, row in enumerate(rows, start=1):
+        row["rank_in_universe"] = index
+        row["overall_rank"] = index
+        row["universe_percentile"] = round((len(rows) - index) / max(len(rows) - 1, 1) * 100.0, 2)
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "universe": universe_key.upper(),
-        "available": False,
+        "available": any(row.get("alpha_score") is not None for row in rows),
         "status": "partial_data",
         "lifecycle_state": "partial_live",
         "qlib_engine": {
             "available": False,
             "mode": "disabled",
             "provider": "Miji Quant",
-            "factor_set": "Render-safe partial data",
+            "factor_set": "Render-safe lightweight factors",
             "reason": reason,
         },
         "market_regime": {"name": "Partial Data", "confidence": None, "status": "partial_data"},
-        "factor_importance": {},
+        "factor_importance": {
+            "momentum": 0.33,
+            "relative_strength": 0.28,
+            "volatility_quality": 0.16,
+            "volume_participation": 0.13,
+            "risk_overlay": 0.10,
+        },
         "top_alpha": rows,
-        "recommendations": [],
+        "recommendations": rows[:5],
         "universe_screener": build_universe_ranking(rows, entity_type="stock", limit=10),
         "summary": reason,
     }
@@ -721,11 +764,17 @@ def _alpha_top_response(universe: str) -> dict:
     if cached is not None:
         return cached
     if not settings.miji_enable_heavy_alpha:
-        return _partial_alpha(normalized, "Heavy alpha pipeline is disabled by MIJI_ENABLE_HEAVY_ALPHA=false.")
+        result = _partial_alpha(normalized, "Heavy alpha pipeline is disabled by MIJI_ENABLE_HEAVY_ALPHA=false.")
+        set_cached_value(cache_key, _with_lifecycle(cache_key, result, result.get("lifecycle_state", "partial_live")), settings.alpha_ranking_ttl_seconds, "json")
+        return result
     if _circuit_open("alpha"):
-        return _partial_alpha(normalized, _circuit_reason("alpha"))
+        result = _partial_alpha(normalized, _circuit_reason("alpha"))
+        set_cached_value(cache_key, _with_lifecycle(cache_key, result, result.get("lifecycle_state", "partial_live")), settings.alpha_ranking_ttl_seconds, "json")
+        return result
     if not ALPHA_ENDPOINT_LOCK.acquire(blocking=False):
-        return _partial_alpha(normalized, "Heavy alpha pipeline is already running; returning partial data.")
+        result = _partial_alpha(normalized, "Heavy alpha pipeline is already running; returning partial data.")
+        set_cached_value(cache_key, _with_lifecycle(cache_key, result, result.get("lifecycle_state", "partial_live")), settings.alpha_ranking_ttl_seconds, "json")
+        return result
     try:
         from quant_engine.qlib_engine import run_alpha_ranking  # noqa: PLC0415
 
