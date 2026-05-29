@@ -1057,6 +1057,11 @@ function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
   };
 }
 
+function toFiniteNumber(v: unknown): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
   const rows = Array.isArray(data)
     ? data
@@ -1069,7 +1074,20 @@ function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
           : [];
   return rows
     .filter(isRecord)
-    .map((row) => normalizeSectorRotationRow(row as unknown as SectorRotation));
+    .map((row) => {
+      const normalized = normalizeSectorRotationRow(row as unknown as SectorRotation);
+      return {
+        ...normalized,
+        score: toFiniteNumber(normalized.score),
+        relative_strength: toFiniteNumber(normalized.relative_strength),
+        flow: toFiniteNumber(normalized.flow),
+        leadership: toFiniteNumber(normalized.leadership),
+        momentum: toFiniteNumber(normalized.momentum),
+        participation: toFiniteNumber(normalized.participation),
+        acceleration: toFiniteNumber(normalized.acceleration),
+        confidence_score: toFiniteNumber(normalized.confidence_score),
+      };
+    });
 }
 
 function normalizeAlphaQuantRow(row: AlphaQuantRow): AlphaQuantRow {

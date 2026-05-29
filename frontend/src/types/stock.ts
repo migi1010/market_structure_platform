@@ -164,10 +164,10 @@ export interface SectorCompany {
 
 export interface SectorRotation {
   sector: string;
-  score: number | null;
+  score: number | null | undefined;
   sector_score?: number | null;
-  relative_strength: number | null;
-  flow: number | null;
+  relative_strength: number | null | undefined;
+  flow: number | null | undefined;
   leadership?: number | null;
   momentum?: number | null;
   participation?: number | null;
