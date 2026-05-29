@@ -1057,6 +1057,21 @@ function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
   };
 }
 
+function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
+  const rows = Array.isArray(data)
+    ? data
+    : isRecord(data) && Array.isArray(data.sectors)
+      ? data.sectors
+      : isRecord(data) && Array.isArray(data.items)
+        ? data.items
+        : isRecord(data) && Array.isArray(data.data)
+          ? data.data
+          : [];
+  return rows
+    .filter(isRecord)
+    .map((row) => normalizeSectorRotationRow(row as unknown as SectorRotation));
+}
+
 function normalizeAlphaQuantRow(row: AlphaQuantRow): AlphaQuantRow {
   const score = firstPathNumber(row, "score", "ranking_score", "universe_ranking.ranking_score", "alpha_score", "theme_strength", "momentum_20d", "relative_strength_spy");
   const flow = firstPathNumber(row, "flow", "theme_capital_flow", "volume_participation", "smart_money");
@@ -1181,8 +1196,9 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
 }
 
 export async function fetchSectorRotation(): Promise<SectorRotation[]> {
-  const data = await fetchCachedJson<SectorRotation[]>("miji:sector-rotation:v3", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
-  return (data ?? []).map(normalizeSectorRotationRow);
+  const data = await fetchCachedJson<unknown>("miji:sector-rotation:v4", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
+  const sectors = normalizeSectorRotationResponse(data);
+  return sectors.length > 0 ? sectors : FALLBACK_SECTORS.map(normalizeSectorRotationRow);
 }
 
 export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {

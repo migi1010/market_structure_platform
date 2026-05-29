@@ -188,6 +188,7 @@ export interface SectorRotation {
   explanation?: string[];
   fallback?: boolean;
   message?: string;
+  status?: string;
   sector_rank?: number;
   leadership_state?: string;
   momentum_direction?: string;
