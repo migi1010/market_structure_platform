@@ -2,6 +2,7 @@ import type {
   AlphaQuantResponse,
   EmergingThemeResponse,
   MarketOverviewItem,
+  MarketOverviewResponse,
   OmniboxGroup,
   OmniboxIntent,
   OmniboxTargetTab,
@@ -1187,7 +1188,9 @@ export async function fetchSectorRotation(): Promise<SectorRotation[]> {
 export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {
   try {
     const response = await fetchWithRetry(`${API_URL}/market/overview`, { cache: "no-store" });
-    return readJson<MarketOverviewItem[]>(response);
+    const data = await readJson<MarketOverviewItem[] | MarketOverviewResponse>(response);
+    if (Array.isArray(data)) return data;
+    return Array.isArray(data.items) ? data.items : [];
   } catch {
     throw new Error("Connecting to quant engine...");
   }

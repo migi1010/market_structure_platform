@@ -249,8 +249,11 @@ def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
         return result.get("smart_money_score") is not None
     if ":earnings_quality:" in lowered_key and isinstance(result, dict):
         return result.get("earnings_quality_score") is not None
-    if ":market_overview" in lowered_key and isinstance(result, list):
-        return any(_finite_positive(item.get("price")) for item in result if isinstance(item, dict))
+    if ":market_overview" in lowered_key:
+        items = result.get("items") if isinstance(result, dict) else result
+        if isinstance(items, list):
+            return any(_finite_positive(item.get("price")) for item in items if isinstance(item, dict))
+        return False
     return True
 
 
@@ -951,8 +954,10 @@ def get_market_regime() -> dict:
 
 
 @app.get("/market/overview")
-def get_market_overview() -> list[dict]:
+def get_market_overview() -> dict:
     symbols = ["SPY", "QQQ", "SMH", "DIA", "IWM", "XLK", "XLF", "XLE", "XLV", "NVDA", "AAPL", "MSFT"]
+    per_symbol_budget_seconds = 2.5
+    overview_budget_seconds = 8.0
 
     def finite_or_none(value: Any) -> float | None:
         try:
@@ -961,24 +966,81 @@ def get_market_overview() -> list[dict]:
         except (TypeError, ValueError):
             return None
 
-    def build() -> list[dict]:
-        tape = []
-        for symbol in symbols:
-            enriched = central_stock_enrichment(symbol)
-            quote = enriched.get("quote") or {}
-            price = finite_or_none(quote.get("price"))
-            change = finite_or_none(quote.get("change"))
-            change_percent = finite_or_none(quote.get("change_percent"))
-            tape.append({
-                "ticker": symbol,
-                "price": round(price, 2) if price is not None else None,
-                "change": round(change, 2) if change is not None else None,
-                "change_percent": round(change_percent, 2) if change_percent is not None else None,
-                "quote_status": quote.get("status") or enriched.get("quote_status") or "unavailable",
-            })
-        return tape
+    def fallback_item(symbol: str, reason: str) -> dict:
+        return {
+            "ticker": symbol,
+            "price": None,
+            "change": None,
+            "change_percent": None,
+            "quote_status": "unavailable",
+            "lifecycle_state": "degraded",
+            "reason": reason,
+        }
 
-    return _guard(lambda: _cached_response(_schema_cache_key("market_overview"), settings.market_overview_ttl_seconds, build))
+    def quote_item(symbol: str) -> dict:
+        quote = get_quote(symbol)
+        price = finite_or_none(quote.get("currentPrice") or quote.get("regularMarketPrice") or quote.get("price"))
+        change = finite_or_none(quote.get("regularMarketChange") or quote.get("change"))
+        change_percent = finite_or_none(quote.get("regularMarketChangePercent") or quote.get("change_percent"))
+        status = str(quote.get("quoteStatus") or quote.get("quote_status") or "").lower()
+        if not status:
+            status = "live" if price is not None else "unavailable"
+        return {
+            "ticker": symbol,
+            "price": round(price, 2) if price is not None else None,
+            "change": round(change, 2) if change is not None else None,
+            "change_percent": round(change_percent, 2) if change_percent is not None else None,
+            "quote_status": status,
+            "lifecycle_state": "live" if price is not None and status not in {"unavailable", "fallback"} else "degraded",
+        }
+
+    def bounded_quote(symbol: str, timeout_seconds: float) -> tuple[dict, float, str | None]:
+        started = time.perf_counter()
+        future = BACKGROUND_EXECUTOR.submit(lambda: quote_item(symbol))
+        try:
+            item = future.result(timeout=timeout_seconds)
+            return item, (time.perf_counter() - started) * 1000.0, None
+        except TimeoutError:
+            future.cancel()
+            logger.warning("market overview quote timed out symbol=%s", symbol)
+            return fallback_item(symbol, "quote_timeout"), (time.perf_counter() - started) * 1000.0, f"{symbol}:timeout"
+        except Exception as exc:
+            logger.warning("market overview quote failed symbol=%s error=%s", symbol, exc)
+            return fallback_item(symbol, "quote_error"), (time.perf_counter() - started) * 1000.0, f"{symbol}:error"
+
+    def build() -> dict:
+        started = time.perf_counter()
+        tape: list[dict] = []
+        degraded_sections: list[str] = []
+        timing_ms: dict[str, float] = {}
+        for symbol in symbols:
+            remaining = overview_budget_seconds - (time.perf_counter() - started)
+            if remaining <= 0:
+                tape.append(fallback_item(symbol, "overview_budget_exceeded"))
+                degraded_sections.append(f"{symbol}:budget")
+                continue
+            item, elapsed_ms, degraded = bounded_quote(symbol, min(per_symbol_budget_seconds, remaining))
+            tape.append(item)
+            timing_ms[symbol] = round(elapsed_ms, 2)
+            if degraded:
+                degraded_sections.append(degraded)
+        live_count = sum(1 for item in tape if _finite_positive(item.get("price")))
+        lifecycle_state = "live" if live_count == len(tape) else "partial_live" if live_count > 0 else "degraded"
+        return {
+            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "overview_status": lifecycle_state,
+            "lifecycle_state": lifecycle_state,
+            "degraded_sections": degraded_sections,
+            "timing_ms": {**timing_ms, "total": round((time.perf_counter() - started) * 1000.0, 2)},
+            "items": tape,
+        }
+
+    return _guard(lambda: _cached_response(_schema_cache_key("market_overview_v2"), settings.market_overview_ttl_seconds, build))
+
+
+@app.get("/overview")
+def get_overview() -> dict:
+    return get_market_overview()
 
 
 @app.get("/sector/rotation")

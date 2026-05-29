@@ -23,7 +23,7 @@ function MarketTickerMarquee() {
         const result = await fetchMarketOverview();
         if (!cancelled && result?.length) setMarketOverviewData(result);
       } catch {
-        if (!cancelled) setMarketOverviewData(fallbackTape);
+        if (!cancelled) setMarketOverviewData((current) => current.length ? current : fallbackTape);
       }
     }
     loadTape();

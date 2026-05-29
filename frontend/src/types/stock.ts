@@ -90,6 +90,17 @@ export interface MarketOverviewItem {
   change: number | null;
   change_percent: number | null;
   quote_status?: string;
+  lifecycle_state?: string;
+  reason?: string;
+}
+
+export interface MarketOverviewResponse {
+  generated_at?: string;
+  overview_status?: "live" | "partial_live" | "degraded" | "unavailable" | string;
+  lifecycle_state?: "live" | "partial_live" | "degraded" | "unavailable" | string;
+  degraded_sections?: string[];
+  timing_ms?: Record<string, number>;
+  items: MarketOverviewItem[];
 }
 
 export type OmniboxIntent = "ticker" | "theme" | "sector" | "command" | "natural_language";
