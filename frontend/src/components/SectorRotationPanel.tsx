@@ -187,6 +187,13 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
 
   const active = sectors.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
   const activeRanking = active?.universe_ranking;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[sector-rotation] rendered sector object", active ?? null);
+    }
+  }, [active]);
+
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
     return (FALLBACK_COMPANIES[activeSector] ?? []).map((ticker, index) => ({
