@@ -201,16 +201,18 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
     };
   }, []);
 
-  const active = sectors.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
+  const renderArray = sectors;
+  const active = renderArray.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
   const activeRanking = active?.universe_ranking;
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("SECTOR_RENDER_ARRAY", sectors);
+      console.log("SECTORS_STATE", sectors);
+      console.log("RENDER_SOURCE_ARRAY", renderArray);
       console.log("ACTIVE_SECTOR", activeSector);
       console.log("SECTOR_RENDER_ROW", active ?? null);
     }
-  }, [active, activeSector, sectors]);
+  }, [active, activeSector, renderArray, sectors]);
 
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
@@ -226,8 +228,8 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
     }));
   }, [active?.companies, activeSector]);
   const sectorOptions = useMemo(
-    () => Array.from(new Set([...CANONICAL_SECTORS, ...sectors.map((sector) => sector.sector)])),
-    [sectors],
+    () => Array.from(new Set([...CANONICAL_SECTORS, ...renderArray.map((sector) => sector.sector)])),
+    [renderArray],
   );
 
   const selectSector = (sector: string) => {
@@ -250,12 +252,12 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
       <div className="miji-card-grid mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Leadership</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{sectors?.[0]?.sector ?? "Calibrating"}</p>
+          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{renderArray?.[0]?.sector ?? "Calibrating"}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Top sector by composite strength</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Avg Strength</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(sectors.map(sectorFactorScore)))}</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(renderArray.map(sectorFactorScore)))}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Across institutional sector universe</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
@@ -276,13 +278,13 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
       </div>
 
       <div className="miji-sector-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_500px]">
-        {loading && sectors.length === 0 ? (
+        {loading && renderArray.length === 0 ? (
           <SectorSkeleton />
         ) : (
           <div className="miji-sector-heatmap grid auto-rows-[148px] grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {sectors.map((sector) => {
+            {renderArray.map((sector) => {
               if (process.env.NODE_ENV === "development") {
-                console.log("SECTOR_RENDER_ROW", sector);
+                console.log("CARD_ROW", sector);
               }
               return (
                 <motion.button
