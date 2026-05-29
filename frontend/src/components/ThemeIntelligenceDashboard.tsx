@@ -193,18 +193,15 @@ function ThemeRow({
   onThemeSelect: (theme: string) => void;
 }) {
   const leadership = theme.leadership_intelligence;
-  const leadershipScore = firstFiniteScore(theme.leadership_score, leadership?.leadership_score);
+  const leadershipScore = theme.leadership;
   const narrative = isNarrativeIntelligence(theme.narrative_intelligence) ? theme.narrative_intelligence : null;
   const score = firstFiniteScore(
-    theme?.ranking_score,
-    theme?.theme_strength_score,
-    leadershipScore,
-    theme?.narrative_strength,
-    narrative?.narrative_strength,
-    theme?.acceleration_velocity,
-    narrative?.acceleration_velocity,
-    theme?.institutional_alignment,
-    narrative?.institutional_alignment,
+    theme.score,
+    theme.leadership,
+    theme.momentum,
+    theme.participation,
+    theme.acceleration,
+    narrative?.score,
   );
   const ranking = theme.universe_ranking;
   const leaders = relatedStocksForTheme(theme);
@@ -231,15 +228,15 @@ function ThemeRow({
       <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
         <div>
           <p className="text-[#6E7681]">Flow</p>
-          <p className={`font-mono font-semibold ${scoreTone(theme?.theme_capital_flow_score)}`}>{formatOptionalScore(theme?.theme_capital_flow_score)}</p>
+          <p className={`font-mono font-semibold ${scoreTone(theme.flow)}`}>{formatOptionalScore(theme.flow)}</p>
         </div>
         <div>
           <p className="text-[#6E7681]">RS vs SPY</p>
-          <p className="font-mono font-semibold text-[#C9D1D9]">{pct(theme?.relative_strength_vs_spy)}</p>
+          <p className="font-mono font-semibold text-[#C9D1D9]">{pct(theme.momentum)}</p>
         </div>
         <div>
           <p className="text-[#6E7681]">Breadth</p>
-          <p className="font-mono font-semibold text-[#C9D1D9]">{formatOptionalScore(theme?.breadth_participation)}{finiteScore(theme?.breadth_participation) !== null ? "%" : ""}</p>
+          <p className="font-mono font-semibold text-[#C9D1D9]">{formatOptionalScore(theme.participation)}{finiteScore(theme.participation) !== null ? "%" : ""}</p>
         </div>
       </div>
       {leadership && (
@@ -573,8 +570,8 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                   <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.narrative_name}</p>
                   <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">{item.narrative_state.replaceAll("_", " ")}</p>
                 </div>
-                <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(item.narrative_strength, item.acceleration_velocity, item.institutional_alignment, item.participation_breadth))}`}>
-                  {formatOptionalScore(firstFiniteScore(item.narrative_strength, item.acceleration_velocity, item.institutional_alignment, item.participation_breadth))}
+                <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}`}>
+                  {formatOptionalScore(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}
                 </p>
               </div>
               <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{item.capital_flow_semantics ?? item.explanation}</p>
@@ -623,8 +620,8 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                     <p className="truncate text-sm font-semibold text-[#E6EDF3]">{theme.theme}</p>
                     <p className="mt-1 text-xs text-[#9BA7B4]">{theme.category}</p>
                   </div>
-                  <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(theme.emerging_score, theme.acceleration_velocity, theme.narrative_strength, theme.ranking_score, theme.theme_strength_score))}`}>
-                    {formatOptionalScore(firstFiniteScore(theme.emerging_score, theme.acceleration_velocity, theme.narrative_strength, theme.ranking_score, theme.theme_strength_score))}
+                  <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(theme.score, theme.acceleration, theme.leadership, theme.momentum, theme.participation))}`}>
+                    {formatOptionalScore(firstFiniteScore(theme.score, theme.acceleration, theme.leadership, theme.momentum, theme.participation))}
                   </p>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-[#9BA7B4]">{theme.explainability?.[0] ?? "Acceleration detected across theme proxies."}</p>
@@ -652,9 +649,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.theme}</p>
-                  <p className="text-xs text-[#9BA7B4]">Volume {ratio(item.volume_expansion)} - Breadth {formatOptionalScore(item.breadth_participation)}{finiteScore(item.breadth_participation) !== null ? "%" : ""}</p>
+                  <p className="text-xs text-[#9BA7B4]">Momentum {formatOptionalScore(item.momentum)} - Breadth {formatOptionalScore(item.participation)}{finiteScore(item.participation) !== null ? "%" : ""}</p>
                 </div>
-                <p className={`font-mono font-semibold ${scoreTone(item.theme_capital_flow_score)}`}>{formatOptionalScore(item.theme_capital_flow_score)}</p>
+                <p className={`font-mono font-semibold ${scoreTone(item.flow)}`}>{formatOptionalScore(item.flow)}</p>
               </div>
             ))}
             {loading && flowItems.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-16" />)}
@@ -708,7 +705,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               {overheatedThemes.slice(0, 4).map((theme) => (
                 <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
                   <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-rose-300">{formatOptionalScore(theme.overheating_score)}</span>
+                  <span className="font-mono text-sm font-semibold text-rose-300">{formatOptionalScore(theme.score)}</span>
                 </div>
               ))}
               {loading && overheatedThemes.length === 0 && <ShimmerBlock className="h-20" />}
@@ -721,7 +718,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               {undervaluedThemes.slice(0, 4).map((theme) => (
                 <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
                   <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-emerald-300">{formatOptionalScore(theme.theme_strength_score)}</span>
+                  <span className="font-mono text-sm font-semibold text-emerald-300">{formatOptionalScore(theme.score)}</span>
                 </div>
               ))}
               {loading && undervaluedThemes.length === 0 && <ShimmerBlock className="h-20" />}

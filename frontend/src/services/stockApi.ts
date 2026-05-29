@@ -9,6 +9,9 @@ import type {
   SectorRotation,
   StockAnalysis,
   StockQuote,
+  AlphaQuantRow,
+  NarrativeIntelligence,
+  ThemeScore,
   ThemeCapitalFlowResponse,
   ThemeDetailResponse,
   ThemeNarrativeResponse,
@@ -870,9 +873,10 @@ function fallbackThemeTop(): ThemeTopResponse {
 
 function normalizeAlphaQuantResponse(data: AlphaQuantResponse): AlphaQuantResponse {
   const normalizeRow = (row: AlphaQuantResponse["top_alpha"][number]) => {
+    const normalized = normalizeAlphaQuantRow(row);
     const quote = normalizeQuote(row as unknown as Partial<StockAnalysis>, row.ticker);
     return {
-      ...row,
+      ...normalized,
       price: quote.price,
       change: quote.change,
       change_percent: quote.change_percent,
@@ -909,6 +913,176 @@ function normalizeThemeStocksResponse<T extends ThemeStocksResponse | ThemeDetai
     related_stocks: related,
     top_alpha_stocks: top,
     ...(supply ? { supply_chain: supply } : {}),
+  };
+}
+
+function pathNumber(source: unknown, path: string): number | null {
+  let current: unknown = source;
+  for (const segment of path.split(".")) {
+    if (!isRecord(current)) return null;
+    current = current[segment];
+  }
+  return validNumber(current);
+}
+
+function firstPathNumber(source: unknown, ...paths: string[]): number | null {
+  for (const path of paths) {
+    const value = pathNumber(source, path);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function normalizeNarrativeIntelligence<T extends Partial<NarrativeIntelligence>>(item: T): T {
+  const score = firstPathNumber(
+    item,
+    "score",
+    "narrative_strength",
+    "ranking_score",
+    "leadership_score",
+    "institutional_alignment",
+    "acceleration_velocity",
+    "participation_breadth",
+  );
+  const flow = firstPathNumber(item, "flow", "institutional_alignment", "theme_capital_flow_score", "volume_participation");
+  const relativeStrength = firstPathNumber(item, "relative_strength", "relative_strength_spy", "relative_strength_qqq", "momentum_60d", "momentum_20d");
+  const leadership = firstPathNumber(item, "leadership", "leadership_score", "institutional_alignment", "narrative_strength", "score");
+  const momentum = firstPathNumber(item, "momentum", "momentum_strength", "momentum_60d", "momentum_20d", "narrative_strength", "score");
+  const participation = firstPathNumber(item, "participation", "participation_breadth", "breadth_participation", "volume_participation");
+  const acceleration = firstPathNumber(item, "acceleration", "acceleration_velocity", "narrative_acceleration", "momentum_20d");
+  return {
+    ...item,
+    score,
+    flow,
+    relative_strength: relativeStrength,
+    narrative_strength: firstPathNumber(item, "narrative_strength", "score", "ranking_score", "leadership_score", "institutional_alignment") ?? item.narrative_strength ?? null,
+    acceleration_velocity: firstPathNumber(item, "acceleration_velocity", "acceleration", "narrative_acceleration", "momentum_20d") ?? item.acceleration_velocity ?? null,
+    participation_breadth: firstPathNumber(item, "participation_breadth", "participation", "breadth_participation", "volume_participation") ?? item.participation_breadth ?? null,
+    institutional_alignment: firstPathNumber(item, "institutional_alignment", "leadership", "flow", "theme_capital_flow_score") ?? item.institutional_alignment ?? null,
+    leadership,
+    momentum,
+    participation,
+    acceleration,
+  };
+}
+
+function normalizeThemeScore<T extends Partial<ThemeScore>>(theme: T): T {
+  const narrative = isRecord(theme.narrative_intelligence)
+    ? normalizeNarrativeIntelligence(theme.narrative_intelligence as Partial<NarrativeIntelligence>)
+    : theme.narrative_intelligence;
+  const score = firstPathNumber(
+    theme,
+    "score",
+    "theme_strength_score",
+    "ranking_score",
+    "universe_ranking.ranking_score",
+    "leadership_score",
+    "leadership_intelligence.leadership_score",
+    "narrative_intelligence.score",
+    "narrative_intelligence.narrative_strength",
+    "narrative_strength",
+    "acceleration_velocity",
+    "momentum_strength",
+    "relative_strength_spy",
+    "relative_strength_vs_spy",
+  );
+  const flow = firstPathNumber(
+    theme,
+    "flow",
+    "theme_capital_flow_score",
+    "institutional_alignment",
+    "narrative_intelligence.institutional_alignment",
+    "volume_participation",
+    "smart_money_accumulation",
+    "institutional_accumulation",
+  );
+  const relativeStrength = firstPathNumber(theme, "relative_strength", "relative_strength_spy", "relative_strength_vs_spy", "relative_strength_qqq", "etf_relative_strength", "relative_momentum");
+  const leadership = firstPathNumber(theme, "leadership", "leadership_score", "leadership_intelligence.leadership_score", "sector_leadership", "score", "theme_strength_score");
+  const momentum = firstPathNumber(theme, "momentum", "momentum_strength", "momentum_60d", "momentum_20d", "relative_momentum", "narrative_strength");
+  const participation = firstPathNumber(theme, "participation", "participation_breadth", "participation_score", "breadth_participation", "volume_expansion");
+  const acceleration = firstPathNumber(theme, "acceleration", "acceleration_velocity", "acceleration_score", "narrative_acceleration", "emerging_score");
+  return {
+    ...theme,
+    score,
+    flow,
+    relative_strength: relativeStrength,
+    relative_strength_vs_spy: relativeStrength ?? theme.relative_strength_vs_spy ?? null,
+    theme_strength_score: firstPathNumber(theme, "theme_strength_score", "score", "ranking_score", "leadership_score", "narrative_strength") ?? theme.theme_strength_score ?? null,
+    theme_capital_flow_score: flow ?? theme.theme_capital_flow_score ?? null,
+    leadership,
+    momentum,
+    participation,
+    acceleration,
+    ...(narrative ? { narrative_intelligence: narrative as ThemeScore["narrative_intelligence"] } : {}),
+  };
+}
+
+function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
+  const narrative = isRecord(sector.narrative_intelligence)
+    ? normalizeNarrativeIntelligence(sector.narrative_intelligence)
+    : sector.narrative_intelligence;
+  const score = firstPathNumber(
+    sector,
+    "score",
+    "sector_score",
+    "sector_strength",
+    "ranking_score",
+    "universe_ranking.ranking_score",
+    "leadership_score",
+    "leadership_intelligence.leadership_score",
+    "narrative_intelligence.score",
+    "narrative_intelligence.narrative_strength",
+    "momentum_20d",
+    "momentum_60d",
+    "relative_strength_spy",
+  );
+  const flow = firstPathNumber(sector, "flow", "capital_flow", "institutional_alignment", "volume_participation", "narrative_intelligence.institutional_alignment");
+  const relativeStrength = firstPathNumber(sector, "relative_strength", "relative_strength_spy", "relative_strength_qqq", "momentum_60d", "momentum_20d");
+  const leadership = firstPathNumber(sector, "leadership", "leadership_score", "leadership_intelligence.leadership_score", "sector_strength", "score", "ranking_score");
+  const momentum = firstPathNumber(sector, "momentum", "momentum_strength", "momentum_60d", "momentum_20d", "relative_strength_spy");
+  const participation = firstPathNumber(sector, "participation", "participation_breadth", "participation_strength", "leadership_intelligence.participation_strength", "volume_participation");
+  const acceleration = firstPathNumber(sector, "acceleration", "acceleration_velocity", "narrative_intelligence.acceleration_velocity", "momentum_20d");
+  return {
+    ...sector,
+    score,
+    sector_score: firstPathNumber(sector, "sector_score", "sector_strength", "score", "ranking_score") ?? sector.sector_score ?? null,
+    flow,
+    relative_strength: relativeStrength,
+    leadership,
+    momentum,
+    participation,
+    acceleration,
+    ...(narrative ? { narrative_intelligence: narrative } : {}),
+  };
+}
+
+function normalizeAlphaQuantRow(row: AlphaQuantRow): AlphaQuantRow {
+  const score = firstPathNumber(row, "score", "ranking_score", "universe_ranking.ranking_score", "alpha_score", "theme_strength", "momentum_20d", "relative_strength_spy");
+  const flow = firstPathNumber(row, "flow", "theme_capital_flow", "volume_participation", "smart_money");
+  const relativeStrength = firstPathNumber(row, "relative_strength", "relative_strength_spy", "relative_strength_qqq", "sector_alignment", "theme_alignment");
+  const leadership = firstPathNumber(row, "leadership", "ranking_score", "universe_ranking.ranking_score", "alpha_score", "sector_alignment", "theme_alignment", "theme_strength");
+  const momentum = firstPathNumber(row, "momentum", "momentum_60d", "momentum_20d", "growth", "theme_strength");
+  const participation = firstPathNumber(row, "participation", "volume_participation", "smart_money", "participation_breadth");
+  const acceleration = firstPathNumber(row, "acceleration", "acceleration_velocity", "momentum_20d", "trend_consistency");
+  return {
+    ...row,
+    score,
+    flow,
+    relative_strength: relativeStrength,
+    alpha_score: firstPathNumber(row, "alpha_score", "score", "ranking_score", "universe_ranking.ranking_score") ?? row.alpha_score ?? null,
+    ranking_score: firstPathNumber(row, "ranking_score", "universe_ranking.ranking_score", "score", "alpha_score") ?? row.ranking_score ?? null,
+    leadership,
+    momentum,
+    participation,
+    acceleration,
+    momentum_20d: firstPathNumber(row, "momentum_20d", "momentum") ?? row.momentum_20d ?? null,
+    momentum_60d: firstPathNumber(row, "momentum_60d", "momentum_strength", "momentum") ?? row.momentum_60d ?? null,
+    relative_strength_spy: firstPathNumber(row, "relative_strength_spy", "relative_strength", "sector_alignment") ?? row.relative_strength_spy ?? null,
+    relative_strength_qqq: firstPathNumber(row, "relative_strength_qqq", "theme_alignment") ?? row.relative_strength_qqq ?? null,
+    volatility_quality: firstPathNumber(row, "volatility_quality", "quality") ?? row.volatility_quality ?? null,
+    volume_participation: firstPathNumber(row, "volume_participation", "smart_money", "participation") ?? row.volume_participation ?? null,
+    drawdown_pressure: firstPathNumber(row, "drawdown_pressure", "bubble_risk") ?? row.drawdown_pressure ?? null,
+    trend_consistency: firstPathNumber(row, "trend_consistency", "market_structure") ?? row.trend_consistency ?? null,
   };
 }
 
@@ -1006,7 +1180,8 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
 }
 
 export async function fetchSectorRotation(): Promise<SectorRotation[]> {
-  return fetchCachedJson<SectorRotation[]>("miji:sector-rotation:v2", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
+  const data = await fetchCachedJson<SectorRotation[]>("miji:sector-rotation:v3", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
+  return (data ?? []).map(normalizeSectorRotationRow);
 }
 
 export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {
@@ -1031,26 +1206,34 @@ export async function warmupQuantEngine(): Promise<void> {
 }
 
 export async function fetchAlphaQuant(universe = "sp500"): Promise<AlphaQuantResponse> {
-  const data = await fetchFreshJson<AlphaQuantResponse>(`miji:alpha:v4:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
+  const data = await fetchFreshJson<AlphaQuantResponse>(`miji:alpha:v5:${universe}`, `${API_URL}/alpha/top?universe=${encodeURIComponent(universe)}`, fallbackAlpha(universe));
   return normalizeAlphaQuantResponse(data);
 }
 
 export async function fetchThemeTop(): Promise<ThemeTopResponse> {
-  return fetchFreshJson<ThemeTopResponse>("miji:theme-top:v3", `${API_URL}/theme/top`, fallbackThemeTop());
+  const data = await fetchFreshJson<ThemeTopResponse>("miji:theme-top:v4", `${API_URL}/theme/top`, fallbackThemeTop());
+  return {
+    ...data,
+    themes: (data.themes ?? []).map(normalizeThemeScore),
+  };
 }
 
 export async function fetchThemeEmerging(): Promise<EmergingThemeResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<EmergingThemeResponse>("miji:theme-emerging:v2", `${API_URL}/theme/emerging`, {
+  const data = await fetchCachedJson<EmergingThemeResponse>("miji:theme-emerging:v3", `${API_URL}/theme/emerging`, {
     generated_at: fallback.generated_at,
     emerging_themes: fallback.themes.slice(0, 6),
     summary: "Theme engine calibrating. No active emerging signal confirmed yet.",
   });
+  return {
+    ...data,
+    emerging_themes: (data.emerging_themes ?? []).map(normalizeThemeScore),
+  };
 }
 
 export async function fetchThemeRotation(): Promise<ThemeRotationResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<ThemeRotationResponse>("miji:theme-rotation:v2", `${API_URL}/theme/rotation`, {
+  const data = await fetchCachedJson<ThemeRotationResponse>("miji:theme-rotation:v3", `${API_URL}/theme/rotation`, {
     generated_at: fallback.generated_at,
     rotation_map: fallback.themes,
     strengthening: [],
@@ -1059,15 +1242,27 @@ export async function fetchThemeRotation(): Promise<ThemeRotationResponse> {
     undervalued_themes: [],
     summary: "Theme rotation matrix is calibrating.",
   });
+  return {
+    ...data,
+    rotation_map: (data.rotation_map ?? []).map(normalizeThemeScore),
+    strengthening: (data.strengthening ?? []).map(normalizeThemeScore),
+    weakening: (data.weakening ?? []).map(normalizeThemeScore),
+    overheated_themes: (data.overheated_themes ?? []).map(normalizeThemeScore),
+    undervalued_themes: (data.undervalued_themes ?? []).map(normalizeThemeScore),
+  };
 }
 
 export async function fetchThemeCapitalFlow(): Promise<ThemeCapitalFlowResponse> {
   const fallback = fallbackThemeTop();
-  return fetchCachedJson<ThemeCapitalFlowResponse>("miji:theme-flow:v2", `${API_URL}/theme/capital-flow`, {
+  const data = await fetchCachedJson<ThemeCapitalFlowResponse>("miji:theme-flow:v3", `${API_URL}/theme/capital-flow`, {
     generated_at: fallback.generated_at,
     capital_flow: fallback.themes,
     summary: "Capital flow engine warming. Awaiting finite lightweight factor inputs.",
   });
+  return {
+    ...data,
+    capital_flow: (data.capital_flow ?? []).map(normalizeThemeScore),
+  };
 }
 
 export async function fetchThemeSupplyChain(theme?: string): Promise<ThemeSupplyChainResponse> {
@@ -1089,12 +1284,21 @@ export async function fetchThemeSupplyChain(theme?: string): Promise<ThemeSupply
 }
 
 export async function fetchThemeNarrative(): Promise<ThemeNarrativeResponse> {
-  return fetchCachedJson<ThemeNarrativeResponse>("miji:theme-narrative:v2", `${API_URL}/theme/narrative`, {
+  const data = await fetchCachedJson<ThemeNarrativeResponse>("miji:theme-narrative:v3", `${API_URL}/theme/narrative`, {
     generated_at: new Date().toISOString(),
     status: "partial_data",
     lifecycle_state: "warming",
     narratives: [],
   });
+  return {
+    ...data,
+    narratives: (data.narratives ?? []).map(normalizeNarrativeIntelligence),
+    top_narratives: (data.top_narratives ?? []).map(normalizeNarrativeIntelligence),
+    emerging_narratives: (data.emerging_narratives ?? []).map(normalizeNarrativeIntelligence),
+    weakening_narratives: (data.weakening_narratives ?? []).map(normalizeNarrativeIntelligence),
+    crowded_narratives: (data.crowded_narratives ?? []).map(normalizeNarrativeIntelligence),
+    defensive_narratives: (data.defensive_narratives ?? []).map(normalizeNarrativeIntelligence),
+  };
 }
 
 export async function fetchThemeStocks(theme: string): Promise<ThemeStocksResponse> {

@@ -102,13 +102,10 @@ function sectorFactorScore(sector: SectorRotation | undefined): number | null {
   if (!sector) return null;
   return firstFiniteScore(
     sector.score,
-    sector.sector_score,
-    sector.ranking_score,
-    sector.leadership_intelligence?.confidence,
-    sector.participation_breadth,
-    sector.acceleration_velocity,
-    sector.institutional_alignment,
-    sector.narrative_intelligence?.narrative_strength,
+    sector.leadership,
+    sector.momentum,
+    sector.participation,
+    sector.acceleration,
   );
 }
 
@@ -236,7 +233,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Screener Rank</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(activeRanking?.ranking_score)}</p>
+          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(activeRanking?.ranking_score ?? active?.score)}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">{activeRanking?.market_classification?.replaceAll("_", " ") ?? "Awaiting factors"}</p>
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
@@ -344,7 +341,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                 ["Strength", sectorFactorScore(active)],
                 ["Capital Flow", active?.flow],
                 ["Relative Momentum", active?.relative_strength],
-                ["Narrative Velocity", active?.acceleration_velocity],
+                ["Acceleration", active?.acceleration],
                 ["Bubble Risk", averageFinite(activeCompanies.map((item) => item.bubble_score))],
               ].map(([label, value]) => (
                 <div key={label as string}>

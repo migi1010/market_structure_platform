@@ -51,33 +51,24 @@ const FactorBar = memo(function FactorBar({ label, value }: { label: string; val
   );
 });
 
-function rowFactorValue(row: AlphaQuantRow, factorId: string, fallback?: number | null): number | null {
-  const factor = row.lightweight_factors?.find((item) => item.factor_id === factorId);
-  return finiteScore(factor?.score) ?? finiteScore((row as unknown as Record<string, number | null | undefined>)[factorId]) ?? finiteScore(fallback);
-}
-
 function alphaFactors(row: AlphaQuantRow) {
   return [
-    ["20D Momentum", rowFactorValue(row, "momentum_20d", row.growth)],
-    ["60D Momentum", rowFactorValue(row, "momentum_60d", row.theme_strength)],
-    ["RS vs SPY", rowFactorValue(row, "relative_strength_spy", row.sector_alignment)],
-    ["RS vs QQQ", rowFactorValue(row, "relative_strength_qqq", row.theme_alignment)],
-    ["Vol Quality", rowFactorValue(row, "volatility_quality", row.quality)],
-    ["Volume", rowFactorValue(row, "volume_participation", row.smart_money)],
-    ["Drawdown", rowFactorValue(row, "drawdown_pressure", row.bubble_risk)],
-    ["Trend", rowFactorValue(row, "trend_consistency", row.market_structure)],
+    ["Momentum", row.momentum],
+    ["Leadership", row.leadership],
+    ["Participation", row.participation],
+    ["Acceleration", row.acceleration],
+    ["Vol Quality", row.volatility_quality],
+    ["Trend", row.trend_consistency],
   ] as const;
 }
 
 function primaryAlphaScore(row: AlphaQuantRow): number | null {
   const factorCandidates = [
-    row.ranking_score,
-    row.alpha_score,
-    rowFactorValue(row, "momentum_20d"),
-    rowFactorValue(row, "momentum_60d"),
-    rowFactorValue(row, "relative_strength_spy"),
-    rowFactorValue(row, "volatility_quality"),
-    row.theme_strength,
+    row.score,
+    row.leadership,
+    row.momentum,
+    row.participation,
+    row.acceleration,
   ];
   for (const value of factorCandidates) {
     const score = finiteScore(value);
@@ -150,7 +141,7 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         </div>
         <div className="text-right">
           <p className={`font-mono text-3xl font-semibold ${scoreColor(alphaScore)}`}>{formatScore(alphaScore)}</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{finiteScore(row.ranking_score) !== null ? "Ranking Score" : finiteScore(row.alpha_score) !== null ? "Alpha Score" : "Factor Score"}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Composite Score</p>
           <p className="mt-1 text-[10px] font-medium text-[#9BA7B4]">
             Rank in {row?.universe ?? "Universe"}: <span className="font-mono text-[#C9D1D9]">#{row?.rank_in_universe ?? "--"}</span>
           </p>
@@ -346,12 +337,12 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
               <button key={row.ticker} onClick={() => onTickerSelect(row.ticker)} className="w-full rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3 text-left transition hover:border-[#10B981]/35">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-lg font-semibold text-[#E6EDF3]">{row.ticker}</span>
-                  <span className={scoreColor(row.alpha_score)}>{formatScore(row.alpha_score)}</span>
+                  <span className={scoreColor(primaryAlphaScore(row))}>{formatScore(primaryAlphaScore(row))}</span>
                 </div>
                 <p className="mt-1 truncate text-xs text-[#9BA7B4]">{sanitizeCompanyName(row.company_name)}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-wide text-[#9BA7B4]">
-                  <span>Smart <b className="block text-[#10B981]">{formatScore(row.smart_money, 0)}</b></span>
-                  <span>Bubble <b className="block text-red-400">{formatScore(row.bubble_risk, 0)}</b></span>
+                  <span>Lead <b className="block text-[#10B981]">{formatScore(row.leadership, 0)}</b></span>
+                  <span>Mom <b className="block text-[#06B6D4]">{formatScore(row.momentum, 0)}</b></span>
                 </div>
               </button>
             ))}
