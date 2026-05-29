@@ -1058,7 +1058,10 @@ function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
 }
 
 function toFiniteNumber(v: unknown): number | undefined {
-  const n = Number(v);
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === "string" && v.trim() === "") return undefined;
+  if (typeof v !== "number" && typeof v !== "string") return undefined;
+  const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
 

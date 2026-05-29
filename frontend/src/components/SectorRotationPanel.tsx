@@ -71,8 +71,7 @@ function scoreLabel(score: number | null | undefined): string {
   if (value >= 90) return "Exceptional";
   if (value >= 75) return "Strong";
   if (value >= 50) return "Neutral";
-  if (value >= 25) return "Weak";
-  return "Distressed";
+  return "Weak";
 }
 
 function formatOptionalScore(value: number | null | undefined): string {
@@ -96,6 +95,14 @@ function firstFiniteScore(...values: Array<number | null | undefined>): number |
     if (score !== null) return score;
   }
   return null;
+}
+
+function metricBarWidth(value: number | null | undefined): string {
+  const score = finiteScore(value);
+  if (score === null) return "0%";
+  if (score < 0) return "0%";
+  if (score > 100) return "100%";
+  return `${score}%`;
 }
 
 function sectorFactorScore(sector: SectorRotation | undefined): number | null {
@@ -268,7 +275,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                   <div>
                     <div className="flex items-end justify-between">
                       <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sectorFactorScore(sector))}</p>
-                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{scoreLabel(sectorFactorScore(sector))}</span>
+                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sectorFactorScore(sector))}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
                       <span>RS {formatOptionalScore(sector.relative_strength)}</span>
@@ -350,7 +357,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                     <span className="font-mono text-[#C9D1D9]">{formatOptionalScore(value as number | null | undefined)}</span>
                   </div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-[#0A0C10]">
-                    <div className="h-full rounded-full bg-amber-200" style={{ width: `${finiteScore(value as number | null | undefined) === null ? 0 : Math.min(100, Math.max(0, Number(value)))}%` }} />
+                    <div className="h-full rounded-full bg-amber-200" style={{ width: metricBarWidth(value as number | null | undefined) }} />
                   </div>
                 </div>
               ))}
@@ -376,14 +383,14 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                     </div>
                     <p className="mt-1 truncate text-sm text-[#9BA7B4]">{sanitizeCompanyName(company.company_name)}</p>
                   </div>
-                  <span className={finiteScore(company.change_percent) === null ? "font-mono text-sm font-semibold text-[#6E7681]" : Number(company.change_percent) >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
+                  <span className={finiteScore(company.change_percent) === null ? "font-mono text-sm font-semibold text-[#6E7681]" : (finiteScore(company.change_percent) as number) >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
                     {formatPercent(company.change_percent)}
                   </span>
                 </div>
                 <div className="mt-4 grid grid-cols-4 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
                   <span>Cap <b className="block text-[#C9D1D9]">{money(company.market_cap)}</b></span>
                   <span>Alpha <b className="block text-amber-200">{formatOptionalScore(company.alpha_score)}</b></span>
-                  <span>Bubble <b className={Number(company.bubble_score) >= 70 ? "block text-rose-300" : "block text-[#C9D1D9]"}>{formatOptionalScore(company.bubble_score)}</b></span>
+                  <span>Bubble <b className={(finiteScore(company.bubble_score) ?? -Infinity) >= 70 ? "block text-rose-300" : "block text-[#C9D1D9]"}>{formatOptionalScore(company.bubble_score)}</b></span>
                   <span>RS <b className="block text-emerald-300">{formatOptionalScore(company.relative_strength)}</b></span>
                 </div>
               </button>
