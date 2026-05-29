@@ -41,8 +41,13 @@ const FALLBACK_COMPANIES: Record<string, string[]> = {
   "Communication Services": ["META", "GOOGL", "GOOG", "NFLX", "DIS", "TMUS"],
 };
 
-function finiteScore(value: number | null | undefined): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function finiteScore(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value.replace(/[$,%\s,]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function money(value: number | null | undefined): string {
@@ -75,12 +80,18 @@ function scoreLabel(score: number | null | undefined): string {
 }
 
 function formatOptionalScore(value: number | null | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) : "--";
+  const numeric = finiteScore(value);
+  return numeric === null ? "--" : numeric.toFixed(2);
 }
 
 function formatPercent(value: number | null | undefined): string {
   const numeric = finiteScore(value);
   return numeric === null ? "--" : `${numeric >= 0 ? "+" : ""}${numeric.toFixed(2)}%`;
+}
+
+function formatRank(value: number | null | undefined): string {
+  const numeric = finiteScore(value);
+  return numeric === null ? "-" : numeric.toFixed(0);
 }
 
 function averageFinite(values: Array<number | null | undefined>): number | null {
@@ -107,13 +118,7 @@ function metricBarWidth(value: number | null | undefined): string {
 
 function sectorFactorScore(sector: SectorRotation | undefined): number | null {
   if (!sector) return null;
-  return firstFiniteScore(
-    sector.score,
-    sector.leadership,
-    sector.momentum,
-    sector.participation,
-    sector.acceleration,
-  );
+  return finiteScore(sector.score);
 }
 
 function sectorExplanation(sector: SectorRotation | undefined, name: string): string {
@@ -146,8 +151,9 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
 
   useEffect(() => {
     if (!selectedSector) return;
+    if (sectors.length > 0 && !sectors.some((sector) => sector.sector.toLowerCase() === selectedSector.toLowerCase())) return;
     setActiveSector(selectedSector);
-  }, [selectedSector]);
+  }, [selectedSector, sectors]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +163,14 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         const result = await fetchSectorRotation();
         if (!cancelled) {
           setSectors(result);
-          setActiveSector((current) => current || result?.[0]?.sector || selectedSector || "Technology");
+          setActiveSector((current) => {
+            const currentMatch = result.find((sector) => sector.sector.toLowerCase() === current.toLowerCase());
+            if (currentMatch) return currentMatch.sector;
+            const selectedMatch = selectedSector
+              ? result.find((sector) => sector.sector.toLowerCase() === selectedSector.toLowerCase())
+              : undefined;
+            return selectedMatch?.sector ?? result?.[0]?.sector ?? "Technology";
+          });
         }
       } catch {
         if (!cancelled) setSectors([]);
@@ -190,9 +203,10 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
-      console.debug("[sector-rotation] rendered sector object", active ?? null);
+      console.log("ACTIVE_SECTOR", activeSector);
+      console.log("SECTOR_RENDER_ROW", active ?? null);
     }
-  }, [active]);
+  }, [active, activeSector]);
 
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
@@ -252,7 +266,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         </div>
         <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Rotation State</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? active?.rotation_state ?? scoreLabel(active?.score)}</p>
+          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.rotation_state ?? active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? scoreLabel(active?.score)}</p>
           <p className="mt-1 text-sm text-[#9BA7B4]">Momentum and risk-adjusted sector status</p>
         </div>
       </div>
@@ -263,6 +277,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         ) : (
           <div className="miji-sector-heatmap grid auto-rows-[148px] grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {sectors.map((sector) => (
+              process.env.NODE_ENV === "development" && console.log("SECTOR_RENDER_ROW", sector),
               <motion.button
                 key={sector.sector}
                 onClick={() => selectSector(sector.sector)}
@@ -271,7 +286,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                 transition={{ duration: 0.18 }}
                 className={`miji-card relative overflow-hidden rounded-2xl border p-5 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition ${
                   activeSector === sector.sector ? "border-amber-400/30" : "border-[#2B313C]"
-                } bg-gradient-to-br ${gradient(sectorFactorScore(sector))}`}
+                } bg-gradient-to-br ${gradient(sector.score)}`}
               >
                 <div className="absolute inset-0 bg-[#0A0C10]/20" />
                 <div className="relative flex h-full flex-col justify-between">
@@ -281,12 +296,12 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                   </div>
                   <div>
                     <div className="flex items-end justify-between">
-                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sectorFactorScore(sector))}</p>
-                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sectorFactorScore(sector))}</span>
+                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
+                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
                       <span>RS {formatOptionalScore(sector.relative_strength)}</span>
-                      <span>Flow {formatOptionalScore(sector.flow)}</span>
+                      <span>FLOW {formatOptionalScore(sector.flow)}</span>
                     </div>
                   </div>
                 </div>
@@ -312,7 +327,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Sector Drilldown</p>
               <h2 className="text-2xl font-semibold tracking-wide text-[#E6EDF3]">{active?.sector ?? activeSector}</h2>
               <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
-                {active?.momentum_direction ? `${active.momentum_direction} / rank ${active.sector_rank ?? "--"}` : "Workspace Focus"}
+                {active?.momentum_direction ? `${active.momentum_direction} / rank ${formatRank(active.sector_rank)}` : "Workspace Focus"}
               </p>
               </div>
               <ChevronDown className={`shrink-0 text-[#9BA7B4] transition ${sectorDropdownOpen ? "rotate-180" : ""}`} size={20} />
