@@ -162,6 +162,9 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
       try {
         const result = await fetchSectorRotation();
         if (!cancelled) {
+          if (process.env.NODE_ENV === "development") {
+            console.log("SECTOR_STATE_SET_INPUT", result);
+          }
           setSectors(result);
           setActiveSector((current) => {
             const currentMatch = result.find((sector) => sector.sector.toLowerCase() === current.toLowerCase());
@@ -203,10 +206,11 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
+      console.log("SECTOR_RENDER_ARRAY", sectors);
       console.log("ACTIVE_SECTOR", activeSector);
       console.log("SECTOR_RENDER_ROW", active ?? null);
     }
-  }, [active, activeSector]);
+  }, [active, activeSector, sectors]);
 
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
@@ -276,37 +280,41 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           <SectorSkeleton />
         ) : (
           <div className="miji-sector-heatmap grid auto-rows-[148px] grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {sectors.map((sector) => (
-              process.env.NODE_ENV === "development" && console.log("SECTOR_RENDER_ROW", sector),
-              <motion.button
-                key={sector.sector}
-                onClick={() => selectSector(sector.sector)}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.18 }}
-                className={`miji-card relative overflow-hidden rounded-2xl border p-5 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition ${
-                  activeSector === sector.sector ? "border-amber-400/30" : "border-[#2B313C]"
-                } bg-gradient-to-br ${gradient(sector.score)}`}
-              >
-                <div className="absolute inset-0 bg-[#0A0C10]/20" />
-                <div className="relative flex h-full flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold tracking-wide text-[#E6EDF3]">{sector.sector}</span>
-                    <Radar size={18} className="text-[#E6EDF3]/75" />
-                  </div>
-                  <div>
-                    <div className="flex items-end justify-between">
-                      <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
-                      <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
+            {sectors.map((sector) => {
+              if (process.env.NODE_ENV === "development") {
+                console.log("SECTOR_RENDER_ROW", sector);
+              }
+              return (
+                <motion.button
+                  key={sector.sector}
+                  onClick={() => selectSector(sector.sector)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className={`miji-card relative overflow-hidden rounded-2xl border p-5 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition ${
+                    activeSector === sector.sector ? "border-amber-400/30" : "border-[#2B313C]"
+                  } bg-gradient-to-br ${gradient(sector.score)}`}
+                >
+                  <div className="absolute inset-0 bg-[#0A0C10]/20" />
+                  <div className="relative flex h-full flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-semibold tracking-wide text-[#E6EDF3]">{sector.sector}</span>
+                      <Radar size={18} className="text-[#E6EDF3]/75" />
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
-                      <span>RS {formatOptionalScore(sector.relative_strength)}</span>
-                      <span>FLOW {formatOptionalScore(sector.flow)}</span>
+                    <div>
+                      <div className="flex items-end justify-between">
+                        <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
+                        <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
+                        <span>RS {formatOptionalScore(sector.relative_strength)}</span>
+                        <span>FLOW {formatOptionalScore(sector.flow)}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.button>
-            ))}
+                </motion.button>
+              );
+            })}
           </div>
         )}
 

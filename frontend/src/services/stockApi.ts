@@ -1219,13 +1219,17 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
 export async function fetchSectorRotation(): Promise<SectorRotation[]> {
   const data = await fetchFreshJson<unknown>("miji:sector-rotation:v5", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
   if (IS_DEVELOPMENT) {
-    console.debug("[sector-rotation] raw API payload", data);
+    console.log("SECTOR_RAW_API_PAYLOAD", data);
   }
   const sectors = normalizeSectorRotationResponse(data);
   if (IS_DEVELOPMENT) {
-    console.debug("[sector-rotation] normalized payload", sectors);
+    console.log("SECTOR_NORMALIZED_PAYLOAD", sectors);
   }
-  return sectors.length > 0 ? sectors : FALLBACK_SECTORS.map(normalizeSectorRotationRow);
+  const result = sectors.length > 0 ? sectors : FALLBACK_SECTORS.map(normalizeSectorRotationRow);
+  if (IS_DEVELOPMENT) {
+    console.log("SECTOR_FETCH_RETURN", result);
+  }
+  return result;
 }
 
 export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {
