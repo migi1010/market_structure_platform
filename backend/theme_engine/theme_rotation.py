@@ -13,6 +13,16 @@ from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_
 from quant_engine.theme_engine import enrich_theme_leadership
 from settings import get_settings
 
+from .forecast_engine import (
+    compute_capital_rotation,
+    compute_horizon_scores,
+    compute_residual_strength,
+    explain_forecast,
+    percentile_rescale,
+    update_score_history,
+    THEME_PARENT,
+    THEME_PEERS,
+)
 from .supply_chain_mapper import map_supply_chain
 from .theme_detector import ThemeDefinition, find_theme_exposure, get_theme_definitions
 from .theme_scoring import detect_cross_asset_regime, score_theme, symbol_market_snapshot
@@ -33,6 +43,92 @@ def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
             row = _fallback_theme_row(theme)
         rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(row)), "theme"))
     rows.sort(key=lambda item: safe_float(item.get("ranking_score") or item.get("theme_strength_score")), reverse=True)
+
+    # ------------------------------------------------------------------
+    # Phase 6.0B: Cross-sectional percentile rescaling + new forecast fields
+    # ------------------------------------------------------------------
+    # Build raw score map for residual / rotation / rescaling
+    raw_scores: Dict[str, float] = {
+        row["theme"]: safe_float(row.get("raw_strength_score") or row.get("theme_strength_score"))
+        for row in rows
+    }
+    all_metrics: Dict[str, Dict[str, Any]] = {
+        row["theme"]: {
+            "acceleration":   safe_float(row.get("supply_chain_acceleration", 50.0)) / 100.0 - 0.50,  # back to approx unit scale
+            "momentum_1m":    safe_float(row.get("relative_momentum", 0.0)) / 100.0 + safe_float(row.get("etf_relative_strength", 0.0)) / 100.0,
+        }
+        for row in rows
+    }
+
+    # Percentile-rescale theme_strength_score across all themes (prevents all-100 saturation)
+    calibrated = percentile_rescale(raw_scores, target_low=26.0, target_high=95.0)
+
+    for row in rows:
+        theme_name = row["theme"]
+        # Rescaled primary score
+        row["theme_strength_score"] = calibrated.get(theme_name, row["theme_strength_score"])
+
+        # Residual strength vs parent sector
+        row["residual_strength_score"] = compute_residual_strength(theme_name, raw_scores)
+
+        # Capital rotation signal
+        row["capital_rotation_score"] = compute_capital_rotation(theme_name, all_metrics)
+
+        # Horizon-differentiated scores
+        h_metrics = {
+            "momentum_1m":          safe_float(row.get("relative_momentum", 0.0)) / 100.0 * 100.0 + 50.0,
+            "momentum_3m":          bounded_score(50.0 + safe_float(row.get("relative_momentum", 0.0)) * 0.8),
+            "acceleration":         safe_float(row.get("narrative_acceleration") or row.get("supply_chain_acceleration") or 50.0),
+            "volume_expansion":     safe_float(row.get("volume_expansion") or row.get("options_activity") or 50.0),
+            "breadth":              safe_float(row.get("breadth_participation") or row.get("confidence_score") or 50.0),
+            "macro_alignment":      safe_float(row.get("macro_alignment") or row.get("theme_strength_score") or 50.0),
+            "capital_rotation":     row["capital_rotation_score"],
+            "residual_vs_parent":   row["residual_strength_score"],
+            "structural_leadership": safe_float(row.get("institutional_accumulation") or row.get("smart_money_accumulation") or 50.0),
+            "crowding_penalty":     safe_float(row.get("crowding_penalty") or row.get("overheating_score") or 20.0),
+        }
+        horizons = compute_horizon_scores(
+            theme_name=theme_name,
+            metrics=h_metrics,
+            macro_state={},
+            raw_scores=raw_scores,
+        )
+        row["forecast_score_1w"] = horizons["1w"]
+        row["forecast_score_1m"] = horizons["1m"]
+        row["forecast_score_1m"] = calibrated.get(theme_name, horizons["1m"])  # align 1m to rescaled
+        row["forecast_score_3m"] = horizons["3m"]
+
+        # Parent / peer metadata
+        row.setdefault("parent_theme", THEME_PARENT.get(theme_name))
+        row.setdefault("peer_themes", THEME_PEERS.get(theme_name, []))
+        row.setdefault("crowding_penalty", safe_float(row.get("overheating_score", 20.0)))
+        row.setdefault("forecast_confidence", safe_float(row.get("confidence_score", 50.0)))
+        row.setdefault("forecast_stability", 60.0)
+
+        # Update score history for next-period stability
+        update_score_history(theme_name, row["theme_strength_score"])
+
+        # Enrich explainability with Phase 6.0B signals
+        new_explanation = explain_forecast(
+            theme_name=theme_name,
+            score_1w=row["forecast_score_1w"],
+            score_1m=row["forecast_score_1m"],
+            score_3m=row["forecast_score_3m"],
+            residual=row["residual_strength_score"],
+            capital_rotation=row["capital_rotation_score"],
+            crowding=row["crowding_penalty"],
+            macro_alignment=safe_float(row.get("macro_alignment") or row.get("theme_strength_score") or 50.0),
+            forecast_confidence=row["forecast_confidence"],
+        )
+        existing = row.get("explainability") or []
+        if isinstance(existing, list):
+            # Merge: new signals first, keep legacy explanations that are unique
+            seen = set(new_explanation)
+            merged = new_explanation + [e for e in existing if e not in seen]
+            row["explainability"] = merged[:6]  # cap at 6 lines
+        else:
+            row["explainability"] = new_explanation
+
     return rows
 
 

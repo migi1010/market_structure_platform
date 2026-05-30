@@ -12,11 +12,19 @@ from alpha_engine.scoring import bounded_score, confidence_label
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
 from settings import get_settings
 
+from .forecast_engine import (
+    compute_crowding_penalty_raw,
+    compute_crowding_score,
+    compute_forecast_confidence,
+    compute_forecast_stability,
+    compute_residual_strength,
+    compute_capital_rotation,
+    explain_forecast,
+    update_score_history,
+    THEME_PARENT,
+    THEME_PEERS,
+)
 from .theme_detector import ThemeDefinition
-
-
-def _pct(now: float, then: float) -> float:
-    return now / then - 1.0 if then > 0 else 0.0
 
 
 def _avg(values: List[float], default: float = 0.0) -> float:
@@ -189,7 +197,11 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
     revenue_score = bounded_score(50.0 + revenue_acceleration * 72.0)
     breadth_score = bounded_score(breadth * 100.0)
     leadership_balance_score = bounded_score(100.0 - min(100.0, leadership_concentration * 150.0))
-    theme_strength_score = bounded_score(
+    # -----------------------------------------------------------------------
+    # Phase 6.0B: Compute raw weighted sum BEFORE bounded_score so that the
+    # crowding penalty is effective even when all themes score 95-100.
+    # -----------------------------------------------------------------------
+    raw_weighted_sum = (
         relative_momentum_score * 0.16
         + etf_relative_strength_score * 0.11
         + volume_score * 0.09
@@ -205,6 +217,27 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
         + supply_chain_acceleration * 0.03
         + macro_alignment * 0.10
     )
+
+    # Crowding penalty applied to raw sum BEFORE clamping (Part 3 fix)
+    avg_acceleration = _avg([item["acceleration"] for item in equity_metrics])
+    avg_ret_1m = _avg([item["ret_1m"] for item in equity_metrics])
+    avg_volatility = _avg([item["volatility"] for item in equity_metrics], 0.30)
+    crowding_raw_penalty = compute_crowding_penalty_raw(
+        ret_1m=avg_ret_1m,
+        acceleration=avg_acceleration,
+        relative_volume=volume_expansion,
+        volatility=avg_volatility,
+        leadership_concentration=leadership_concentration,
+    )
+    crowding_display = compute_crowding_score(
+        ret_1m=avg_ret_1m,
+        acceleration=avg_acceleration,
+        relative_volume=volume_expansion,
+        volatility=avg_volatility,
+        leadership_concentration=leadership_concentration,
+    )
+    theme_strength_score = bounded_score(raw_weighted_sum - crowding_raw_penalty)
+
     capital_flow_score = bounded_score(
         smart_money_accumulation * 0.34
         + institutional_accumulation * 0.28
@@ -213,15 +246,21 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
         + options_activity * 0.08
     )
     emerging_score = bounded_score(
-        bounded_score(_avg([item["acceleration"] for item in equity_metrics]) * 120.0 + 48.0) * 0.32
+        bounded_score(avg_acceleration * 120.0 + 48.0) * 0.32
         + capital_flow_score * 0.28
         + narrative["narrative_acceleration"] * 0.18
         + supply_chain_acceleration * 0.12
         + macro_alignment * 0.10
     )
-    overheating_score = bounded_score(valuation_heat * 0.38 + narrative["narrative_saturation"] * 0.22 + max(0.0, leadership_concentration * 100.0 - 35.0) * 0.28 + options_activity * 0.12)
-    theme_strength_score = bounded_score(theme_strength_score - max(0.0, overheating_score - 72.0) * 0.16)
+    overheating_score = bounded_score(
+        valuation_heat * 0.38
+        + narrative["narrative_saturation"] * 0.22
+        + max(0.0, leadership_concentration * 100.0 - 35.0) * 0.28
+        + options_activity * 0.12
+    )
+    # Secondary overheating adjustment (capital flow only; strength already penalized above)
     capital_flow_score = bounded_score(capital_flow_score - max(0.0, overheating_score - 82.0) * 0.10)
+
     data_completeness = bounded_score(
         min(len([item for item in equity_metrics if item["price"] > 0]), max(len(theme.tickers[:5]), 1)) / max(len(theme.tickers[:5]), 1) * 36.0
         + min(len(etf_metrics), max(len(theme.etf_symbols), 1)) / max(len(theme.etf_symbols), 1) * 22.0
@@ -231,6 +270,24 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
     )
     confidence_score = bounded_score(data_completeness - max(0.0, overheating_score - 82.0) * 0.10)
     status = _theme_status(theme_strength_score, emerging_score, overheating_score, capital_flow_score)
+
+    # -----------------------------------------------------------------------
+    # Part 4 — Calibrated forecast confidence (independent from score)
+    # -----------------------------------------------------------------------
+    subscores = [
+        relative_momentum_score, etf_relative_strength_score, volume_score,
+        institutional_accumulation, earnings_score, revenue_score, macro_alignment,
+    ]
+    forecast_confidence = compute_forecast_confidence(
+        subscores=subscores,
+        breadth=breadth,
+        macro_alignment=macro_alignment,
+        theme_name=theme.name,
+    )
+    forecast_stability = compute_forecast_stability(theme.name)
+
+    # Update history for next-period stability scoring
+    update_score_history(theme.name, theme_strength_score)
 
     return {
         "theme": theme.name,
@@ -273,6 +330,14 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
         ],
         "etfs": list(theme.etf_symbols),
         "macro_tags": list(theme.macro_alignment),
+        # Phase 6.0B new fields
+        "raw_strength_score": round(raw_weighted_sum, 1),
+        "crowding_penalty": round(crowding_display, 1),
+        "forecast_confidence": forecast_confidence,
+        "forecast_stability": forecast_stability,
+        "parent_theme": THEME_PARENT.get(theme.name),
+        "peer_themes": THEME_PEERS.get(theme.name, []),
+        # Explainability updated by theme_rotation.py after cross-sectional rescaling
         "explainability": _explain_theme(theme.name, theme_strength_score, capital_flow_score, macro_alignment, narrative["narrative_acceleration"]),
         "risks": _theme_risks(overheating_score, valuation_heat, narrative["narrative_saturation"], confidence_score),
     }
