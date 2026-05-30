@@ -286,6 +286,9 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               if (process.env.NODE_ENV === "development") {
                 console.log("CARD_ROW", sector);
               }
+              const rawScore = typeof sector.score === "number" ? sector.score.toFixed(2) : String(sector.score);
+              const rawRelativeStrength = typeof sector.relative_strength === "number" ? sector.relative_strength.toFixed(2) : String(sector.relative_strength);
+              const rawFlow = typeof sector.flow === "number" ? sector.flow.toFixed(2) : String(sector.flow);
               return (
                 <motion.button
                   key={sector.sector}
@@ -305,12 +308,19 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                     </div>
                     <div>
                       <div className="flex items-end justify-between">
-                        <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{formatOptionalScore(sector.score)}</p>
+                        <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{rawScore}</p>
                         <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
-                        <span>RS {formatOptionalScore(sector.relative_strength)}</span>
-                        <span>FLOW {formatOptionalScore(sector.flow)}</span>
+                        <span>RS {rawRelativeStrength}</span>
+                        <span>FLOW {rawFlow}</span>
+                      </div>
+                      <div className="mt-3 rounded-lg border border-amber-300/30 bg-black/35 p-2 font-mono text-[10px] leading-relaxed text-amber-100">
+                        <div className="font-semibold text-amber-200">DEBUG</div>
+                        <div>score: {String(sector.score)}</div>
+                        <div>rs: {String(sector.relative_strength)}</div>
+                        <div>flow: {String(sector.flow)}</div>
+                        <div>state: {String(sector.rotation_state)}</div>
                       </div>
                     </div>
                   </div>
