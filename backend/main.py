@@ -174,6 +174,26 @@ def _score_available(value: Any, *keys: str) -> bool:
     return any(_finite_number(value.get(key)) for key in keys)
 
 
+def _sector_rotation_rows(payload: Any) -> list[dict]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("sectors", "items", "data", "results", "rows"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    return []
+
+
+def _sector_row_has_signal(row: dict) -> bool:
+    return any(_finite_positive(row.get(key)) for key in ("score", "relative_strength", "flow"))
+
+
+def _sector_rotation_has_signal(payload: Any) -> bool:
+    rows = _sector_rotation_rows(payload)
+    return bool(rows) and any(_sector_row_has_signal(row) for row in rows)
+
+
 def _stock_lifecycle(result: dict) -> str:
     if _payload_flagged_fallback(result):
         return "degraded"
@@ -254,6 +274,8 @@ def _cacheable_endpoint_result(cache_key: str, result: Any) -> bool:
         if isinstance(items, list):
             return any(_finite_positive(item.get("price")) for item in items if isinstance(item, dict))
         return False
+    if ":sector_rotation" in lowered_key:
+        return _sector_rotation_has_signal(result)
     return True
 
 
@@ -299,13 +321,17 @@ def _schedule_cache_refresh(cache_key: str, ttl_seconds: int, task: Callable[[],
 def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any], fallback: Callable[[], Any]) -> Any:
     cached = get_cached_value(cache_key)
     if cached is not None:
-        logger.info("endpoint cache hit key=%s", cache_key)
-        return cached
+        if _cacheable_endpoint_result(cache_key, cached):
+            logger.info("endpoint cache hit key=%s", cache_key)
+            return cached
+        logger.warning("ignoring invalid endpoint cache key=%s", cache_key)
     stale = get_cached_value(cache_key, allow_expired=True)
     if stale is not None:
-        logger.info("endpoint stale cache hit key=%s", cache_key)
-        _schedule_cache_refresh(cache_key, ttl_seconds, task)
-        return _with_lifecycle(cache_key, stale, "recovery")
+        if _cacheable_endpoint_result(cache_key, stale):
+            logger.info("endpoint stale cache hit key=%s", cache_key)
+            _schedule_cache_refresh(cache_key, ttl_seconds, task)
+            return _with_lifecycle(cache_key, stale, "recovery")
+        logger.warning("ignoring invalid stale endpoint cache key=%s", cache_key)
     future = BACKGROUND_EXECUTOR.submit(task)
 
     def store_result_when_ready(completed: Any) -> None:
@@ -482,6 +508,22 @@ def _fallback_sector_rotation() -> list[dict]:
             "message": "Using Render-safe 3-month ETF factor scores while live sector engine refreshes.",
         })
     return sorted(rows, key=lambda row: row["score"] if row["score"] is not None else -1.0, reverse=True)
+
+
+def _sector_rotation_response() -> Any:
+    live = analyze_sector_rotation()
+    if _sector_rotation_has_signal(live):
+        return live
+    logger.warning("sector rotation live recompute produced no finite score/RS/flow; trying fallback")
+    fallback = _fallback_sector_rotation()
+    if _sector_rotation_has_signal(fallback):
+        return fallback
+    return {
+        "status": "degraded",
+        "lifecycle_state": "degraded",
+        "reason": "Sector rotation unavailable: lightweight ETF factors did not produce finite score, relative strength, or flow.",
+        "sectors": fallback,
+    }
 
 
 def _fallback_theme_top() -> dict:
@@ -955,9 +997,9 @@ def get_market_regime() -> dict:
 
 @app.get("/market/overview")
 def get_market_overview() -> dict:
-    symbols = ["SPY", "QQQ", "SMH", "DIA", "IWM", "XLK", "XLF", "XLE", "XLV", "NVDA", "AAPL", "MSFT"]
+    symbols = ["SPY", "QQQ", "SMH", "DIA", "IWM", "XLK", "XLF", "XLE"]
     per_symbol_budget_seconds = 2.5
-    overview_budget_seconds = 8.0
+    overview_budget_seconds = 5.0
 
     def finite_or_none(value: Any) -> float | None:
         try:
@@ -1044,8 +1086,8 @@ def get_overview() -> dict:
 
 
 @app.get("/sector/rotation")
-def get_sector_rotation() -> list[dict]:
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("sector_rotation_v2"), settings.sector_rotation_ttl_seconds, analyze_sector_rotation, _fallback_sector_rotation))
+def get_sector_rotation() -> Any:
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("sector_rotation_v3"), settings.sector_rotation_ttl_seconds, _sector_rotation_response, _fallback_sector_rotation))
 
 
 @app.get("/theme/top")
