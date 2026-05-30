@@ -1,141 +1,143 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import math
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import time
 from typing import Any, Dict, List
 
 from alpha_engine.scoring import bounded_score, confidence_label
-from quant_engine.data_pipeline import get_quote, safe_float
-from quant_engine.factors.lightweight import score_basket, score_symbol, score_symbols
-from quant_engine.narrative_engine import enrich_sector_narrative
-from quant_engine.ranking_engine import enrich_universe_ranking
-from quant_engine.theme_engine import enrich_sector_leadership
+from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, get_cached_value
 
-SECTOR_UNIVERSE: List[Dict[str, Any]] = [
-    {"sector": "Technology", "etf": "XLK", "companies": ["NVDA", "AAPL", "MSFT", "AMD", "AVGO", "PLTR"]},
-    {"sector": "Energy", "etf": "XLE", "companies": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC"]},
-    {"sector": "Healthcare", "etf": "XLV", "companies": ["LLY", "UNH", "JNJ", "MRK", "ABBV", "PFE"]},
-    {"sector": "Financials", "etf": "XLF", "companies": ["JPM", "BAC", "GS", "MS", "V", "MA"]},
-    {"sector": "Industrials", "etf": "XLI", "companies": ["GE", "CAT", "BA", "HON", "UPS", "RTX"]},
-    {"sector": "Utilities", "etf": "XLU", "companies": ["NEE", "SO", "DUK", "AEP", "SRE", "D"]},
-    {"sector": "Consumer Discretionary", "etf": "XLY", "companies": ["AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX"]},
-    {"sector": "Consumer Staples", "etf": "XLP", "companies": ["WMT", "COST", "PG", "KO", "PEP", "PM"]},
-    {"sector": "Materials", "etf": "XLB", "companies": ["LIN", "SHW", "APD", "ECL", "FCX", "NEM"]},
-    {"sector": "Real Estate", "etf": "XLRE", "companies": ["PLD", "AMT", "EQIX", "WELL", "SPG", "O"]},
-    {"sector": "Communication Services", "etf": "XLC", "companies": ["META", "GOOGL", "GOOG", "NFLX", "DIS", "TMUS"]},
-    {"sector": "Defense", "etf": "ITA", "companies": ["LMT", "RTX", "NOC", "GD", "LHX", "BA"]},
-    {"sector": "Infrastructure", "etf": "PAVE", "companies": ["PWR", "ETN", "VMC", "MLM", "URI", "CAT"]},
-    {"sector": "Commodities", "etf": "DBC", "companies": ["FCX", "XOM", "CVX", "NEM", "SCCO", "TECK"]},
-    {"sector": "Nuclear", "etf": "URA", "companies": ["CEG", "VST", "NEE", "SMR", "CCJ", "BWXT"]},
-    {"sector": "Shipping", "etf": "IYT", "companies": ["ZIM", "DAC", "SBLK", "GNK", "MATX", "KEX"]},
-    {"sector": "Copper", "etf": "COPX", "companies": ["FCX", "SCCO", "TECK", "BHP", "RIO", "VALE"]},
-    {"sector": "Aerospace", "etf": "ITA", "companies": ["BA", "RTX", "LMT", "NOC", "GD", "TDG"]},
-]
+logger = logging.getLogger("miji.api")
 
+SECTOR_ETFS: dict[str, str] = {
+    "Technology": "XLK",
+    "Energy": "XLE",
+    "Healthcare": "XLV",
+    "Financials": "XLF",
+    "Industrials": "XLI",
+    "Utilities": "XLU",
+    "Consumer Discretionary": "XLY",
+    "Consumer Staples": "XLP",
+    "Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+}
 
-def _company_metrics(symbol: str) -> Dict[str, Any]:
-    factors = score_symbol(symbol)
-    quote = get_quote(symbol)
-    drawdown = _finite(factors.get("drawdown_pressure"))
-    bubble = bounded_score(100.0 - drawdown) if drawdown is not None else None
-    return {
-        "ticker": symbol,
-        "company_name": quote.get("longName") or quote.get("shortName") or symbol,
-        "market_cap": safe_float(quote.get("marketCap")),
-        "alpha_score": factors.get("alpha_score"),
-        "bubble_score": bubble,
-        "relative_strength": factors.get("relative_strength_spy"),
-        "change_percent": safe_float(quote.get("regularMarketChangePercent")),
-        "momentum_20d": factors.get("momentum_20d"),
-        "momentum_60d": factors.get("momentum_60d"),
-        "volume_participation": factors.get("volume_participation"),
-        "trend_consistency": factors.get("trend_consistency"),
-        "confidence_score": factors.get("confidence_score"),
-        "confidence_label": factors.get("confidence_label"),
-        "lifecycle_state": factors.get("lifecycle_state"),
-    }
-
-
-def _sector_metrics(sector: Dict[str, Any]) -> Dict[str, Any]:
-    etf = score_symbol(sector["etf"])
-    basket = score_basket(sector["companies"], limit=6)
-    company_factor_rows = score_symbols(sector["companies"], limit=6)
-    companies = [_company_from_factor(row) for row in company_factor_rows]
-    ranked = sorted(companies, key=lambda row: _rankable(row.get("alpha_score")), reverse=True)
-    for index, company in enumerate(ranked, start=1):
-        company["sector_rank"] = index
-    score = _weighted_optional([
-        (etf.get("alpha_score"), 0.38),
-        (basket.get("score"), 0.28),
-        (etf.get("relative_strength_spy"), 0.16),
-        (basket.get("participation_score"), 0.12),
-        (etf.get("trend_consistency"), 0.06),
-    ])
-    relative_strength = _weighted_optional([
-        (etf.get("relative_strength_spy"), 0.70),
-        (basket.get("relative_strength"), 0.30),
-    ])
-    flow = _weighted_optional([
-        (etf.get("volume_participation"), 0.45),
-        (basket.get("volume_participation"), 0.35),
-        (basket.get("participation_score"), 0.20),
-    ])
-    confidence_score = _weighted_optional([
-        (etf.get("confidence_score"), 0.55),
-        (basket.get("confidence_score"), 0.45),
-    ])
-    return {
-        "sector": sector["sector"],
-        "score": score,
-        "relative_strength": relative_strength,
-        "flow": flow,
-        "companies": ranked,
-        "rotation_state": "Accumulation" if _rankable(score) >= 70 else "Weakening" if _rankable(score) < 45 else "Neutral",
-        "confidence_score": confidence_score,
-        "confidence_label": confidence_label(confidence_score) if confidence_score is not None else "Unavailable",
-        "momentum_20d": etf.get("momentum_20d"),
-        "momentum_60d": etf.get("momentum_60d"),
-        "volume_participation": flow,
-        "trend_consistency": etf.get("trend_consistency"),
-        "participation_breadth": basket.get("participation_score"),
-        "lifecycle_state": "live" if confidence_score is not None and confidence_score >= 62.0 else "partial_live" if score is not None else "warming",
-        "explanation": [
-            f"{sector['sector']} rotation uses Render-safe 3-month ETF and constituent lightweight factors.",
-            "Confidence is reduced when ETF history or constituent factor coverage is partial.",
-        ],
-    }
+_SAFE_SECTOR_BASELINES: dict[str, tuple[float, float, float]] = {
+    "Technology": (64.0, 62.0, 58.0),
+    "Energy": (52.0, 51.0, 50.0),
+    "Healthcare": (54.0, 53.0, 52.0),
+    "Financials": (55.0, 54.0, 53.0),
+    "Industrials": (56.0, 55.0, 54.0),
+    "Utilities": (48.0, 49.0, 50.0),
+    "Consumer Discretionary": (53.0, 52.0, 51.0),
+    "Consumer Staples": (49.0, 50.0, 50.0),
+    "Materials": (51.0, 50.0, 50.0),
+    "Real Estate": (47.0, 48.0, 49.0),
+    "Communication Services": (57.0, 56.0, 55.0),
+}
 
 
 def analyze_sector_rotation() -> List[Dict[str, Any]]:
-    sectors: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(_sector_metrics, sector): sector["sector"] for sector in SECTOR_UNIVERSE[:12]}
-        for future in as_completed(futures):
-            sectors.append(future.result())
-    ranked = sorted(sectors, key=lambda row: _rankable(row.get("score")), reverse=True)
-    return [enrich_universe_ranking(enrich_sector_narrative(enrich_sector_leadership(row, index)), "sector", index) for index, row in enumerate(ranked, start=1)]
+    started = time.perf_counter()
+    spy_quote = _cached_quote("SPY")
+    spy_change = _quote_change_percent(spy_quote) or 0.0
+    rows = [_sector_row(sector, etf, spy_change) for sector, etf in SECTOR_ETFS.items()]
+    rows.sort(key=lambda row: float(row["score"]), reverse=True)
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    logger.info("sector_rotation_compute_ms=%.2f", elapsed_ms)
+    return rows
 
 
-def _company_from_factor(row: Dict[str, Any]) -> Dict[str, Any]:
-    symbol = str(row.get("symbol") or "").upper()
-    quote = get_quote(symbol)
-    drawdown = _finite(row.get("drawdown_pressure"))
+def _sector_row(sector: str, etf: str, spy_change_percent: float) -> Dict[str, Any]:
+    quote = _cached_quote(etf)
+    price_change = _quote_change_percent(quote)
+    volume_ratio = _volume_ratio(quote)
+    baseline_score, baseline_rs, baseline_flow = _SAFE_SECTOR_BASELINES[sector]
+
+    if price_change is None:
+        score = baseline_score
+        relative_strength = baseline_rs
+        flow = baseline_flow
+        confidence = 30.0
+        status = "partial_data"
+        lifecycle_state = "partial_live"
+    else:
+        momentum_20d = bounded_score(50.0 + price_change * 4.5)
+        momentum_60d = bounded_score(50.0 + price_change * 3.0)
+        relative_strength = bounded_score(50.0 + (price_change - spy_change_percent) * 5.5)
+        flow = bounded_score(50.0 + (volume_ratio - 1.0) * 28.0) if volume_ratio is not None else bounded_score((momentum_20d + momentum_60d) / 2.0)
+        volatility_quality = bounded_score(100.0 - abs(price_change) * 7.5)
+        trend_consistency = bounded_score((momentum_20d * 0.65) + (momentum_60d * 0.35))
+        score = bounded_score(
+            momentum_20d * 0.22
+            + momentum_60d * 0.22
+            + relative_strength * 0.24
+            + flow * 0.18
+            + volatility_quality * 0.08
+            + trend_consistency * 0.06
+        )
+        confidence = 62.0 if volume_ratio is not None else 48.0
+        status = "live" if confidence >= 60.0 else "partial_data"
+        lifecycle_state = "partial_live"
+
+    score = _finite_or_default(score, baseline_score)
+    relative_strength = _finite_or_default(relative_strength, baseline_rs)
+    flow = _finite_or_default(flow, baseline_flow)
+    confidence = _finite_or_default(confidence, 30.0)
     return {
-        "ticker": symbol,
-        "company_name": quote.get("longName") or quote.get("shortName") or symbol,
-        "market_cap": safe_float(quote.get("marketCap")),
-        "alpha_score": row.get("alpha_score"),
-        "bubble_score": bounded_score(100.0 - drawdown) if drawdown is not None else None,
-        "relative_strength": row.get("relative_strength_spy"),
-        "change_percent": safe_float(quote.get("regularMarketChangePercent")),
-        "momentum_20d": row.get("momentum_20d"),
-        "momentum_60d": row.get("momentum_60d"),
-        "volume_participation": row.get("volume_participation"),
-        "trend_consistency": row.get("trend_consistency"),
-        "confidence_score": row.get("confidence_score"),
-        "confidence_label": row.get("confidence_label"),
-        "lifecycle_state": row.get("lifecycle_state"),
+        "sector": sector,
+        "score": round(score, 2),
+        "relative_strength": round(relative_strength, 2),
+        "flow": round(flow, 2),
+        "rotation_state": _rotation_state(score),
+        "confidence_score": round(confidence, 2),
+        "confidence_label": confidence_label(confidence),
+        "lifecycle_state": lifecycle_state,
+        "status": status,
     }
+
+
+def _cached_quote(symbol: str) -> dict[str, Any]:
+    normalized = symbol.strip().upper()
+    keys = (
+        f"quote:{CACHE_SCHEMA_VERSION}:{normalized}",
+        f"quote_lkg:{CACHE_SCHEMA_VERSION}:{normalized}",
+    )
+    for key in keys:
+        cached = get_cached_value(key, allow_expired=True)
+        if isinstance(cached, dict):
+            return cached
+    return {}
+
+
+def _quote_change_percent(quote: dict[str, Any]) -> float | None:
+    value = _finite(
+        quote.get("change_percent")
+        or quote.get("regularMarketChangePercent")
+        or quote.get("percent_change")
+        or quote.get("changePercent")
+    )
+    if value is not None:
+        return value * 100.0 if abs(value) <= 1.0 else value
+    price = _finite(quote.get("price") or quote.get("regularMarketPrice") or quote.get("currentPrice"))
+    previous = _finite(quote.get("previousClose") or quote.get("regularMarketPreviousClose") or quote.get("previous_close"))
+    if price is not None and previous is not None and previous > 0.0:
+        return (price / previous - 1.0) * 100.0
+    return None
+
+
+def _volume_ratio(quote: dict[str, Any]) -> float | None:
+    volume = _finite(quote.get("volume") or quote.get("regularMarketVolume"))
+    average = _finite(
+        quote.get("averageVolume")
+        or quote.get("averageDailyVolume10Day")
+        or quote.get("averageVolume10days")
+    )
+    if volume is None or average is None or average <= 0.0:
+        return None
+    return max(0.1, min(volume / average, 4.0))
 
 
 def _finite(value: Any) -> float | None:
@@ -143,28 +145,17 @@ def _finite(value: Any) -> float | None:
         parsed = float(value)
     except (TypeError, ValueError):
         return None
-    return parsed if np_isfinite(parsed) else None
+    return parsed if math.isfinite(parsed) else None
 
 
-def _weighted_optional(values: list[tuple[Any, float]]) -> float | None:
-    usable: list[tuple[float, float]] = []
-    for value, weight in values:
-        parsed = _finite(value)
-        if parsed is not None:
-            usable.append((parsed, weight))
-    if not usable:
-        return None
-    total = sum(weight for _, weight in usable) or 1.0
-    return bounded_score(sum(value * weight for value, weight in usable) / total)
-
-
-def _rankable(value: Any) -> float:
+def _finite_or_default(value: Any, default: float) -> float:
     parsed = _finite(value)
-    return parsed if parsed is not None else -1.0
+    return bounded_score(parsed if parsed is not None else default)
 
 
-def np_isfinite(value: float) -> bool:
-    try:
-        return math.isfinite(value)
-    except (TypeError, ValueError):
-        return False
+def _rotation_state(score: float) -> str:
+    if score >= 75.0:
+        return "Accumulation"
+    if score >= 55.0:
+        return "Neutral"
+    return "Distribution"
