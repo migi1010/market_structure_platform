@@ -1058,13 +1058,18 @@ function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
 }
 
 function unwrapSectorRow(row: Record<string, unknown>): Record<string, unknown> {
-  for (const key of ["sector_rotation", "sectorRotation", "rotation", "item", "data"]) {
+  const merged: Record<string, unknown> = { ...row };
+  for (const key of ["sector_rotation", "sectorRotation", "rotation", "item", "data", "metrics"]) {
     const value = row[key];
     if (isRecord(value) && (value.sector || value.score || value.relative_strength || value.flow)) {
-      return value;
+      for (const [nestedKey, nestedValue] of Object.entries(value)) {
+        if (nestedValue !== null && nestedValue !== undefined && nestedValue !== "") {
+          merged[nestedKey] = nestedValue;
+        }
+      }
     }
   }
-  return row;
+  return merged;
 }
 
 function sectorRowsFromPayload(data: unknown): unknown[] {
@@ -1118,6 +1123,7 @@ function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
   return rows
     .filter(isRecord)
     .map((row) => {
+      console.log("RAW_SECTOR_ROW", row);
       const raw = unwrapSectorRow(row);
       const normalized = normalizeSectorRotationRow(raw as unknown as SectorRotation);
       const normalizedRow = {
@@ -1133,25 +1139,39 @@ function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
           "leadership_intelligence.leadership_score",
           "narrative_intelligence.score",
           "narrative_intelligence.narrative_strength",
+          "data.score",
+          "metrics.score",
         ]),
         relative_strength: firstRecordNumber(raw, [
           "relative_strength",
           "relative_strength_spy",
           "relative_strength_qqq",
+          "rs",
+          "sector_leadership",
+          "universe_ranking.sector_leadership",
           "momentum_60d",
           "momentum_20d",
+          "data.relative_strength",
+          "metrics.relative_strength",
         ]),
         flow: firstRecordNumber(raw, [
           "flow",
+          "volume_participation",
           "capital_flow",
           "institutional_alignment",
+          "universe_ranking.institutional_alignment",
           "volume_participation",
           "narrative_intelligence.institutional_alignment",
+          "data.flow",
+          "metrics.flow",
         ]),
         rotation_state: firstRecordString(raw, [
           "rotation_state",
           "rotationState",
           "leadership_state",
+          "market_classification",
+          "narrative_state",
+          "universe_ranking.market_classification",
           "state",
           "status",
         ]) ?? normalized.rotation_state,
@@ -1317,6 +1337,7 @@ export async function fetchMarketOverview(): Promise<MarketOverviewItem[]> {
 }
 
 export async function warmupQuantEngine(): Promise<void> {
+  if (IS_PRODUCTION) return;
   try {
     const response = await fetchWithRetry(`${API_URL}/warmup`, {
       cache: "no-store",
