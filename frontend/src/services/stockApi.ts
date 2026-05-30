@@ -1057,6 +1057,53 @@ function normalizeSectorRotationRow(sector: SectorRotation): SectorRotation {
   };
 }
 
+function unwrapSectorRow(row: Record<string, unknown>): Record<string, unknown> {
+  for (const key of ["sector_rotation", "sectorRotation", "rotation", "item", "data"]) {
+    const value = row[key];
+    if (isRecord(value) && (value.sector || value.score || value.relative_strength || value.flow)) {
+      return value;
+    }
+  }
+  return row;
+}
+
+function sectorRowsFromPayload(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (!isRecord(data)) return [];
+  for (const key of ["sectors", "items", "data", "results", "rows", "sector_rotation", "sectorRotation", "rotation"]) {
+    const value = data[key];
+    if (Array.isArray(value)) return value;
+    if (isRecord(value)) {
+      const nested = sectorRowsFromPayload(value);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
+}
+
+function firstRecordNumber(source: Record<string, unknown>, paths: string[]): number | undefined {
+  for (const path of paths) {
+    const value = pathNumber(source, path);
+    if (value !== null) return value;
+  }
+  return undefined;
+}
+
+function firstRecordString(source: Record<string, unknown>, paths: string[]): string | undefined {
+  for (const path of paths) {
+    let current: unknown = source;
+    for (const segment of path.split(".")) {
+      if (!isRecord(current)) {
+        current = undefined;
+        break;
+      }
+      current = current[segment];
+    }
+    if (typeof current === "string" && current.trim()) return current.trim();
+  }
+  return undefined;
+}
+
 function toFiniteNumber(v: unknown): number | undefined {
   if (v === null || v === undefined) return undefined;
   if (typeof v === "string" && v.trim() === "") return undefined;
@@ -1066,30 +1113,56 @@ function toFiniteNumber(v: unknown): number | undefined {
 }
 
 function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
-  const rows = Array.isArray(data)
-    ? data
-    : isRecord(data) && Array.isArray(data.sectors)
-      ? data.sectors
-      : isRecord(data) && Array.isArray(data.items)
-        ? data.items
-        : isRecord(data) && Array.isArray(data.data)
-          ? data.data
-          : [];
+  const rows = sectorRowsFromPayload(data);
+  console.log("RAW_SECTOR_PAYLOAD", data);
   return rows
     .filter(isRecord)
     .map((row) => {
-      const normalized = normalizeSectorRotationRow(row as unknown as SectorRotation);
-      return {
+      const raw = unwrapSectorRow(row);
+      const normalized = normalizeSectorRotationRow(raw as unknown as SectorRotation);
+      const normalizedRow = {
         ...normalized,
-        score: toFiniteNumber(normalized.score),
-        relative_strength: toFiniteNumber(normalized.relative_strength),
-        flow: toFiniteNumber(normalized.flow),
-        leadership: toFiniteNumber(normalized.leadership),
-        momentum: toFiniteNumber(normalized.momentum),
-        participation: toFiniteNumber(normalized.participation),
-        acceleration: toFiniteNumber(normalized.acceleration),
-        confidence_score: toFiniteNumber(normalized.confidence_score),
+        sector: firstRecordString(raw, ["sector", "name", "sector_name"]) ?? normalized.sector,
+        score: firstRecordNumber(raw, [
+          "score",
+          "sector_score",
+          "sector_strength",
+          "ranking_score",
+          "universe_ranking.ranking_score",
+          "leadership_score",
+          "leadership_intelligence.leadership_score",
+          "narrative_intelligence.score",
+          "narrative_intelligence.narrative_strength",
+        ]),
+        relative_strength: firstRecordNumber(raw, [
+          "relative_strength",
+          "relative_strength_spy",
+          "relative_strength_qqq",
+          "momentum_60d",
+          "momentum_20d",
+        ]),
+        flow: firstRecordNumber(raw, [
+          "flow",
+          "capital_flow",
+          "institutional_alignment",
+          "volume_participation",
+          "narrative_intelligence.institutional_alignment",
+        ]),
+        rotation_state: firstRecordString(raw, [
+          "rotation_state",
+          "rotationState",
+          "leadership_state",
+          "state",
+          "status",
+        ]) ?? normalized.rotation_state,
+        leadership: firstRecordNumber(raw, ["leadership", "leadership_score", "leadership_intelligence.leadership_score", "sector_strength", "score", "ranking_score"]),
+        momentum: firstRecordNumber(raw, ["momentum", "momentum_strength", "momentum_60d", "momentum_20d", "relative_strength_spy"]),
+        participation: firstRecordNumber(raw, ["participation", "participation_breadth", "participation_strength", "leadership_intelligence.participation_strength", "volume_participation"]),
+        acceleration: firstRecordNumber(raw, ["acceleration", "acceleration_velocity", "narrative_intelligence.acceleration_velocity", "momentum_20d"]),
+        confidence_score: firstRecordNumber(raw, ["confidence_score", "confidence", "leadership_intelligence.confidence"]),
       };
+      console.log("NORMALIZED_SECTOR_ROW", normalizedRow);
+      return normalizedRow;
     });
 }
 
