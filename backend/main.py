@@ -194,6 +194,10 @@ def _sector_rotation_has_signal(payload: Any) -> bool:
     return bool(rows) and any(_sector_row_has_signal(row) for row in rows)
 
 
+def _sector_row_is_valid(row: dict) -> bool:
+    return all(_finite_positive(row.get(key)) for key in ("score", "relative_strength", "flow"))
+
+
 def _stock_lifecycle(result: dict) -> str:
     if _payload_flagged_fallback(result):
         return "degraded"
@@ -359,10 +363,18 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
         return cache_result
     except TimeoutError:
         logger.warning("endpoint timed out key=%s; serving fallback", cache_key)
-        return _with_lifecycle(cache_key, fallback(), "degraded")
+        fallback_result = fallback()
+        if ":sector_rotation" in cache_key.lower() and not _sector_rotation_has_signal(fallback_result):
+            logger.warning("sector timeout fallback produced no finite score/RS/flow; recomputing fallback")
+            fallback_result = _fallback_sector_rotation()
+        return _with_lifecycle(cache_key, fallback_result, "degraded")
     except Exception as exc:
         logger.warning("endpoint failed key=%s; serving fallback error=%s", cache_key, exc)
-        return _with_lifecycle(cache_key, fallback(), "degraded")
+        fallback_result = fallback()
+        if ":sector_rotation" in cache_key.lower() and not _sector_rotation_has_signal(fallback_result):
+            logger.warning("sector error fallback produced no finite score/RS/flow; recomputing fallback")
+            fallback_result = _fallback_sector_rotation()
+        return _with_lifecycle(cache_key, fallback_result, "degraded")
 
 
 def _quote_aware_stock_fallback(symbol: str) -> dict:
@@ -482,21 +494,143 @@ def _fallback_sector_rotation() -> list[dict]:
         ("Aerospace", "ITA"),
     ]
     rows: list[dict] = []
-    for index, (sector, etf) in enumerate(sectors):
+
+    def fallback_score_from_factors(factors: dict[str, Any]) -> float | None:
+        return _weighted_score([
+            (factors.get("alpha_score"), 0.30),
+            (factors.get("momentum_20d"), 0.16),
+            (factors.get("momentum_60d"), 0.20),
+            (factors.get("relative_strength_spy"), 0.18),
+            (factors.get("volatility_quality"), 0.08),
+            (factors.get("trend_consistency"), 0.08),
+        ])
+
+    def fallback_rs_from_factors(factors: dict[str, Any], score: float | None) -> float | None:
+        return _weighted_score([
+            (factors.get("relative_strength_spy"), 0.60),
+            (factors.get("relative_strength_qqq"), 0.20),
+            (factors.get("momentum_60d"), 0.20),
+            (score, 0.10),
+        ])
+
+    def fallback_flow_from_factors(factors: dict[str, Any], score: float | None, relative_strength: float | None) -> float | None:
+        return _weighted_score([
+            (factors.get("volume_participation"), 0.36),
+            (factors.get("momentum_20d"), 0.18),
+            (factors.get("momentum_60d"), 0.18),
+            (relative_strength, 0.16),
+            (score, 0.12),
+        ])
+
+    def quote_proxy_factors(etf: str) -> dict[str, Any]:
+        """Small ETF quote proxy used only when 3-month history factors are unavailable.
+
+        The timeout path must not expand sector constituents or run another engine.
+        These proxies are quote-derived and low-confidence by design.
+        """
+        try:
+            quote = get_quote(etf)
+        except Exception as exc:
+            logger.warning("sector fallback quote proxy failed etf=%s error=%s", etf, exc)
+            quote = {}
+        if not isinstance(quote, dict):
+            quote = {}
+
+        pct = _finite_value(
+            quote.get("change_percent")
+            or quote.get("regularMarketChangePercent")
+            or quote.get("percent_change")
+            or quote.get("changePercent")
+        )
+        if pct is None:
+            price = _finite_value(
+                quote.get("price")
+                or quote.get("regularMarketPrice")
+                or quote.get("currentPrice")
+            )
+            previous = _finite_value(
+                quote.get("previousClose")
+                or quote.get("regularMarketPreviousClose")
+                or quote.get("previous_close")
+            )
+            if price is not None and previous is not None and previous > 0:
+                pct = (price / previous - 1.0) * 100.0
+        if pct is not None and abs(pct) <= 1.0:
+            pct *= 100.0
+
+        volume = _finite_value(quote.get("volume") or quote.get("regularMarketVolume"))
+        average_volume = _finite_value(
+            quote.get("averageVolume")
+            or quote.get("averageDailyVolume10Day")
+            or quote.get("averageVolume10days")
+        )
+
+        momentum = bounded_score(50.0 + pct * 4.5) if pct is not None else None
+        participation = None
+        if volume is not None and average_volume is not None and average_volume > 0:
+            participation = bounded_score(50.0 + (volume / average_volume - 1.0) * 30.0)
+        confidence = 38.0 if momentum is not None else 20.0
+        return {
+            "alpha_score": momentum,
+            "momentum_20d": momentum,
+            "momentum_60d": momentum,
+            "relative_strength_spy": momentum,
+            "relative_strength_qqq": momentum,
+            "volume_participation": participation or momentum,
+            "trend_consistency": momentum,
+            "confidence_score": confidence,
+        }
+
+    def merge_quote_proxy(factors: dict[str, Any], etf: str) -> dict[str, Any]:
+        if _weighted_score([
+            (factors.get("alpha_score"), 1.0),
+            (factors.get("momentum_20d"), 1.0),
+            (factors.get("momentum_60d"), 1.0),
+            (factors.get("relative_strength_spy"), 1.0),
+            (factors.get("volume_participation"), 1.0),
+        ]) is not None:
+            return factors
+        quote_factors = quote_proxy_factors(etf)
+        merged = {**quote_factors, **factors}
+        for key, value in quote_factors.items():
+            if _finite_value(merged.get(key)) is None:
+                merged[key] = value
+        return merged
+
+    def repair_row(row: dict, factors: dict[str, Any], etf: str) -> dict:
+        factors = merge_quote_proxy(factors, etf)
+        score = _finite_value(row.get("score")) or fallback_score_from_factors(factors)
+        relative_strength = _finite_value(row.get("relative_strength")) or fallback_rs_from_factors(factors, score)
+        flow = _finite_value(row.get("flow")) or fallback_flow_from_factors(factors, score, relative_strength)
+        repaired = {
+            **row,
+            "score": bounded_score(score) if score is not None else None,
+            "relative_strength": bounded_score(relative_strength) if relative_strength is not None else None,
+            "flow": bounded_score(flow) if flow is not None else None,
+        }
+        if not _sector_row_is_valid(repaired):
+            logger.warning("sector fallback row invalid %s", repaired)
+        else:
+            logger.info("sector fallback repaired %s", repaired)
+        return repaired
+
+    for sector, etf in sectors:
         factors: dict[str, Any] = {}
         try:
             factors = score_symbol(etf)
-            score = _weighted_score([(factors.get("alpha_score"), 0.55), (factors.get("momentum_60d"), 0.25), (factors.get("relative_strength_spy"), 0.20)])
-            flow = _weighted_score([(factors.get("volume_participation"), 0.45), (factors.get("momentum_60d"), 0.35), (score, 0.20)])
+            score = fallback_score_from_factors(factors)
+            relative_strength = fallback_rs_from_factors(factors, score)
+            flow = fallback_flow_from_factors(factors, score, relative_strength)
             confidence = bounded_score(_finite_value(factors.get("confidence_score")) or 25.0)
         except Exception:
             score = None
+            relative_strength = None
             flow = None
             confidence = 25.0
-        rows.append({
+        row = {
             "sector": sector,
             "score": score,
-            "relative_strength": factors.get("relative_strength_spy") or score,
+            "relative_strength": relative_strength,
             "flow": flow,
             "rotation_state": "Partial Data" if score is None else "Partial Data" if confidence < 55 else "Accumulation" if score >= 65 else "Weakening" if score < 42 else "Neutral",
             "confidence_score": confidence,
@@ -506,7 +640,31 @@ def _fallback_sector_rotation() -> list[dict]:
             "status": "partial_data" if confidence < 62 else "live",
             "lifecycle_state": "partial_live",
             "message": "Using Render-safe 3-month ETF factor scores while live sector engine refreshes.",
-        })
+        }
+        rows.append(repair_row(row, factors, etf))
+    if rows and not _sector_rotation_has_signal(rows):
+        logger.warning("sector fallback payload all-null; forcing second ETF repair pass")
+        repaired_rows: list[dict] = []
+        for sector, etf in sectors:
+            try:
+                factors = score_symbol(etf)
+            except Exception:
+                factors = {}
+            repaired_rows.append(repair_row({
+                "sector": sector,
+                "score": None,
+                "relative_strength": None,
+                "flow": None,
+                "rotation_state": "Partial Data",
+                "confidence_score": _finite_value(factors.get("confidence_score")) or 25.0,
+                "confidence_label": confidence_label(_finite_value(factors.get("confidence_score")) or 25.0),
+                "companies": [],
+                "fallback": True,
+                "status": "partial_data",
+                "lifecycle_state": "partial_live",
+                "message": "Using second-pass Render-safe ETF factor repair.",
+            }, factors, etf))
+        rows = repaired_rows
     return sorted(rows, key=lambda row: row["score"] if row["score"] is not None else -1.0, reverse=True)
 
 
