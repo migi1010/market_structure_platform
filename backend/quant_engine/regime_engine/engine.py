@@ -9,8 +9,8 @@ from quant_engine.data_pipeline import get_history
 
 
 def detect_market_regime() -> Dict[str, Any]:
-    spy = get_history("SPY", "3y")
-    qqq = get_history("QQQ", "3y")
+    spy = get_history("SPY", "3mo")
+    qqq = get_history("QQQ", "3mo")
     if spy.empty or len(spy) < 120:
         return {"name": "Neutral Regime", "confidence": 50.0, "states": []}
 

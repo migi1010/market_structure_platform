@@ -10,6 +10,7 @@ import numpy as np
 
 from alpha_engine.scoring import bounded_score, confidence_label
 from quant_engine.data_pipeline import get_history, get_quote, safe_float
+from settings import get_settings
 
 from .theme_detector import ThemeDefinition
 
@@ -23,7 +24,7 @@ def _avg(values: List[float], default: float = 0.0) -> float:
     return float(mean(usable)) if usable else default
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=128)
 def symbol_market_snapshot(symbol: str, use_history: bool = False) -> Dict[str, Any]:
     normalized = symbol.strip().upper()
     quote = get_quote(normalized)
@@ -51,7 +52,7 @@ def symbol_market_snapshot(symbol: str, use_history: bool = False) -> Dict[str, 
 
     if use_history:
         try:
-            history = get_history(normalized, "9mo")
+            history = get_history(normalized, "3mo")
             if history is not None and not history.empty and len(history) >= 64:
                 close = history["Close"].astype(float)
                 volume_series = history["Volume"].astype(float)
@@ -103,8 +104,9 @@ def _macro_snapshot() -> Dict[str, Any]:
         "CL=F": "oil",
     }
     values = {}
+    use_history = not get_settings().miji_lightweight_mode
     for symbol, key in symbols.items():
-        values[key] = symbol_market_snapshot(symbol, use_history=True)
+        values[key] = symbol_market_snapshot(symbol, use_history=use_history)
     spy = values["equities"]
     qqq = values["growth"]
     vix = values["volatility"]
@@ -131,6 +133,23 @@ def _macro_snapshot() -> Dict[str, Any]:
 
 
 def detect_cross_asset_regime() -> Dict[str, Any]:
+    if get_settings().miji_lightweight_mode:
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "risk_on_off": "Partial Data",
+            "risk_on_score": None,
+            "liquidity_regime": "Partial Data",
+            "liquidity_score": None,
+            "volatility_regime": "Partial Data",
+            "volatility_score": None,
+            "inflation_regime": "Partial Data",
+            "inflation_score": None,
+            "AI_capex_regime": "Partial Data",
+            "AI_capex_score": None,
+            "lifecycle_state": "partial_live",
+            "status": "partial_data",
+            "reason": "Cross-asset macro scan skipped in MIJI_LIGHTWEIGHT_MODE.",
+        }
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         **_macro_snapshot(),
@@ -138,10 +157,11 @@ def detect_cross_asset_regime() -> Dict[str, Any]:
 
 
 def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = None, macro: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    spy = spy_snapshot or symbol_market_snapshot("SPY", use_history=True)
+    use_history = not get_settings().miji_lightweight_mode
+    spy = spy_snapshot or symbol_market_snapshot("SPY", use_history=use_history)
     macro_state = macro or _macro_snapshot()
-    etf_metrics = [symbol_market_snapshot(symbol, use_history=True) for symbol in theme.etf_symbols]
-    equity_metrics = [symbol_market_snapshot(symbol, use_history=False) for symbol in theme.tickers[:8]]
+    etf_metrics = [symbol_market_snapshot(symbol, use_history=use_history) for symbol in theme.etf_symbols]
+    equity_metrics = [symbol_market_snapshot(symbol, use_history=False) for symbol in theme.tickers[:5]]
     leaders = sorted(equity_metrics, key=lambda item: item["ret_3m"], reverse=True)[:4]
 
     etf_momentum = _avg([item["ret_3m"] for item in etf_metrics], _avg([item["ret_3m"] for item in equity_metrics]))
@@ -203,7 +223,7 @@ def score_theme(theme: ThemeDefinition, spy_snapshot: Dict[str, Any] | None = No
     theme_strength_score = bounded_score(theme_strength_score - max(0.0, overheating_score - 72.0) * 0.16)
     capital_flow_score = bounded_score(capital_flow_score - max(0.0, overheating_score - 82.0) * 0.10)
     data_completeness = bounded_score(
-        min(len([item for item in equity_metrics if item["price"] > 0]), max(len(theme.tickers[:8]), 1)) / max(len(theme.tickers[:8]), 1) * 36.0
+        min(len([item for item in equity_metrics if item["price"] > 0]), max(len(theme.tickers[:5]), 1)) / max(len(theme.tickers[:5]), 1) * 36.0
         + min(len(etf_metrics), max(len(theme.etf_symbols), 1)) / max(len(theme.etf_symbols), 1) * 22.0
         + min(100.0, breadth * 100.0) * 0.18
         + min(100.0, max(0.0, volume_expansion) * 50.0) * 0.12

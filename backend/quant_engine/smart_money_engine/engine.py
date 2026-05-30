@@ -11,7 +11,7 @@ from quant_engine.data_pipeline import get_history, get_quote, safe_float
 def analyze_smart_money(symbol: str, quote: Dict[str, Any] | None = None) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
     quote = quote if isinstance(quote, dict) else get_quote(ticker)
-    history = get_history(ticker, "9mo")
+    history = get_history(ticker, "3mo")
     if history is None or history.empty or len(history) < 64:
         volume = safe_float(quote.get("regularMarketVolume") or quote.get("volume"))
         average_volume = safe_float(quote.get("averageVolume") or quote.get("averageDailyVolume10Day"))

@@ -39,7 +39,7 @@ def score_symbol(symbol: str, spy: LightweightSnapshot | None = None, qqq: Light
             "confidence_label": "Unavailable",
             "lifecycle_state": "partial_live",
             "status": "partial_data",
-            "factors": [factor.to_dict() for factor in factors],
+            "factors": [],
             "explanation": "Lightweight factor score unavailable until recent history is cached.",
         }
 
@@ -74,7 +74,7 @@ def score_symbol(symbol: str, spy: LightweightSnapshot | None = None, qqq: Light
         "confidence_label": confidence_label(confidence),
         "lifecycle_state": "live" if confidence >= 62.0 else "partial_live",
         "status": "live" if confidence >= 62.0 else "partial_data",
-        "factors": [factor.to_dict() for factor in factors],
+        "factors": [],
         "explanation": _explain_score(normalized, alpha_score, factors),
     }
 
@@ -126,7 +126,7 @@ def compute_lightweight_factors(snapshot: LightweightSnapshot, spy: LightweightS
     ]
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=96)
 def get_lightweight_snapshot(symbol: str) -> LightweightSnapshot:
     normalized = symbol.strip().upper()
     try:

@@ -125,7 +125,7 @@ def build_narrative_signal(row: Mapping[str, Any]) -> dict[str, Any]:
         (smart_money, 0.20),
         (participation, 0.18),
     ])
-    participation_breadth = bounded_score(participation)
+    participation_breadth = bounded_score(participation) if participation is not None else None
     institutional_alignment = _weighted_score([
         (smart_money, 0.35),
         (sector_leadership, 0.25),
@@ -258,18 +258,18 @@ def _representative_symbols(row: Mapping[str, Any]) -> list[str]:
     leadership = row.get("leadership_intelligence") if isinstance(row.get("leadership_intelligence"), Mapping) else {}
     symbols = leadership.get("representative_symbols") if isinstance(leadership.get("representative_symbols"), list) else None
     if symbols:
-        return [str(symbol).upper() for symbol in symbols[:8]]
+        return [str(symbol).upper() for symbol in symbols[:5]]
     leaders = row.get("leaders")
     if not isinstance(leaders, list):
         return []
-    return [str(item.get("ticker")).upper() for item in leaders[:8] if isinstance(item, Mapping) and item.get("ticker")]
+    return [str(item.get("ticker")).upper() for item in leaders[:5] if isinstance(item, Mapping) and item.get("ticker")]
 
 
 def _sector_symbols(row: Mapping[str, Any]) -> list[str]:
     companies = row.get("companies")
     if not isinstance(companies, list):
         return []
-    return [str(item.get("ticker")).upper() for item in companies[:8] if isinstance(item, Mapping) and item.get("ticker")]
+    return [str(item.get("ticker")).upper() for item in companies[:5] if isinstance(item, Mapping) and item.get("ticker")]
 
 
 def _is_defensive_theme(theme: str) -> bool:

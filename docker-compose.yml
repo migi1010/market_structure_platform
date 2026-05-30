@@ -1,6 +1,72 @@
 version: '3.8'
 
 services:
+  backend:
+    image: python:3.11-slim
+    working_dir: /app/backend
+    command: sh -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000"
+    environment:
+      - MIJI_RUNTIME_MODE=${MIJI_RUNTIME_MODE:-local_full}
+      - MIJI_LIGHTWEIGHT_MODE=${MIJI_LIGHTWEIGHT_MODE:-false}
+      - MIJI_ENABLE_HEAVY_ALPHA=${MIJI_ENABLE_HEAVY_ALPHA:-true}
+      - MIJI_ENABLE_HEAVY_REGIME=${MIJI_ENABLE_HEAVY_REGIME:-true}
+      - MIJI_ENABLE_THEME_FORECAST=${MIJI_ENABLE_THEME_FORECAST:-true}
+      - MIJI_ENABLE_LEAN=${MIJI_ENABLE_LEAN:-true}
+      - MIJI_ENABLE_BACKGROUND_JOBS=${MIJI_ENABLE_BACKGROUND_JOBS:-true}
+      - MIJI_ENABLE_FEATURE_STORE=${MIJI_ENABLE_FEATURE_STORE:-true}
+      - MIJI_FEATURE_STORE_DIR=/app/backend/.cache/research_store
+      - SQLITE_CACHE_PATH=/app/backend/.cache/market_cache.sqlite3
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://miji:miji@postgres:5432/miji
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - backend-cache:/app/backend/.cache
+    depends_on:
+      - redis
+      - postgres
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - frontend-node-modules:/app/frontend/node_modules
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=miji
+      - POSTGRES_USER=miji
+      - POSTGRES_PASSWORD=miji
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  lean:
+    image: quantconnect/lean:latest
+    profiles: ["lean"]
+    working_dir: /lean
+    command: ["bash", "-lc", "lean --help || true"]
+    volumes:
+      - ./lean:/lean
+
   market-analyzer:
     build:
       context: .
@@ -78,8 +144,10 @@ services:
   #   restart: always
 
 volumes:
-  # redis-data:
-  # postgres-data:
+  backend-cache:
+  frontend-node-modules:
+  redis-data:
+  postgres-data:
 
 networks:
   default:

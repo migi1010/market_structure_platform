@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
@@ -12,6 +11,7 @@ from quant_engine.data_pipeline import safe_float
 from quant_engine.narrative_engine import build_cross_theme_ranking, enrich_theme_narrative
 from quant_engine.ranking_engine import build_universe_ranking, enrich_universe_ranking
 from quant_engine.theme_engine import enrich_theme_leadership
+from settings import get_settings
 
 from .supply_chain_mapper import map_supply_chain
 from .theme_detector import ThemeDefinition, find_theme_exposure, get_theme_definitions
@@ -24,16 +24,14 @@ def _time_bucket(seconds: int = 900) -> int:
 
 @lru_cache(maxsize=4)
 def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
-    definitions = get_theme_definitions()
+    definitions = get_theme_definitions()[:12]
     rows: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        future_map = {executor.submit(_lightweight_theme_row, theme): theme for theme in definitions}
-        for future in as_completed(future_map):
-            try:
-                rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(future.result())), "theme"))
-            except Exception:
-                theme = future_map[future]
-                rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(_fallback_theme_row(theme))), "theme"))
+    for theme in definitions:
+        try:
+            row = _lightweight_theme_row(theme)
+        except Exception:
+            row = _fallback_theme_row(theme)
+        rows.append(enrich_universe_ranking(enrich_theme_narrative(enrich_theme_leadership(row)), "theme"))
     rows.sort(key=lambda item: safe_float(item.get("ranking_score") or item.get("theme_strength_score")), reverse=True)
     return rows
 
@@ -48,7 +46,7 @@ def get_cached_theme_snapshot() -> List[Dict[str, Any]] | None:
     return _theme_snapshot(_time_bucket())
 
 
-def get_top_themes(limit: int = 15) -> Dict[str, Any]:
+def get_top_themes(limit: int = 10) -> Dict[str, Any]:
     themes = build_theme_snapshot()
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -60,20 +58,20 @@ def get_top_themes(limit: int = 15) -> Dict[str, Any]:
 
 def get_theme_rotation() -> Dict[str, Any]:
     themes = build_theme_snapshot()
-    narrative_ranking = build_cross_theme_ranking(themes)
-    universe_ranking = build_universe_ranking(themes, entity_type="theme", limit=10)
-    strengthening = sorted(themes, key=lambda item: safe_float(item.get("emerging_score")), reverse=True)[:8]
-    weakening = sorted(themes, key=lambda item: safe_float(item.get("relative_momentum")))[:8]
-    overheated = [item for item in themes if safe_float(item.get("overheating_score")) >= 62][:8]
+    narrative_ranking = build_cross_theme_ranking(themes, limit=5)
+    universe_ranking = build_universe_ranking(themes, entity_type="theme", limit=5)
+    strengthening = sorted(themes, key=lambda item: safe_float(item.get("emerging_score")), reverse=True)[:5]
+    weakening = sorted(themes, key=lambda item: safe_float(item.get("relative_momentum")))[:5]
+    overheated = [item for item in themes if safe_float(item.get("overheating_score")) >= 62][:5]
     undervalued = [
         item for item in themes
         if safe_float(item.get("theme_strength_score")) >= 58
         and safe_float(item.get("overheating_score")) <= 45
         and safe_float(item.get("narrative_saturation")) <= 65
-    ][:8]
+    ][:5]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "rotation_map": themes,
+        "rotation_map": themes[:10],
         "strengthening": strengthening,
         "weakening": weakening,
         "overheated_themes": overheated,
@@ -90,7 +88,7 @@ def get_theme_supply_chain(theme_name: str | None = None) -> Dict[str, Any]:
     if theme_name:
         normalized = theme_name.strip().lower()
         selected = [theme for theme in definitions if normalized in theme.name.lower()] or definitions[:3]
-    mapped = [map_supply_chain(theme) for theme in selected[:8]]
+    mapped = [map_supply_chain(theme) for theme in selected[:5]]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "themes": mapped,
@@ -142,7 +140,13 @@ def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
 
     etf = theme.etf_symbols[0] if theme.etf_symbols else "SPY"
     factors = score_symbol(etf)
-    basket = score_basket(theme.tickers, limit=6)
+    # In Render survival mode, theme cards must stay ETF-first and compact.
+    # Constituent sampling is bounded outside lightweight mode only.
+    basket = (
+        {"score": None, "volume_participation": None, "participation_score": None, "confidence_score": None, "leaders": []}
+        if get_settings().miji_lightweight_mode
+        else score_basket(theme.tickers, limit=5)
+    )
     strength = _avg_optional(factors.get("alpha_score"), basket.get("score"), weights=(0.55, 0.45))
     flow = _weighted_optional([
         (factors.get("volume_participation"), 0.35),
@@ -204,7 +208,7 @@ def _fallback_theme_row(theme: ThemeDefinition) -> Dict[str, Any]:
                 "relative_volume": _volume_ratio(row.get("volume_participation")),
                 "day_change_percent": None,
             }
-            for row in (basket.get("leaders") or [])[:4]
+            for row in (basket.get("leaders") or [])[:3]
         ],
         "etfs": list(theme.etf_symbols),
         "macro_tags": list(theme.macro_alignment),

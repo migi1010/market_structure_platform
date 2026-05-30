@@ -43,6 +43,18 @@ export const terminalModules: TerminalModule[] = [
     order: 20,
   },
   {
+    id: "theme-forecast",
+    title: "Theme Forecast AI",
+    shortTitle: "Forecast",
+    description: "Forward theme leadership forecasts, regime overlays, and validation diagnostics",
+    iconKey: "brain",
+    target_tab: "theme-forecast",
+    searchKeywords: ["forecast", "theme forecast", "future themes", "theme ai", "regime forecast"],
+    workspaceType: "theme",
+    enabled: true,
+    order: 25,
+  },
+  {
     id: "alpha-quant",
     title: "Alpha Quant",
     shortTitle: "Alpha",

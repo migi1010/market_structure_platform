@@ -105,7 +105,7 @@ export interface MarketOverviewResponse {
 
 export type OmniboxIntent = "ticker" | "theme" | "sector" | "command" | "natural_language";
 export type OmniboxGroup = "Stocks" | "Themes" | "Sectors" | "Commands";
-export type OmniboxTargetTab = "theme-intelligence" | "portfolio" | "alpha-quant" | "market-intel" | "stock-analysis";
+export type OmniboxTargetTab = "theme-intelligence" | "theme-forecast" | "portfolio" | "alpha-quant" | "market-intel" | "stock-analysis";
 export type WorkspaceActionType = "open_stock" | "open_theme" | "open_sector" | "open_alpha" | "open_portfolio" | "open_module";
 export type WorkspaceOpenMode = "replace" | "focus" | "background";
 
@@ -149,6 +149,59 @@ export interface SearchResult {
   price?: number | null;
   change_percent?: number | null;
   quote_status?: string;
+}
+
+export type ForecastHorizon = "1w" | "1m" | "3m";
+
+export interface ThemeForecastRecord {
+  theme: string;
+  forecast_horizon: ForecastHorizon | string;
+  forecast_score: number | null;
+  expected_excess_return: number | null;
+  outperformance_probability: number | null;
+  confidence: number;
+  lifecycle_state: string;
+  risk_state: string;
+  crowding_state: string;
+  forecast_label: string;
+  explanation: string;
+  top_positive_drivers: string[];
+  top_negative_drivers: string[];
+  regime_context?: Record<string, unknown>;
+  feature_snapshot?: Record<string, unknown>;
+}
+
+export interface ThemeForecastResponse {
+  available: boolean;
+  status: string;
+  lifecycle_state: string;
+  horizon: ForecastHorizon | string;
+  generated_at?: string;
+  regime_context?: Record<string, unknown>;
+  top_future_themes: ThemeForecastRecord[];
+  emerging_themes: ThemeForecastRecord[];
+  weakening_themes: ThemeForecastRecord[];
+  crowded_themes: ThemeForecastRecord[];
+  defensive_rotation: ThemeForecastRecord[];
+  forecasts: ThemeForecastRecord[];
+  message?: string;
+}
+
+export interface ThemeForecastValidationResponse {
+  horizon: ForecastHorizon | string;
+  status: string;
+  lifecycle_state: string;
+  observations: number;
+  hit_rate: number | null;
+  precision_at_5: number | null;
+  information_ratio: number | null;
+  max_drawdown: number | null;
+  calibration_quality: number | null;
+  turnover: number | null;
+  excess_return_stability: number | null;
+  confusion_matrix: Record<string, Record<string, number>>;
+  walk_forward: Record<string, unknown>;
+  reason?: string | null;
 }
 
 export interface SectorCompany {

@@ -37,6 +37,11 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _runtime_mode() -> str:
+    raw = os.getenv("MIJI_RUNTIME_MODE", "render_safe").strip().lower()
+    return raw if raw in {"render_safe", "local_full"} else "render_safe"
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Miji Quant Institutional API")
@@ -60,8 +65,15 @@ class Settings:
     theme_ttl_seconds: int = int(os.getenv("THEME_TTL_SECONDS", "900"))
     market_regime_ttl_seconds: int = int(os.getenv("MARKET_REGIME_TTL_SECONDS", "900"))
     market_overview_ttl_seconds: int = int(os.getenv("MARKET_OVERVIEW_TTL_SECONDS", "300"))
+    miji_runtime_mode: str = _runtime_mode()
+    miji_lightweight_mode: bool = _env_bool("MIJI_LIGHTWEIGHT_MODE", True)
     miji_enable_heavy_alpha: bool = _env_bool("MIJI_ENABLE_HEAVY_ALPHA", False)
     miji_enable_heavy_regime: bool = _env_bool("MIJI_ENABLE_HEAVY_REGIME", False)
+    miji_enable_theme_forecast: bool = _env_bool("MIJI_ENABLE_THEME_FORECAST", False)
+    miji_enable_lean: bool = _env_bool("MIJI_ENABLE_LEAN", False)
+    miji_enable_background_jobs: bool = _env_bool("MIJI_ENABLE_BACKGROUND_JOBS", False)
+    miji_enable_feature_store: bool = _env_bool("MIJI_ENABLE_FEATURE_STORE", False)
+    miji_feature_store_dir: Path = Path(os.getenv("MIJI_FEATURE_STORE_DIR", ".cache/research_store"))
     alpha_regime_circuit_cooldown_seconds: int = int(os.getenv("ALPHA_REGIME_CIRCUIT_COOLDOWN_SECONDS", "120"))
     provider_timeout_seconds: float = float(os.getenv("PROVIDER_TIMEOUT_SECONDS", "8"))
     provider_retry_count: int = int(os.getenv("PROVIDER_RETRY_COUNT", "2"))
@@ -79,6 +91,10 @@ class Settings:
             "cors_whitelist",
             _cors_origins(),
         )
+        if self.miji_runtime_mode == "local_full":
+            object.__setattr__(self, "miji_lightweight_mode", _env_bool("MIJI_LIGHTWEIGHT_MODE", False))
+            object.__setattr__(self, "miji_enable_theme_forecast", _env_bool("MIJI_ENABLE_THEME_FORECAST", True))
+            object.__setattr__(self, "miji_enable_feature_store", _env_bool("MIJI_ENABLE_FEATURE_STORE", True))
 
 
 @lru_cache(maxsize=1)
@@ -86,4 +102,5 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.cache_dir.mkdir(parents=True, exist_ok=True)
     settings.sqlite_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.miji_feature_store_dir.mkdir(parents=True, exist_ok=True)
     return settings

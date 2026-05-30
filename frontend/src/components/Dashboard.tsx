@@ -18,6 +18,7 @@ import MarketTickerMarquee from "./MarketTickerMarquee";
 const AlphaQuantPage = React.lazy(() => import("./AlphaQuantPage"));
 const SectorRotationPanel = React.lazy(() => import("./SectorRotationPanel"));
 const StockAnalysisWorkspace = React.lazy(() => import("./StockAnalysisWorkspace"));
+const ThemeForecastAIPage = React.lazy(() => import("./ThemeForecastAIPage"));
 const ThemeIntelligenceDashboard = React.lazy(() => import("./ThemeIntelligenceDashboard"));
 
 type ActiveTab = TerminalModuleId;
@@ -358,9 +359,10 @@ function DashboardApp() {
     actionContextLabel
     ?? (activeTab === "stock-analysis" ? selectedTicker
       : activeTab === "theme-intelligence" ? selectedTheme || "Theme Intelligence"
-        : activeTab === "market-intel" ? selectedSector
-          : activeTab === "alpha-quant" ? selectedAlphaView
-            : selectedPortfolioView);
+        : activeTab === "theme-forecast" ? "Theme Forecast AI"
+          : activeTab === "market-intel" ? selectedSector
+            : activeTab === "alpha-quant" ? selectedAlphaView
+              : selectedPortfolioView);
 
   return (
     <div className="miji-shell flex h-[100dvh] w-full flex-col overflow-hidden bg-[#0A0C10] text-[#E6EDF3]">
@@ -424,6 +426,7 @@ function DashboardApp() {
 
       <div className="miji-content min-h-0 flex-1 overflow-y-auto bg-[#0A0C10]">
         {activeTab === "theme-intelligence" && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeIntelligenceDashboard onTickerSelect={openStock} /></div>}
+        {activeTab === "theme-forecast" && <div id="theme-forecast" tabIndex={-1} className="outline-none ring-0"><ThemeForecastAIPage /></div>}
         {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
         {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} /></div>}
         {activeTab === "market-intel" && <div id="sector-rotation" tabIndex={-1} className="outline-none ring-0"><SectorRotationPanel onTickerSelect={openStock} /></div>}

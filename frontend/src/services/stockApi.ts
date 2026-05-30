@@ -16,6 +16,9 @@ import type {
   ThemeCapitalFlowResponse,
   ThemeDetailResponse,
   ThemeNarrativeResponse,
+  ThemeForecastResponse,
+  ThemeForecastValidationResponse,
+  ForecastHorizon,
   ThemeRotationResponse,
   ThemeStocksResponse,
   ThemeSupplyChainResponse,
@@ -1443,6 +1446,49 @@ export async function fetchThemeNarrative(): Promise<ThemeNarrativeResponse> {
     crowded_narratives: (data.crowded_narratives ?? []).map(normalizeNarrativeIntelligence),
     defensive_narratives: (data.defensive_narratives ?? []).map(normalizeNarrativeIntelligence),
   };
+}
+
+export async function fetchThemeForecast(horizon: ForecastHorizon = "1m"): Promise<ThemeForecastResponse> {
+  return fetchFreshJson<ThemeForecastResponse>(
+    `miji:theme-forecast:v1:${horizon}`,
+    `${API_URL}/theme/forecast?horizon=${encodeURIComponent(horizon)}`,
+    {
+      available: false,
+      status: "disabled",
+      lifecycle_state: "warming",
+      horizon,
+      top_future_themes: [],
+      emerging_themes: [],
+      weakening_themes: [],
+      crowded_themes: [],
+      defensive_rotation: [],
+      forecasts: [],
+      message: "Theme Forecast AI is unavailable.",
+    },
+  );
+}
+
+export async function fetchThemeForecastValidation(horizon: ForecastHorizon = "1m"): Promise<ThemeForecastValidationResponse> {
+  return fetchFreshJson<ThemeForecastValidationResponse>(
+    `miji:theme-forecast-validation:v1:${horizon}`,
+    `${API_URL}/theme/forecast/validation?horizon=${encodeURIComponent(horizon)}`,
+    {
+      horizon,
+      status: "partial_data",
+      lifecycle_state: "partial_live",
+      observations: 0,
+      hit_rate: null,
+      precision_at_5: null,
+      information_ratio: null,
+      max_drawdown: null,
+      calibration_quality: null,
+      turnover: null,
+      excess_return_stability: null,
+      confusion_matrix: {},
+      walk_forward: { method: "expanding_window", shuffle: false },
+      reason: "Validation unavailable.",
+    },
+  );
 }
 
 export async function fetchThemeStocks(theme: string): Promise<ThemeStocksResponse> {

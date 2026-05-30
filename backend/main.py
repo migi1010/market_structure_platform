@@ -17,8 +17,11 @@ from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
 from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
+from quant_engine.lean_integration import LeanSignalExporter
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
 from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
+from quant_engine.theme_forecast import forecast_status, forecast_theme_leadership
+from quant_engine.validation import validate_theme_forecasts
 from settings import get_settings
 from theme_engine import (
     analyze_all_narratives,
@@ -1107,6 +1110,39 @@ def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
     return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
+
+
+@app.get("/theme/forecast")
+def get_theme_forecast(horizon: str = Query("1m", pattern="^(1w|1m|3m)$")) -> dict:
+    return _guard(lambda: forecast_theme_leadership(horizon))  # type: ignore[arg-type]
+
+
+@app.get("/theme/forecast/validation")
+def get_theme_forecast_validation(horizon: str = Query("1m", pattern="^(1w|1m|3m)$")) -> dict:
+    return _guard(lambda: validate_theme_forecasts(horizon))  # type: ignore[arg-type]
+
+
+@app.get("/theme/forecast/status")
+def get_theme_forecast_status() -> dict:
+    return _guard(forecast_status)
+
+
+@app.get("/lean/insights")
+def get_lean_insights(horizon: str = Query("1m", pattern="^(1w|1m|3m)$")) -> dict:
+    def build() -> dict:
+        if not (settings.miji_runtime_mode == "local_full" or settings.miji_enable_lean):
+            return {
+                "status": "disabled",
+                "lifecycle_state": "warming",
+                "live_brokerage_execution": False,
+                "insights": [],
+                "message": "LEAN export disabled. Set MIJI_RUNTIME_MODE=local_full or MIJI_ENABLE_LEAN=true.",
+            }
+        forecast = forecast_theme_leadership(horizon)  # type: ignore[arg-type]
+        forecasts = forecast.get("forecasts") if isinstance(forecast, dict) else []
+        return LeanSignalExporter().export(forecasts if isinstance(forecasts, list) else [])
+
+    return _guard(build)
 
 
 @app.get("/theme/{theme_id:path}/stocks")

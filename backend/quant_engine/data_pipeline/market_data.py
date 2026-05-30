@@ -251,18 +251,29 @@ def get_quote(symbol: str) -> Dict[str, Any]:
         return quote if isinstance(quote, dict) else {"symbol": normalized, "quoteStatus": "unavailable"}
 
 
-def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
+def _bounded_history_period(period: str | None) -> str:
+    allowed = {"5d", "10d", "1mo", "3mo"}
+    normalized = (period or "3mo").strip().lower()
+    return normalized if normalized in allowed else "3mo"
+
+
+def get_history(symbol: str, period: str = "3mo") -> pd.DataFrame:
     normalized = symbol.strip().upper()
+    period = _bounded_history_period(period)
     cache_key = f"history:{CACHE_SCHEMA_VERSION}:{normalized}:{period}"
-    cached = _get_cached(cache_key)
-    if isinstance(cached, pd.DataFrame):
-        return cached
-    stale = _get_cached(cache_key, allow_expired=True)
-    with _lock_for(cache_key):
+    lightweight_mode = get_settings().miji_lightweight_mode
+    stale = None
+    if not lightweight_mode:
         cached = _get_cached(cache_key)
         if isinstance(cached, pd.DataFrame):
             return cached
         stale = _get_cached(cache_key, allow_expired=True)
+    with _lock_for(cache_key):
+        if not lightweight_mode:
+            cached = _get_cached(cache_key)
+            if isinstance(cached, pd.DataFrame):
+                return cached
+            stale = _get_cached(cache_key, allow_expired=True)
         try:
             df = fetch_yfinance_history(normalized, period)
         except Exception:
@@ -273,7 +284,8 @@ def get_history(symbol: str, period: str = "9mo") -> pd.DataFrame:
             df.columns = df.columns.get_level_values(0)
         result = df.dropna()
         if not result.empty:
-            _set_cached(cache_key, result, get_settings().history_ttl_seconds, "pickle")
+            if not get_settings().miji_lightweight_mode:
+                _set_cached(cache_key, result, get_settings().history_ttl_seconds, "pickle")
             return result
         if isinstance(stale, pd.DataFrame):
             return stale

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Callable, Iterable, Literal, Mapping
@@ -191,16 +190,7 @@ class FactorPipeline:
         return resolved
 
     def _compute(self, definitions: list[FactorDefinition], context: FactorContext) -> list[FactorResult]:
-        if self.max_concurrency == 1 or len(definitions) <= 1:
-            return [_safe_compute(definition, context) for definition in definitions]
-        workers = min(self.max_concurrency, len(definitions))
-        results: list[FactorResult] = []
-        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="miji.factor") as executor:
-            future_map = {executor.submit(_safe_compute, definition, context): definition for definition in definitions}
-            for future in as_completed(future_map):
-                results.append(future.result())
-        order = {definition.id: index for index, definition in enumerate(definitions)}
-        return sorted(results, key=lambda item: order.get(item.factor_id, 0))
+        return [_safe_compute(definition, context) for definition in definitions]
 
 
 def build_default_factor_registry() -> FactorRegistry:

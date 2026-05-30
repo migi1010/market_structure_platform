@@ -6,11 +6,8 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Dict, List
 
-from quant_engine.bubble_engine import analyze_bubble
 from quant_engine.data_pipeline import get_history, get_news, get_quote, safe_float
-from quant_engine.earnings_quality_engine import analyze_earnings_quality
-from quant_engine.regime_engine import detect_market_regime
-from quant_engine.smart_money_engine import analyze_smart_money
+from settings import get_settings
 
 logger = logging.getLogger("miji.stock_service")
 
@@ -463,6 +460,7 @@ def _collect_engine(future: Future, fallback_val: Any, name: str) -> Any:  # noq
 
 def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
+    lightweight_mode = get_settings().miji_lightweight_mode
 
     # ── Phase 1: synchronous quote fetch (critical path) ───────────────────────
     # get_quote() uses PROVIDER_EXECUTOR (6 workers) and typically completes in
@@ -488,21 +486,32 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
     #   - _collect_engine() caps the wait at _ENGINE_TIMEOUT_SECONDS (9s).
     #   - If an engine misses the cap it continues in background, populating SQLite
     #     for the next request (which will then return in <1s from cache).
-    f_bubble   = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_bubble(ticker, quote=quote))
-    f_earnings = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_earnings_quality(ticker, quote=quote))
-    f_smart    = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_smart_money(ticker, quote=quote))
-    f_regime   = _ENRICHMENT_EXECUTOR.submit(detect_market_regime)
+    if lightweight_mode:
+        bubble = _fallback_bubble(ticker, quote, provisional["price"])
+        earnings = _fallback_earnings()
+        smart = _fallback_smart_money()
+        regime = {"name": "Partial Data", "confidence": None, "fallback": True}
+    else:
+        from quant_engine.bubble_engine import analyze_bubble  # noqa: PLC0415
+        from quant_engine.earnings_quality_engine import analyze_earnings_quality  # noqa: PLC0415
+        from quant_engine.regime_engine import detect_market_regime  # noqa: PLC0415
+        from quant_engine.smart_money_engine import analyze_smart_money  # noqa: PLC0415
 
-    bubble   = _collect_engine(f_bubble,   _fallback_bubble(ticker, quote, provisional["price"]), "bubble")
-    earnings = _collect_engine(f_earnings, _fallback_earnings(),                                    "earnings_quality")
-    smart    = _collect_engine(f_smart,    _fallback_smart_money(),                                 "smart_money")
-    regime   = _collect_engine(f_regime,   {"name": "Calibrating", "confidence": 50.0, "fallback": True}, "market_regime")
+        f_bubble   = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_bubble(ticker, quote=quote))
+        f_earnings = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_earnings_quality(ticker, quote=quote))
+        f_smart    = _ENRICHMENT_EXECUTOR.submit(lambda: analyze_smart_money(ticker, quote=quote))
+        f_regime   = _ENRICHMENT_EXECUTOR.submit(detect_market_regime)
+
+        bubble   = _collect_engine(f_bubble,   _fallback_bubble(ticker, quote, provisional["price"]), "bubble")
+        earnings = _collect_engine(f_earnings, _fallback_earnings(),                                    "earnings_quality")
+        smart    = _collect_engine(f_smart,    _fallback_smart_money(),                                 "smart_money")
+        regime   = _collect_engine(f_regime,   {"name": "Calibrating", "confidence": 50.0, "fallback": True}, "market_regime")
 
     # ── Phase 3: assemble response ─────────────────────────────────────────────
     snapshot = _resolve_price_snapshot(ticker, quote, bubble)
     normalized_quote = _normalized_quote(ticker, quote, snapshot)
     price = normalized_quote["price"]
-    analyst = _analyst_consensus(ticker, price, quote)
+    analyst = {"available": False, "high": None, "average": None, "low": None, "average_target": None, "implied_upside": None, "buy": None, "hold": None, "sell": None} if lightweight_mode else _analyst_consensus(ticker, price, quote)
     smart_raw = smart.get("smart_money_score")
     smart_score = safe_float(smart_raw, 50.0) if smart_raw is not None else None
     regime_name = str(regime.get("name") or "Calibrating")
@@ -524,6 +533,11 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
                 ticker, price, bool(bubble_data.get("bubble_index") is not None))
 
     sector = _sector(ticker, quote)
+    composite_intelligence = (
+        _partial_composite_intelligence("Composite intelligence skipped in MIJI_LIGHTWEIGHT_MODE; price data is live.")
+        if lightweight_mode
+        else _composite_intelligence(ticker, normalized_quote, sector)
+    )
     result = {
         "ticker": ticker,
         "company_name": _company_name(ticker, quote),
@@ -537,7 +551,7 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
         "bubble_analysis_data": bubble_data,
         "earnings_quality": earnings,
         "smart_money": smart,
-        "composite_intelligence": _composite_intelligence(ticker, normalized_quote, sector),
+        "composite_intelligence": composite_intelligence,
         "analyst_targets": analyst,
         "analyst_consensus": analyst,
         "hmm_prediction": {
@@ -549,7 +563,7 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
             "confidence": round(min(0.95, max(0.32, regime_confidence / 100.0)), 3) if model_available else None,
             "message": "Using fallback market regime..." if bool(regime.get("fallback")) else "Awaiting regime confirmation...",
         },
-        "news": _news(ticker),
+        "news": [] if lightweight_mode else _news(ticker),
     }
     if include_provider_quote:
         result["provider_quote"] = quote

@@ -160,7 +160,7 @@ def _series_metrics(symbol: str) -> Dict[str, Any]:
     enriched = central_stock_enrichment(symbol, include_provider_quote=True)
     quote = enriched.get("quote") or {}
     info = enriched.get("provider_quote") or {}
-    hist = get_history(symbol, "9mo")
+    hist = get_history(symbol, "3mo")
     if hist is None or hist.empty or len(hist) < 64:
         raise ValueError(f"insufficient history for {symbol}")
 

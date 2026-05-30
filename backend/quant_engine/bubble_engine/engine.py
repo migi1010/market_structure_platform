@@ -19,7 +19,7 @@ def analyze_bubble(symbol: str, quote: Dict[str, Any] | None = None) -> Dict[str
     ticker = symbol.strip().upper()
     info = quote if isinstance(quote, dict) else get_quote(ticker)
     financials, cashflow, balance = get_statements(ticker)
-    history = get_history(ticker, "9mo")
+    history = get_history(ticker, "3mo")
 
     revenue = statement_value(financials, ["Total Revenue", "Operating Revenue"])
     previous_revenue = previous_statement_value(financials, ["Total Revenue", "Operating Revenue"])

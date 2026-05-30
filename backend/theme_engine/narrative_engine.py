@@ -19,15 +19,16 @@ def analyze_theme_narrative(theme: ThemeDefinition, news_limit_per_symbol: int =
     return {**signal, "generated_at": datetime.now(timezone.utc).isoformat(), "keywords": list(theme.narrative_keywords)}
 
 
-def analyze_all_narratives(limit: int = 12) -> Dict[str, Any]:
+def analyze_all_narratives(limit: int = 5) -> Dict[str, Any]:
     from .theme_rotation import _fallback_theme_row, get_cached_theme_snapshot
 
     snapshot = get_cached_theme_snapshot()
     if not snapshot:
         definitions = get_theme_definitions()[:limit]
         snapshot = [_fallback_theme_row(theme) for theme in definitions]
-    ranking = build_cross_theme_ranking(snapshot, limit=limit)
-    universe = build_universe_ranking(snapshot, entity_type="theme", limit=limit)
+    compact_snapshot = snapshot[:limit]
+    ranking = build_cross_theme_ranking(compact_snapshot, limit=limit)
+    universe = build_universe_ranking(compact_snapshot, entity_type="theme", limit=limit)
     return {
         **ranking,
         "universe_ranking": universe,

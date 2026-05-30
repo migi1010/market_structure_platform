@@ -171,7 +171,7 @@ def _stock_row(symbol: str, role: str, theme_score: float) -> Dict[str, Any]:
     }
 
 
-def get_theme_stocks(theme_id: str, limit: int = 10) -> Dict[str, Any]:
+def get_theme_stocks(theme_id: str, limit: int = 5) -> Dict[str, Any]:
     theme = find_theme(theme_id)
     if theme is None:
         return {
@@ -187,7 +187,7 @@ def get_theme_stocks(theme_id: str, limit: int = 10) -> Dict[str, Any]:
     theme_metrics = snapshot.get(theme.name, {})
     theme_score = safe_float(theme_metrics.get("theme_strength_score"))
     roles = _role_map(theme)
-    rows = [_stock_row(symbol, roles.get(symbol, "theme exposure"), theme_score) for symbol in _preferred_symbols(theme)]
+    rows = [_stock_row(symbol, roles.get(symbol, "theme exposure"), theme_score) for symbol in _preferred_symbols(theme)[:limit]]
     related = rows[:limit]
     top_alpha = sorted(related, key=lambda item: safe_float(item.get("alpha_score")), reverse=True)[: min(5, limit)]
     return {
@@ -202,7 +202,7 @@ def get_theme_stocks(theme_id: str, limit: int = 10) -> Dict[str, Any]:
     }
 
 
-def get_theme_stocks_static(theme_id: str, limit: int = 10) -> Dict[str, Any]:
+def get_theme_stocks_static(theme_id: str, limit: int = 5) -> Dict[str, Any]:
     theme = find_theme(theme_id)
     if theme is None:
         return {
@@ -252,7 +252,7 @@ def get_theme_detail(theme_id: str) -> Dict[str, Any]:
         return {**stocks, "theme_score": None, "confidence": "Unavailable", "status": "Unavailable", "supply_chain": {}, "capital_flow": None, "bubble_risk": None}
     snapshot = {row.get("theme"): row for row in build_theme_snapshot()}
     metrics = snapshot.get(theme.name, {})
-    stocks = get_theme_stocks(theme.name, limit=12)
+    stocks = get_theme_stocks(theme.name, limit=5)
     supply_chain = map_supply_chain(theme)
     bubble_values = [safe_float(row.get("bubble_risk")) for row in stocks["related_stocks"] if row.get("bubble_risk") is not None]
     return {
@@ -278,7 +278,7 @@ def get_theme_detail(theme_id: str) -> Dict[str, Any]:
 
 def get_theme_detail_static(theme_id: str) -> Dict[str, Any]:
     theme = find_theme(theme_id)
-    stocks = get_theme_stocks_static(theme_id, limit=12)
+    stocks = get_theme_stocks_static(theme_id, limit=5)
     if theme is None:
         return {**stocks, "theme_score": None, "confidence": "Unavailable", "status": "Unavailable", "supply_chain": {}, "capital_flow": None, "bubble_risk": None}
     supply_chain: Dict[str, List[Dict[str, Any]]] = {}
