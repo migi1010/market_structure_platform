@@ -85,8 +85,8 @@ const POPULAR_SYMBOLS: SearchResult[] = [
 const UNIVERSAL_SEARCH: SearchResult[] = [
   { symbol: "HBM", name: "High Bandwidth Memory / 高頻寬記憶體", exchange: "Theme", type: "Theme" },
   { symbol: "NUCLEAR", name: "Nuclear Energy / 核能", exchange: "Theme", type: "Theme" },
-  { symbol: "COPPER", name: "Cable / Copper / 電纜銅材", exchange: "Theme", type: "Theme" },
-  { symbol: "GRID", name: "Electric Grid / 電網基建", exchange: "Theme", type: "Theme" },
+  { symbol: "COPPER", name: "Cable / Copper / 電纜銅", exchange: "Theme", type: "Theme" },
+  { symbol: "GRID", name: "Electric Grid / 電網基礎建設", exchange: "Theme", type: "Theme" },
   { symbol: "DEFENSE AI", name: "Defense AI / 國防 AI", exchange: "Theme", type: "Theme" },
   { symbol: "ROBOTICS", name: "Robotics / 機器人", exchange: "Theme", type: "Theme" },
   { symbol: "CYBERSECURITY", name: "Cybersecurity / 資安", exchange: "Theme", type: "Theme" },
@@ -116,6 +116,48 @@ const OMNIBOX_COMMANDS: OmniboxRegistryItem[] = enabledTerminalModules.filter((m
   target_tab: module.target_tab,
   aliases: [module.title, module.shortTitle, ...module.searchKeywords],
 }));
+
+const THEME_RESEARCH_COMMANDS: OmniboxRegistryItem[] = [
+  {
+    symbol: "THEME-FORECAST",
+    name: "Open Theme Forecast",
+    exchange: "Command",
+    type: "Command",
+    command: "open-theme-forecast",
+    label: "Open Theme Forecast",
+    description: "Open the Forecast tab inside Theme Research",
+    intent: "command",
+    group: "Commands",
+    target_tab: "theme-intelligence",
+    aliases: ["forecast", "theme forecast", "future themes", "theme ai", "regime forecast"],
+  },
+  {
+    symbol: "CAPITAL-ROTATION",
+    name: "Open Capital Rotation",
+    exchange: "Command",
+    type: "Command",
+    command: "open-capital-rotation",
+    label: "Open Capital Rotation",
+    description: "Open the Rotation tab inside Theme Research",
+    intent: "command",
+    group: "Commands",
+    target_tab: "theme-intelligence",
+    aliases: ["sector", "sector rotation", "capital rotation", "capital flow", "relative strength"],
+  },
+  {
+    symbol: "SUPPLY-CHAIN",
+    name: "Open Supply Chain",
+    exchange: "Command",
+    type: "Command",
+    command: "open-supply-chain",
+    label: "Open Supply Chain",
+    description: "Open supply-chain intelligence inside Theme Research",
+    intent: "command",
+    group: "Commands",
+    target_tab: "theme-intelligence",
+    aliases: ["supply chain", "beneficiary stocks", "theme stocks", "stocks"],
+  },
+];
 
 const OMNIBOX_THEMES: OmniboxRegistryItem[] = [
   ["AI Infrastructure", "AI capex, accelerators, cloud data centers, and power demand", ["AI", "ARTIFICIAL INTELLIGENCE", "AI INFRA", "AI INFRASTRUCTURE", "DATA CENTER"]],
@@ -158,7 +200,7 @@ const OMNIBOX_SECTORS: OmniboxRegistryItem[] = [
   description: String(description),
   intent: "sector" as OmniboxIntent,
   group: "Sectors" as OmniboxGroup,
-  target_tab: "market-intel" as OmniboxTargetTab,
+  target_tab: "theme-intelligence" as OmniboxTargetTab,
   aliases: aliases as string[],
 }));
 
@@ -209,6 +251,43 @@ function actionForResult(item: SearchResult, query = ""): WorkspaceAction {
       contextPayload: { ticker, label: `Open ${ticker} Analysis` },
     };
   }
+  if (type === "sector" || targetTab === "market-intel") {
+    const sector = item.sector ?? item.label ?? item.name;
+    return {
+      actionType: type === "sector" ? "open_sector" : "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-rotation",
+      openMode: "replace",
+      contextPayload: type === "sector" ? { sector, themeView: "rotation", label: `Open ${sector} Rotation` } : { themeView: "rotation", label: item.label ?? item.name },
+    };
+  }
+  if (item.command === "open-theme-forecast") {
+    return {
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-forecast",
+      openMode: "replace",
+      contextPayload: { themeView: "forecast", label: item.label ?? item.name },
+    };
+  }
+  if (item.command === "open-capital-rotation") {
+    return {
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-rotation",
+      openMode: "replace",
+      contextPayload: { themeView: "rotation", label: item.label ?? item.name },
+    };
+  }
+  if (item.command === "open-supply-chain") {
+    return {
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-supply-chain",
+      openMode: "replace",
+      contextPayload: { themeView: "supply-chain", label: item.label ?? item.name },
+    };
+  }
   if (type === "theme" || targetTab === "theme-intelligence") {
     const theme = item.theme ?? item.label ?? item.name;
     return {
@@ -216,17 +295,16 @@ function actionForResult(item: SearchResult, query = ""): WorkspaceAction {
       target_tab: "theme-intelligence",
       focusTarget: type === "theme" ? "theme-detail" : "theme-workspace",
       openMode: "replace",
-      contextPayload: type === "theme" ? { theme, label: `Open ${theme}` } : { label: item.label ?? item.name },
+      contextPayload: type === "theme" ? { theme, themeView: "command", label: `Open ${theme}` } : { themeView: "command", label: item.label ?? item.name },
     };
   }
-  if (type === "sector" || targetTab === "market-intel") {
-    const sector = item.sector ?? item.label ?? item.name;
+  if (targetTab === "theme-forecast") {
     return {
-      actionType: type === "sector" ? "open_sector" : "open_module",
-      target_tab: "market-intel",
-      focusTarget: "sector-drilldown",
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-forecast",
       openMode: "replace",
-      contextPayload: type === "sector" ? { sector, label: `Open ${sector} Rotation` } : { label: item.label ?? item.name },
+      contextPayload: { themeView: "forecast", label: item.label ?? item.name },
     };
   }
   if (targetTab === "alpha-quant") {
@@ -308,7 +386,7 @@ function enrichUniversalResult(item: SearchResult): SearchResult {
       description: item.description ?? "Open sector rotation",
       intent: "sector",
       group: "Sectors",
-      target_tab: "market-intel",
+      target_tab: "theme-intelligence",
     });
   }
   return enrichStockResult(item);
@@ -320,7 +398,7 @@ export function classifySearchIntent(query: string): OmniboxIntent {
   if (!normalized) return "ticker";
   if (/^THEME\s+/.test(normalized)) return "theme";
   if (/^SECTOR\s+/.test(normalized)) return "sector";
-  if (OMNIBOX_COMMANDS.some((item) => matchesOmniboxItem(item, normalized))) return "command";
+  if ([...OMNIBOX_COMMANDS, ...THEME_RESEARCH_COMMANDS].some((item) => matchesOmniboxItem(item, normalized))) return "command";
   if (OMNIBOX_THEMES.some((item) => matchesOmniboxItem(item, normalized))) return "theme";
   if (OMNIBOX_SECTORS.some((item) => matchesOmniboxItem(item, normalized))) return "sector";
   if (/^[A-Z.]{1,8}$/.test(stripped)) return "ticker";
@@ -1260,7 +1338,7 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
   }).map(enrichUniversalResult);
   const themeMatches = OMNIBOX_THEMES.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
   const sectorMatches = OMNIBOX_SECTORS.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
-  const commandMatches = OMNIBOX_COMMANDS.filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
+  const commandMatches = [...OMNIBOX_COMMANDS, ...THEME_RESEARCH_COMMANDS].filter((item) => matchesOmniboxItem(item, normalized)).map((item) => withWorkspaceAction(item, normalized));
   const localBuckets: Record<OmniboxIntent, SearchResult[]> = {
     command: [...commandMatches, ...localMatches, ...themeMatches, ...sectorMatches, ...universalMatches],
     theme: [...themeMatches, ...localMatches, ...sectorMatches, ...commandMatches, ...universalMatches],

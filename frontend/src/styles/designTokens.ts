@@ -1,21 +1,25 @@
 export const designTokens = {
   colors: {
-    background: "#20242B",
-    backgroundSecondary: "#262B33",
-    panel: "#2A2F37",
-    panelHover: "#313743",
-    border: "#3A404A",
-    accent: "#7C8796",
-    accentSoft: "#909BA8",
-    bullish: "#7E9C8C",
-    bearish: "#A07B7B",
-    warning: "#B39C72",
-    highlight: "#D8D3C9",
-    textPrimary: "#E2E6EB",
-    textSecondary: "#B5BDC8",
-    mutedText: "#8D97A5",
-    success: "#7E9C8C",
-    danger: "#B08989",
+    background: "#1E2229",
+    backgroundSecondary: "#242933",
+    panel: "#2B313C",
+    panelHover: "#343B48",
+    border: "#48515F",
+    borderStrong: "#5C6675",
+    accent: "#A3ACB8",
+    accentSoft: "#B8C0CA",
+    bullish: "#95B8A3",
+    bearish: "#BD9292",
+    warning: "#C9B17D",
+    highlight: "#F1E7D4",
+    textPrimary: "#F4EFE7",
+    textSecondary: "#D3CCC2",
+    mutedText: "#AAB3BF",
+    success: "#95B8A3",
+    danger: "#BD9292",
+    positiveTagBg: "rgba(149,184,163,0.14)",
+    negativeTagBg: "rgba(189,146,146,0.14)",
+    panelInset: "#232832",
   },
   typography: {
     fontFamily: '"IBM Plex Sans", "Noto Sans TC", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -39,10 +43,10 @@ export const designTokens = {
   },
   icons: {
     size: 18,
-    default: "#7C8796",
-    hover: "#D8D3C9",
-    active: "#E2E6EB",
-    activeBackground: "#313743",
+    default: "#A3ACB8",
+    hover: "#F1E7D4",
+    active: "#F4EFE7",
+    activeBackground: "#343B48",
   },
   panel: {
     className: "terminal-panel rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel)]",
@@ -51,4 +55,3 @@ export const designTokens = {
 } as const;
 
 export type DesignTokens = typeof designTokens;
-

@@ -23,7 +23,7 @@ export default function TerminalPanel({
   return (
     <Component className={`terminal-panel p-4 ${className}`}>
       {(eyebrow || title || description || actions) && (
-        <div className="mb-4 flex min-w-0 items-start justify-between gap-4">
+        <div className="mb-3 flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0">
             {eyebrow && <div className="terminal-micro-label">{eyebrow}</div>}
             {title && <h2 className="terminal-panel-title mt-1 text-[var(--theme-text)]">{title}</h2>}
@@ -36,4 +36,3 @@ export default function TerminalPanel({
     </Component>
   );
 }
-

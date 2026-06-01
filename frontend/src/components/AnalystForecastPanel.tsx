@@ -62,70 +62,70 @@ function AnalystForecastPanel({ targets, consensus, price = 0, lifecycleState, q
         : "Analyst target framework awaiting provider data.";
 
   return (
-    <section className="miji-card rounded-2xl border border-[#2A2F3D] bg-[#151922]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-md">
+    <section className="miji-card terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#06B6D4]">Institutional Analyst Consensus</p>
-          <h3 className="mt-1 text-lg font-semibold tracking-wide text-[#E6EDF3]">Street Target Framework</h3>
+          <p className="terminal-micro-label">Institutional Analyst Consensus</p>
+          <h3 className="terminal-panel-title mt-1 text-[var(--theme-text)]">Street Target Framework</h3>
         </div>
-        <Target className="text-[#06B6D4]" size={22} />
+        <Target className="text-[var(--theme-warning)]" size={22} />
       </div>
 
       <div className="miji-card-metrics grid grid-cols-3 gap-3">
         {[
-          ["High Target", high, "text-[#10B981]"],
-          ["Average Target", averageTarget, "text-amber-200"],
-          ["Low Target", low, "text-red-400"],
+          ["High Target", high, "text-[var(--theme-bullish)]"],
+          ["Average Target", averageTarget, "text-[var(--theme-highlight)]"],
+          ["Low Target", low, "text-[var(--theme-bearish)]"],
         ].map(([label, value, color]) => (
-          <div key={String(label)} className="rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{label}</p>
-            <p className={`mt-2 font-mono text-xl font-semibold ${hasTargets ? color : "text-[#9BA7B4]"}`}>{targetLabel(value as number | null)}</p>
+          <div key={String(label)} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
+            <p className={`mt-2 font-mono text-xl font-bold ${hasTargets ? color : "text-[var(--theme-muted)]"}`}>{targetLabel(value as number | null)}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 rounded-xl border border-[#2A2F3D] bg-[#0B0E14] p-4">
+      <div className="mt-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-[#9BA7B4]">Implied Upside</span>
-          <span className={typeof upside === "number" && upside >= 0 ? "font-mono text-xl font-semibold text-[#10B981]" : typeof upside === "number" ? "font-mono text-xl font-semibold text-red-400" : "font-mono text-xl font-semibold text-[#9BA7B4]"}>
+          <span className="text-sm font-medium text-[var(--theme-muted)]">Implied Upside</span>
+          <span className={typeof upside === "number" && upside >= 0 ? "font-mono text-xl font-bold text-[var(--theme-bullish)]" : typeof upside === "number" ? "font-mono text-xl font-bold text-[var(--theme-bearish)]" : "font-mono text-xl font-bold text-[var(--theme-muted)]"}>
             {typeof upside === "number" && Number.isFinite(upside) ? `${upside.toFixed(1)}%` : waitingLabel}
           </span>
         </div>
 
         <div className="miji-card-metrics mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-lg border border-[#10B981]/25 bg-[#10B981]/10 p-3">
-            <p className="text-xs font-semibold text-[#10B981]">Buy</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-[#E6EDF3]">{hasConsensus ? analystLabel(buyCount) : waitingLabel}</p>
+          <div className="rounded-lg border border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)] p-3">
+            <p className="text-xs font-bold text-[var(--theme-bullish)]">Buy</p>
+            <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(buyCount) : waitingLabel}</p>
           </div>
-          <div className="rounded-lg border border-amber-400/25 bg-amber-400/10 p-3">
-            <p className="text-xs font-semibold text-amber-200">Hold</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-[#E6EDF3]">{hasConsensus ? analystLabel(holdCount) : waitingLabel}</p>
+          <div className="rounded-lg border border-[var(--theme-warning)] bg-[var(--theme-panel)] p-3">
+            <p className="text-xs font-bold text-[var(--theme-warning)]">Hold</p>
+            <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(holdCount) : waitingLabel}</p>
           </div>
-          <div className="rounded-lg border border-red-400/25 bg-red-400/10 p-3">
-            <p className="text-xs font-semibold text-red-400">Sell</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-[#E6EDF3]">{hasConsensus ? analystLabel(sellCount) : waitingLabel}</p>
+          <div className="rounded-lg border border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)] p-3">
+            <p className="text-xs font-bold text-[var(--theme-bearish)]">Sell</p>
+            <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(sellCount) : waitingLabel}</p>
           </div>
         </div>
 
         {total > 0 && (
           <div className="mt-4 space-y-2">
             {[
-              ["Buy", ratios.buy, "bg-[#10B981]", "text-[#10B981]"],
-              ["Hold", ratios.hold, "bg-amber-300", "text-amber-200"],
-              ["Sell", ratios.sell, "bg-red-400", "text-red-400"],
+              ["Buy", ratios.buy, "bg-[var(--theme-bullish)]", "text-[var(--theme-bullish)]"],
+              ["Hold", ratios.hold, "bg-[var(--theme-warning)]", "text-[var(--theme-warning)]"],
+              ["Sell", ratios.sell, "bg-[var(--theme-bearish)]", "text-[var(--theme-bearish)]"],
             ].map(([label, ratio, bar, text]) => (
               <div key={String(label)} className="grid grid-cols-[44px_1fr_42px] items-center gap-3 text-xs">
                 <span className={`font-semibold ${text}`}>{label}</span>
-                <div className="h-2 overflow-hidden rounded-full bg-[#1C2128]">
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--theme-bg-secondary)]">
                   <div className={`h-full rounded-full ${bar}`} style={{ width: `${Number(ratio).toFixed(0)}%` }} />
                 </div>
-                <span className="text-right font-mono text-[#C9D1D9]">{Number(ratio).toFixed(0)}%</span>
+                <span className="text-right font-mono text-[var(--theme-text-secondary)]">{Number(ratio).toFixed(0)}%</span>
               </div>
             ))}
           </div>
         )}
 
-        <p className="mt-4 text-sm leading-relaxed text-[#9BA7B4]">{summary}</p>
+        <p className="mt-4 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{summary}</p>
       </div>
     </section>
   );

@@ -117,6 +117,7 @@ export interface WorkspaceAction {
   contextPayload?: {
     ticker?: string;
     theme?: string;
+    themeView?: string;
     sector?: string;
     alphaView?: string;
     portfolioView?: string;

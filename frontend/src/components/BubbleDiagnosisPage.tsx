@@ -52,7 +52,7 @@ export default function BubbleDiagnosisPage({ selectedTicker, watchlist, globalS
 
   return (
     <main className="min-h-full bg-[#0A0C10] p-5 text-[#E6EDF3]">
-      <div className="mb-5 rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-md">
+      <div className="mb-5 rounded-2xl border border-[#2B313C] bg-[#161B22] p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <ShieldAlert className="text-amber-200" size={28} />
@@ -68,7 +68,7 @@ export default function BubbleDiagnosisPage({ selectedTicker, watchlist, globalS
             <select
               value={selectedTicker}
               onChange={(event) => onTickerChange(event.target.value)}
-              className="h-11 flex-1 rounded-2xl border border-[#2B313C] bg-[#111318] px-4 font-mono text-[#E6EDF3] outline-none backdrop-blur-md focus:border-amber-400/30 focus:shadow-[0_0_0_1px_rgba(251,191,36,0.15)]"
+              className="h-11 flex-1 rounded-2xl border border-[#2B313C] bg-[#111318] px-4 font-mono text-[#E6EDF3] outline-none focus:border-amber-400/30"
             >
               {quickSwitch.map((symbol) => (
                 <option key={symbol} value={symbol}>{symbol}</option>

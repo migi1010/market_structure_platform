@@ -31,10 +31,10 @@ function formatScore(value: number | null | undefined, digits = 1): string {
 }
 
 function actionClass(action: AlphaQuantRow["suggested_action"]): string {
-  if (action === "Strong Buy" || action === "Accumulation") return "border-[var(--theme-bullish)] bg-[var(--theme-bg-secondary)] text-[var(--theme-bullish)]";
-  if (action === "Bubble Risk" || action === "Avoid") return "border-[var(--theme-bearish)] bg-[var(--theme-bg-secondary)] text-[var(--theme-bearish)]";
-  if (action === "Watchlist") return "border-[var(--theme-highlight)] bg-[var(--theme-bg-secondary)] text-[var(--theme-highlight)]";
-  return "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-warning)]";
+  if (action === "Strong Buy" || action === "Accumulation") return "border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)] text-[var(--theme-bullish)]";
+  if (action === "Bubble Risk" || action === "Avoid") return "border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)] text-[var(--theme-bearish)]";
+  if (action === "Watchlist") return "border-[var(--theme-highlight)] bg-[var(--theme-panel-inset)] text-[var(--theme-highlight)]";
+  return "border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] text-[var(--theme-warning)]";
 }
 
 const FactorBar = memo(function FactorBar({ label, value }: { label: string; value: number | null | undefined }) {
@@ -152,14 +152,14 @@ function AlphaRowCard({ row, onOpen }: { row: AlphaQuantRow; onOpen: (ticker: st
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-wide text-[var(--theme-muted)]">
-        <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+        <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-2 py-1">
           Base <b className="font-mono text-[var(--theme-text-secondary)]">{formatScore(row?.base_alpha_score)}</b>
         </span>
-        <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+        <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-2 py-1">
           Adj <b className="font-mono text-[var(--theme-text-secondary)]">{finiteScore(row?.universe_adjustment) !== null ? `${Number(row.universe_adjustment) >= 0 ? "+" : ""}${Number(row.universe_adjustment).toFixed(1)}` : "--"}</b>
         </span>
         {ranking && (
-          <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1">
+          <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-2 py-1">
             Rank <b className="font-mono text-[var(--theme-text-secondary)]">{formatScore(ranking.ranking_score)}</b> / <b className="text-[var(--theme-highlight)]">{ranking.market_classification.replaceAll("_", " ")}</b>
           </span>
         )}
@@ -254,7 +254,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
         </div>
       </div>
 
-      {error && <div className="mb-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4 text-[var(--theme-warning)]">Live engine delayed. Showing cached institutional intelligence.</div>}
+      {error && <div className="mb-5 rounded-2xl border border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] p-4 text-[var(--theme-warning)]">Live engine delayed. Showing cached institutional intelligence.</div>}
 
       <div className="miji-alpha-overview-grid mb-5 grid gap-4 xl:grid-cols-4">
         <TerminalPanel className="p-5 xl:col-span-2">
@@ -264,9 +264,9 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
           </div>
           <p className="text-sm leading-relaxed text-[var(--theme-text-secondary)]">{data?.summary ?? "Preparing institutional alpha intelligence."}</p>
           <div className="mt-4 flex flex-wrap gap-3 text-xs text-[var(--theme-muted)]">
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">Regime: <b className="text-[var(--theme-text)]">{data?.market_regime?.name ?? "Unknown"}</b></span>
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">Confidence: <b className="text-[var(--theme-bullish)]">{formatScore(data?.market_regime?.confidence)}</b></span>
-            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">Qlib: <b className="text-[var(--theme-highlight)]">{data?.qlib_engine?.factor_set ?? "Alpha158"}</b></span>
+            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">Regime: <b className="text-[var(--theme-text)]">{data?.market_regime?.name ?? "Unknown"}</b></span>
+            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">Confidence: <b className="text-[var(--theme-bullish)]">{formatScore(data?.market_regime?.confidence)}</b></span>
+            <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">Qlib: <b className="text-[var(--theme-highlight)]">{data?.qlib_engine?.factor_set ?? "Alpha158"}</b></span>
           </div>
         </TerminalPanel>
         <TerminalPanel className="p-5 xl:col-span-2">
@@ -279,7 +279,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
               <FactorBar key={factor} label={factor.replace("_", " ").toUpperCase()} value={finiteScore(weight) === null ? null : Number(weight) * 100} />
             ))}
             {factorImportance.length === 0 && (
-              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-sm text-[var(--theme-muted)] md:col-span-2">
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3 text-sm text-[var(--theme-muted)] md:col-span-2">
                 Factor weights are warming. No neutral placeholder weights are displayed until backend inputs are finite.
               </div>
             )}
@@ -294,10 +294,10 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {screener.slice(0, 4).map((row) => (
-            <div key={`${row.symbol}-${row.market_classification}`} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+            <div key={`${row.symbol}-${row.market_classification}`} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-mono text-sm font-semibold text-[var(--theme-text)]">{row.symbol}</p>
+                  <p className="truncate font-mono text-sm font-bold text-[var(--theme-text)]">{row.symbol}</p>
                   <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-highlight)]">{row.market_classification.replaceAll("_", " ")}</p>
                 </div>
                 <p className={`font-mono text-lg font-semibold ${scoreColor(row.ranking_score)}`}>{formatScore(row.ranking_score)}</p>
@@ -306,7 +306,7 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
             </div>
           ))}
           {screener.length === 0 && (
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-sm text-[var(--theme-muted)]">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3 text-sm text-[var(--theme-muted)]">
               Universe screener awaits finite factor inputs.
             </div>
           )}
@@ -335,9 +335,9 @@ export default function AlphaQuantPage({ onTickerSelect }: AlphaQuantPageProps) 
           </div>
           <div className="space-y-3">
             {recommendations.map((row) => (
-              <button key={row.ticker} onClick={() => onTickerSelect(row.ticker)} className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-left transition hover:border-[var(--theme-bullish)]">
+              <button key={row.ticker} onClick={() => onTickerSelect(row.ticker)} className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3 text-left transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-lg font-semibold text-[var(--theme-text)]">{row.ticker}</span>
+                  <span className="font-mono text-lg font-bold text-[var(--theme-text)]">{row.ticker}</span>
                   <span className={scoreColor(primaryAlphaScore(row))}>{formatScore(primaryAlphaScore(row))}</span>
                 </div>
                 <p className="mt-1 truncate text-xs text-[var(--theme-muted)]">{sanitizeCompanyName(row.company_name)}</p>

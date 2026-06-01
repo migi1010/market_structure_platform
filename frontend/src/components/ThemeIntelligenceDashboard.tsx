@@ -37,7 +37,7 @@ import type {
   ThemeTopResponse,
 } from "@/types/stock";
 
-const cardClass = "miji-card terminal-panel p-5";
+const cardClass = "miji-card terminal-panel p-4";
 const warmupMessages = [
   "Initializing Capital Flow Engine...",
   "Mapping Supply Chains...",
@@ -113,8 +113,8 @@ function EmptyState({
   detail?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-5">
-      <p className="font-semibold tracking-wide text-[var(--theme-text)]">{title}</p>
+    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
+      <p className="font-bold tracking-wide text-[var(--theme-text)]">{title}</p>
       <p className="mt-2 text-sm leading-relaxed text-[var(--theme-muted)]">{detail}</p>
     </div>
   );
@@ -142,7 +142,7 @@ function WarmupExperience({ progress, messageIndex }: { progress: number; messag
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+        <div className="space-y-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
           {warmupMessages.map((message, index) => {
             const complete = index < activeIndex || progress >= 100;
             const active = index === activeIndex && progress < 100;
@@ -164,7 +164,7 @@ function WarmupExperience({ progress, messageIndex }: { progress: number; messag
 
         <div className="grid gap-3 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+            <div key={index} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
               <div className="flex items-center justify-between gap-3">
                 <ShimmerBlock className="h-4 w-32" />
                 <ShimmerBlock className="h-7 w-12" />
@@ -213,11 +213,11 @@ function ThemeRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onThemeSelect(theme.theme);
       }}
-      className="w-full cursor-pointer rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4 text-left transition-colors hover:border-[var(--theme-border)] hover:bg-[var(--theme-panel)]"
+      className="w-full cursor-pointer rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4 text-left transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-wide text-[var(--theme-text)]">{theme?.theme ?? "Theme"}</p>
+          <p className="truncate text-sm font-bold tracking-wide text-[var(--theme-text)]">{theme?.theme ?? "Theme"}</p>
           <p className="mt-1 truncate text-xs text-[var(--theme-muted)]">{theme?.category ?? "Universal Market Theme"}</p>
         </div>
         <div className={`font-mono text-xl font-semibold ${scoreTone(score)}`}>{formatOptionalScore(score)}</div>
@@ -240,7 +240,7 @@ function ThemeRow({
         </div>
       </div>
       {leadership && (
-        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Leadership</p>
             <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{formatOptionalScore(leadershipScore)}</p>
@@ -249,7 +249,7 @@ function ThemeRow({
         </div>
       )}
       {ranking && (
-        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Universe Rank</p>
             <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{formatOptionalScore(ranking.ranking_score)}</p>
@@ -269,7 +269,7 @@ function ThemeRow({
                 event.stopPropagation();
                 onTickerSelect(leader.ticker);
               }}
-              className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--theme-text-secondary)]"
+              className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--theme-text-secondary)]"
             >
               {leader.ticker}
             </button>
@@ -283,7 +283,7 @@ function ThemeRow({
 
 function MetricCard({ label, value, sublabel, icon }: { label: string; value: string; sublabel: string; icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
         <div className="text-[var(--theme-warning)]">{icon}</div>
@@ -328,15 +328,15 @@ function ThemeDetailPanel({
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--theme-muted)]">{detail.description ?? detail.summary}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-right text-xs">
-          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
             <p className="text-[var(--theme-accent)]">Score</p>
             <p className={`font-mono text-lg font-semibold ${scoreTone(detail.theme_score ?? undefined)}`}>{formatOptionalScore(detail.theme_score)}</p>
           </div>
-          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
             <p className="text-[var(--theme-accent)]">Confidence</p>
             <p className="font-semibold text-[var(--theme-text-secondary)]">{detail.confidence ?? "Partial"}</p>
           </div>
-          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
             <p className="text-[var(--theme-accent)]">Status</p>
             <p className="font-semibold text-[var(--theme-warning)]">{detail.status ?? "Watchlist"}</p>
           </div>
@@ -352,7 +352,7 @@ function ThemeDetailPanel({
                 key={`${detail.theme}-${stock.ticker}`}
                 type="button"
                 onClick={() => onTickerSelect(stock.ticker)}
-                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-left"
+                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3 text-left transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -368,9 +368,9 @@ function ThemeDetailPanel({
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">Alpha {formatOptionalScore(stock.alpha_score)}</span>
-                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">SM {formatOptionalScore(stock.smart_money)}</span>
-                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">Bubble {formatOptionalScore(stock.bubble_risk)}</span>
+                  <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[var(--theme-text-secondary)]">Alpha {formatOptionalScore(stock.alpha_score)}</span>
+                  <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[var(--theme-text-secondary)]">SM {formatOptionalScore(stock.smart_money)}</span>
+                  <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[var(--theme-text-secondary)]">Bubble {formatOptionalScore(stock.bubble_risk)}</span>
                 </div>
               </button>
             ))}
@@ -379,17 +379,17 @@ function ThemeDetailPanel({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Top Alpha Stocks</p>
             <div className="flex flex-wrap gap-2">
               {alpha.slice(0, 6).map((stock) => (
-                <button key={`alpha-${stock.ticker}`} type="button" onClick={() => onTickerSelect(stock.ticker)} className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-1.5 font-mono text-xs font-semibold text-[var(--theme-text-secondary)]">
+                <button key={`alpha-${stock.ticker}`} type="button" onClick={() => onTickerSelect(stock.ticker)} className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2.5 py-1.5 font-mono text-xs font-semibold text-[var(--theme-text-secondary)]">
                   {stock.ticker} {formatOptionalScore(stock.alpha_score)}
                 </button>
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Supply Chain Map</p>
             <div className="space-y-2">
               {chainRoles.map(([role, stocks]) => (
@@ -402,11 +402,11 @@ function ThemeDetailPanel({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
               <p className="text-[11px] text-[var(--theme-accent)]">Capital Flow</p>
               <p className={`font-mono text-lg font-semibold ${scoreTone(detail.capital_flow ?? undefined)}`}>{formatOptionalScore(detail.capital_flow)}</p>
             </div>
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
               <p className="text-[11px] text-[var(--theme-accent)]">Bubble Risk</p>
               <p className={`font-mono text-lg font-semibold ${scoreTone(finiteScore(detail.bubble_risk) === null ? null : 100 - Number(detail.bubble_risk))}`}>{formatOptionalScore(detail.bubble_risk)}</p>
             </div>
@@ -576,10 +576,10 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           </div>
           <div className="space-y-3">
             {emergingThemes.slice(0, 7).map((theme) => (
-              <div key={theme.theme} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+              <div key={theme.theme} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{theme.theme}</p>
+                    <p className="truncate text-sm font-bold text-[var(--theme-text)]">{theme.theme}</p>
                     <p className="mt-1 text-xs text-[var(--theme-muted)]">{theme.category}</p>
                   </div>
                   <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(theme.score, theme.acceleration, theme.leadership, theme.momentum, theme.participation))}`}>
@@ -608,9 +608,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           </div>
           <div className="space-y-3">
             {flowItems.slice(0, 6).map((item) => (
-              <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3">
+              <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{item.theme}</p>
+                  <p className="truncate text-sm font-bold text-[var(--theme-text)]">{item.theme}</p>
                   <p className="text-xs text-[var(--theme-muted)]">Momentum {formatOptionalScore(item.momentum)} - Breadth {formatOptionalScore(item.participation)}{finiteScore(item.participation) !== null ? "%" : ""}</p>
                 </div>
                 <p className={`font-mono font-semibold ${scoreTone(item.flow)}`}>{formatOptionalScore(item.flow)}</p>
@@ -635,10 +635,10 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                 key={`${leader.theme}-${leader.ticker}`}
                 type="button"
                 onClick={() => onTickerSelect(leader.ticker)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3 text-left"
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-3 text-left transition-colors hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]"
               >
                 <div className="min-w-0">
-                  <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{leader.ticker}</p>
+                  <p className="font-mono text-sm font-bold text-[var(--theme-text)]">{leader.ticker}</p>
                   <p className="truncate text-xs text-[var(--theme-muted)]">{leader.theme} - {leader.role ?? "leader"}</p>
                 </div>
                 <p className={typeof leader.change_percent !== "number" ? "font-mono text-sm font-semibold text-[var(--theme-accent)]" : leader.change_percent >= 0 ? "font-mono text-sm font-semibold text-[var(--theme-bullish)]" : "font-mono text-sm font-semibold text-[var(--theme-bearish)]"}>
@@ -665,7 +665,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-bearish)]">Overheated Themes</p>
               {overheatedThemes.slice(0, 4).map((theme) => (
-                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
                   <span className="truncate text-sm text-[var(--theme-text-secondary)]">{theme.theme}</span>
                   <span className="font-mono text-sm font-semibold text-[var(--theme-bearish)]">{formatOptionalScore(theme.score)}</span>
                 </div>
@@ -678,7 +678,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-bullish)]">Undervalued Themes</p>
               {undervaluedThemes.slice(0, 4).map((theme) => (
-                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
                   <span className="truncate text-sm text-[var(--theme-text-secondary)]">{theme.theme}</span>
                   <span className="font-mono text-sm font-semibold text-[var(--theme-bullish)]">{formatOptionalScore(theme.score)}</span>
                 </div>

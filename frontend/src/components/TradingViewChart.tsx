@@ -31,13 +31,13 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
   }, [interval, symbol]);
 
   return (
-    <section className="miji-card miji-chart-card miji-tradingview min-h-[680px] min-w-0 overflow-hidden rounded-2xl border border-[#2B313C] bg-[#161B22]/95 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#2B313C] px-4 py-3">
+    <section className="miji-card miji-chart-card miji-tradingview min-h-[680px] min-w-0 overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--theme-border)] px-4 py-3">
         <div className="flex items-center gap-3">
-          <CandlestickChart className="text-amber-200" size={20} />
+          <CandlestickChart className="text-[var(--theme-warning)]" size={20} />
           <div>
-            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[#E6EDF3]">{symbol} Real-Time Chart</h2>
-            <p className="text-xs text-[#9BA7B4]">Volume, SMA, RSI, MACD, SMC liquidity map</p>
+            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--theme-text)]">{symbol} Real-Time Chart</h2>
+            <p className="text-xs text-[var(--theme-muted)]">Volume, SMA, RSI, MACD, SMC liquidity map</p>
           </div>
         </div>
         <div className="flex max-w-full items-center gap-2 overflow-x-auto">
@@ -46,7 +46,7 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
               key={item}
               onClick={() => setInterval(item)}
               className={`h-8 rounded-lg border px-3 font-mono text-xs font-bold transition ${
-                interval === item ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-[#2B313C] bg-[#0A0C10] text-[#9BA7B4] hover:border-amber-400/20"
+                interval === item ? "border-[var(--theme-border-strong)] bg-[var(--theme-panel-hover)] text-[var(--theme-highlight)]" : "border-[var(--theme-border)] bg-[var(--theme-panel-inset)] text-[var(--theme-muted)] hover:border-[var(--theme-border-strong)]"
               }`}
             >
               {item}
@@ -54,23 +54,23 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
           ))}
         </div>
       </div>
-      <div className="miji-tradingview-grid grid min-w-0 gap-px bg-[#2A2F3D] lg:grid-cols-[1fr_260px]">
-        <div className="miji-tradingview-frame h-[620px] min-w-0 bg-[#0A0C10] p-2">
+      <div className="miji-tradingview-grid grid min-w-0 gap-px bg-[var(--theme-border)] lg:grid-cols-[1fr_260px]">
+        <div className="miji-tradingview-frame h-[620px] min-w-0 bg-[var(--theme-panel-inset)] p-2">
           <iframe title={`${symbol} TradingView`} src={src} className="h-full w-full rounded-xl border-0" allowFullScreen />
         </div>
-        <aside className="miji-info-panel min-w-0 bg-[#0A0C10] p-4">
-          <div className="mb-4 flex items-center gap-2 text-amber-200">
+        <aside className="miji-info-panel min-w-0 bg-[var(--theme-panel-inset)] p-4">
+          <div className="mb-4 flex items-center gap-2 text-[var(--theme-warning)]">
             <Layers size={16} />
             <span className="text-xs font-black uppercase tracking-[0.18em]">Smart Money Overlay</span>
           </div>
           {["Liquidity Zones", "Fair Value Gap", "Order Block", "Volume Imbalance", "Session VWAP"].map((label, index) => (
-            <div key={label} className="mb-3 rounded-xl border border-[#2B313C] bg-[#161B22]/95 p-3">
+            <div key={label} className="mb-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#C9D1D9]">{label}</span>
-                <BarChart3 size={14} className={index % 2 === 0 ? "text-emerald-300" : "text-amber-200"} />
+                <span className="text-xs font-bold text-[var(--theme-text-secondary)]">{label}</span>
+                <BarChart3 size={14} className={index % 2 === 0 ? "text-[var(--theme-bullish)]" : "text-[var(--theme-warning)]"} />
               </div>
-              <div className="mt-2 h-1.5 rounded-full bg-slate-800">
-                <div className="h-full rounded-full bg-gradient-to-r from-emerald-300 to-teal-400" style={{ width: `${68 - index * 7}%` }} />
+              <div className="mt-2 h-1.5 rounded-full bg-[var(--theme-bg)]">
+                <div className="h-full rounded-full bg-[var(--theme-bullish)]" style={{ width: `${68 - index * 7}%` }} />
               </div>
             </div>
           ))}

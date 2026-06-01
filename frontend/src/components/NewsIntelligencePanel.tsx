@@ -17,22 +17,22 @@ export default function NewsIntelligencePanel({ news = [] }: NewsIntelligencePan
   const sentiment = sentimentScore > 0 ? "Bullish" : sentimentScore < 0 ? "Bearish" : "Neutral";
 
   return (
-    <section className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+    <section className="miji-card terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-amber-200">Live Intelligence Feed</p>
-          <h3 className="text-lg font-black text-[#E6EDF3]">News Intelligence</h3>
+          <p className="terminal-micro-label">Live Intelligence Feed</p>
+          <h3 className="terminal-panel-title text-[var(--theme-text)]">News Intelligence</h3>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-[#2B313C] bg-[#0A0C10] px-3 py-2">
-          <Newspaper className="text-amber-200" size={18} />
-          <span className={sentiment === "Bullish" ? "text-emerald-300" : sentiment === "Bearish" ? "text-rose-300" : "text-[#C9D1D9]"}>
+        <div className="flex items-center gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
+          <Newspaper className="text-[var(--theme-warning)]" size={18} />
+          <span className={sentiment === "Bullish" ? "text-[var(--theme-bullish)]" : sentiment === "Bearish" ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"}>
             {sentiment}
           </span>
         </div>
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-[#2B313C] bg-[#0A0C10] p-5 text-sm text-[#9BA7B4]">No News</div>
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-5 text-sm text-[var(--theme-muted)]">No News</div>
       ) : (
         <div className="space-y-3">
           {items.map((item, index) => (
@@ -41,17 +41,17 @@ export default function NewsIntelligencePanel({ news = [] }: NewsIntelligencePan
               href={item?.link ?? "#"}
               target="_blank"
               rel="noreferrer"
-              className="group block rounded-xl border border-[#2B313C] bg-[#0A0C10] p-4 transition hover:border-amber-400/20 hover:bg-[#161B22]"
+              className="group block rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4 transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]"
             >
               <div className="mb-2 flex items-start justify-between gap-3">
-                <h4 className="text-sm font-bold leading-5 text-[#E6EDF3] group-hover:text-amber-200">{item?.title ?? "No News"}</h4>
-                <ExternalLink size={14} className="mt-1 shrink-0 text-[#6E7681] group-hover:text-amber-200" />
+                <h4 className="text-sm font-bold leading-5 text-[var(--theme-text)] group-hover:text-[var(--theme-highlight)]">{item?.title ?? "No News"}</h4>
+                <ExternalLink size={14} className="mt-1 shrink-0 text-[var(--theme-muted)] group-hover:text-[var(--theme-highlight)]" />
               </div>
-              <p className="line-clamp-2 text-xs leading-5 text-[#9BA7B4]">{item?.summary ?? ""}</p>
+              <p className="line-clamp-2 text-xs leading-5 text-[var(--theme-text-secondary)]">{item?.summary ?? ""}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                <span className="rounded border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-amber-200">{item?.category ?? "General"}</span>
-                <span className="text-[#6E7681]">{item?.publisher ?? "Market News"}</span>
-                <span className={item?.sentiment === "Bullish" ? "text-emerald-300" : item?.sentiment === "Bearish" ? "text-rose-300" : "text-[#C9D1D9]"}>
+                <span className="rounded border border-[var(--theme-warning)] bg-[var(--theme-panel)] px-2 py-1 text-[var(--theme-warning)]">{item?.category ?? "General"}</span>
+                <span className="text-[var(--theme-muted)]">{item?.publisher ?? "Market News"}</span>
+                <span className={item?.sentiment === "Bullish" ? "text-[var(--theme-bullish)]" : item?.sentiment === "Bearish" ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"}>
                   {item?.sentiment ?? "Neutral"}
                 </span>
               </div>

@@ -20,26 +20,26 @@ export default function BubbleGauge({ score }: BubbleGaugeProps) {
   const isSafe = normalized <= 40;
   const label = isHigh ? "High Bubble Risk" : isSafe ? "Fundamental Safety Zone" : "Neutral Observation";
   const colorClass = isHigh
-    ? "text-rose-300 border-rose-300/40"
+    ? "text-[var(--theme-bearish)] border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)]"
     : isSafe
-      ? "text-emerald-300 border-emerald-300/40"
-      : "text-amber-200 border-amber-400/30";
-  const stroke = isHigh ? "#fda4af" : isSafe ? "#86efac" : "#fcd34d";
+      ? "text-[var(--theme-bullish)] border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)]"
+      : "text-[var(--theme-warning)] border-[var(--theme-warning)] bg-[var(--theme-panel-inset)]";
+  const stroke = isHigh ? "var(--theme-bearish)" : isSafe ? "var(--theme-bullish)" : "var(--theme-warning)";
 
   return (
-    <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-6 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-md">
+    <div className="miji-card terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Weighted Bubble Index</p>
-          <h3 className="mt-1 text-lg font-semibold tracking-wide text-[#E6EDF3]">Valuation Risk HUD</h3>
+          <p className="terminal-micro-label">Weighted Bubble Index</p>
+          <h3 className="terminal-panel-title mt-1 text-[var(--theme-text)]">Valuation Risk HUD</h3>
         </div>
-        <ShieldAlert className={isHigh ? "text-rose-300" : "text-amber-200"} size={24} />
+        <ShieldAlert className={isHigh ? "text-[var(--theme-bearish)]" : "text-[var(--theme-warning)]"} size={24} />
       </div>
 
       <div className="flex flex-col items-center">
         <div className="relative h-56 w-56">
           <svg viewBox="0 0 220 220" className="relative h-full w-full -rotate-90">
-            <circle cx="110" cy="110" r="86" fill="none" stroke="#222833" strokeWidth="16" />
+            <circle cx="110" cy="110" r="86" fill="none" stroke="var(--theme-panel-inset)" strokeWidth="16" />
             <motion.circle
               cx="110"
               cy="110"
@@ -55,8 +55,8 @@ export default function BubbleGauge({ score }: BubbleGaugeProps) {
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-mono text-5xl font-semibold tracking-wide text-[#E6EDF3]">{normalized.toFixed(0)}</span>
-            <span className="mt-1 text-xs font-medium uppercase tracking-wide text-[#9BA7B4]">0-100</span>
+            <span className="font-mono text-5xl font-bold tracking-wide text-[var(--theme-highlight)]">{normalized.toFixed(0)}</span>
+            <span className="mt-1 text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">0-100</span>
           </div>
         </div>
 

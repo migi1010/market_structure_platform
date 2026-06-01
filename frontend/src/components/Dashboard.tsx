@@ -27,7 +27,7 @@ import {
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { uiText } from "@/lib/i18n";
 import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
-import { enabledTerminalModules, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
+import { enabledTerminalModules, getEnabledTerminalModule, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
 
 import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
 import type { SearchResult, StockAnalysis, WorkspaceAction } from "@/types/stock";
@@ -38,10 +38,8 @@ import MarketTickerMarquee from "./MarketTickerMarquee";
 import { TerminalRail, TerminalRailButton } from "./terminal";
 
 const AlphaQuantPage = React.lazy(() => import("./AlphaQuantPage"));
-const SectorRotationPanel = React.lazy(() => import("./SectorRotationPanel"));
 const StockAnalysisWorkspace = React.lazy(() => import("./StockAnalysisWorkspace"));
-const ThemeForecastAIPage = React.lazy(() => import("./ThemeForecastAIPage"));
-const ThemeIntelligenceDashboard = React.lazy(() => import("./ThemeIntelligenceDashboard"));
+const ThemeResearchPage = React.lazy(() => import("./ThemeResearchPage"));
 
 type ActiveTab = TerminalModuleId;
 const WATCHLIST_KEY = "watchlist";
@@ -70,7 +68,7 @@ const navItems = enabledTerminalModules;
 const mobileMenuItems: Array<{ id: ActiveTab | "settings"; label: string; icon: React.ReactNode }> = [
   ...enabledTerminalModules.map((module) => ({
     id: module.id,
-    label: module.id === "theme-intelligence" ? uiText.navigation.themeIntelligence : module.title,
+    label: module.title,
     icon: moduleIcon(module.iconKey, 17),
   })),
   { id: "settings", label: uiText.navigation.settings, icon: <Settings2 size={17} /> },
@@ -98,27 +96,55 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
       target_tab: "theme-intelligence",
       focusTarget: "theme-detail",
       openMode: "replace",
-      contextPayload: { theme, label: `Open ${theme}` },
+      contextPayload: { theme, themeView: "command", label: `Open ${theme}` },
     };
   }
   if (type === "sector") {
     const sector = normalizeSectorName(result);
     return {
       actionType: "open_sector",
-      target_tab: "market-intel",
-      focusTarget: "sector-drilldown",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-rotation",
       openMode: "replace",
-      contextPayload: { sector, label: `Open ${sector} Rotation` },
+      contextPayload: { sector, themeView: "rotation", label: `Open ${sector} Rotation` },
     };
   }
   const targetModule = getTerminalModule(result.target_tab);
-  if (targetModule && targetModule.workspaceType !== "stock") {
+  if (targetModule?.id === "theme-forecast") {
     return {
-      actionType: targetModule.id === "alpha-quant" ? "open_alpha" : targetModule.id === "portfolio" ? "open_portfolio" : "open_module",
-      target_tab: targetModule.id,
-      focusTarget: targetModule.id,
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-forecast",
       openMode: "replace",
-      contextPayload: { label: result.label ?? targetModule.title },
+      contextPayload: { themeView: "forecast", label: result.label ?? targetModule.title },
+    };
+  }
+  if (targetModule?.id === "market-intel") {
+    return {
+      actionType: "open_module",
+      target_tab: "theme-intelligence",
+      focusTarget: "theme-rotation",
+      openMode: "replace",
+      contextPayload: { themeView: "rotation", label: result.label ?? targetModule.title },
+    };
+  }
+  if (targetModule && targetModule.workspaceType !== "stock") {
+    const enabledModule = getEnabledTerminalModule(targetModule.id);
+    if (!enabledModule) {
+      return {
+        actionType: "open_module",
+        target_tab: "theme-intelligence",
+        focusTarget: "theme-workspace",
+        openMode: "replace",
+        contextPayload: { themeView: "command", label: result.label ?? targetModule.title },
+      };
+    }
+    return {
+      actionType: enabledModule.id === "alpha-quant" ? "open_alpha" : enabledModule.id === "portfolio" ? "open_portfolio" : "open_module",
+      target_tab: enabledModule.id,
+      focusTarget: enabledModule.id,
+      openMode: "replace",
+      contextPayload: { label: result.label ?? enabledModule.title },
     };
   }
   const ticker = normalizeSymbol(result.ticker ?? result.symbol);
@@ -291,6 +317,7 @@ function DashboardApp() {
     selectedTicker,
     selectedTheme,
     selectedSector,
+    selectedThemeView,
     selectedAlphaView,
     selectedPortfolioView,
     lastWorkspaceAction,
@@ -341,11 +368,19 @@ function DashboardApp() {
         return;
       }
       if (action.focusTarget === "theme-detail" || action.focusTarget === "theme-workspace") {
-        focusElement(action.focusTarget === "theme-detail" ? "theme-detail" : "theme-intelligence");
+        focusElement(action.focusTarget === "theme-detail" ? "theme-detail" : "theme-research");
         return;
       }
-      if (action.focusTarget === "sector-drilldown") {
-        focusElement("sector-drilldown");
+      if (action.focusTarget === "theme-forecast") {
+        focusElement("theme-forecast");
+        return;
+      }
+      if (action.focusTarget === "theme-rotation" || action.focusTarget === "sector-drilldown") {
+        focusElement("theme-rotation");
+        return;
+      }
+      if (action.focusTarget === "theme-supply-chain") {
+        focusElement("theme-supply-chain");
         return;
       }
       if (action.focusTarget === "alpha-momentum" || action.focusTarget === "alpha-workspace") {
@@ -392,11 +427,9 @@ function DashboardApp() {
   const activeContextLabel =
     actionContextLabel
     ?? (activeTab === "stock-analysis" ? selectedTicker
-      : activeTab === "theme-intelligence" ? selectedTheme || "Theme Intelligence"
-        : activeTab === "theme-forecast" ? "Theme Forecast AI"
-          : activeTab === "market-intel" ? selectedSector
-            : activeTab === "alpha-quant" ? selectedAlphaView
-              : selectedPortfolioView);
+      : activeTab === "theme-intelligence" ? `${selectedTheme || selectedSector || "Theme Research"} / ${selectedThemeView}`
+        : activeTab === "alpha-quant" ? selectedAlphaView
+          : selectedPortfolioView);
 
   const railItems = navItems.filter((item) => item.railGroup !== "bottom");
   const railBottomItems = navItems.filter((item) => item.railGroup === "bottom");
@@ -480,11 +513,9 @@ function DashboardApp() {
       </header>
 
       <div className="miji-content min-h-0 flex-1 overflow-y-auto bg-[var(--theme-bg)]">
-        {activeTab === "theme-intelligence" && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeIntelligenceDashboard onTickerSelect={openStock} /></div>}
-        {activeTab === "theme-forecast" && <div id="theme-forecast" tabIndex={-1} className="outline-none ring-0"><ThemeForecastAIPage /></div>}
+        {activeTab === "theme-intelligence" && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeResearchPage onTickerSelect={openStock} /></div>}
         {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
         {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} /></div>}
-        {activeTab === "market-intel" && <div id="sector-rotation" tabIndex={-1} className="outline-none ring-0"><SectorRotationPanel onTickerSelect={openStock} /></div>}
         {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0"><StockAnalysisWorkspace /></div>}
       </div>
       {mobileMenuOpen && (

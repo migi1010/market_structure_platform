@@ -40,15 +40,26 @@ export interface TerminalModule {
 export const terminalModules: TerminalModule[] = [
   {
     id: "theme-intelligence",
-    title: "主題指揮中心 Theme Command Center",
+    title: "主題研究 Theme Research",
     shortTitle: "Themes",
     labelZh: "主題",
-    labelEn: "Command",
-    description: "Theme leadership, capital flow, and beneficiary stock intelligence",
+    labelEn: "Research",
+    description: "Unified theme research, forecast, capital flow, rotation, supply-chain, and beneficiary stock workflow",
     iconKey: "layout-dashboard",
     railGroup: "top",
     target_tab: "theme-intelligence",
-    searchKeywords: ["theme", "themes", "theme intelligence", "theme command center", "macro themes", "ai themes"],
+    searchKeywords: [
+      "theme",
+      "themes",
+      "theme research",
+      "theme intelligence",
+      "theme command center",
+      "theme forecast",
+      "capital flow",
+      "sector rotation",
+      "supply chain",
+      "beneficiary stocks",
+    ],
     workspaceType: "theme",
     enabled: true,
     order: 10,
@@ -74,13 +85,13 @@ export const terminalModules: TerminalModule[] = [
     shortTitle: "Forecast",
     labelZh: "預測",
     labelEn: "Forecast",
-    description: "Forward theme leadership forecasts, regime overlays, and validation diagnostics",
+    description: "Forward theme leadership forecasts, regime overlays, and validation diagnostics inside Theme Research",
     iconKey: "brain-circuit",
     railGroup: "middle",
     target_tab: "theme-forecast",
     searchKeywords: ["forecast", "theme forecast", "future themes", "theme ai", "regime forecast"],
     workspaceType: "theme",
-    enabled: true,
+    enabled: false,
     order: 25,
   },
   {
@@ -100,24 +111,24 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "market-intel",
-    title: "板塊輪動 Rotation",
-    shortTitle: "Sectors",
+    title: "類股輪動 Rotation",
+    shortTitle: "Rotation",
     labelZh: "輪動",
     labelEn: "Rotation",
-    description: "Sector leadership, rotation, and relative strength analytics",
+    description: "Sector leadership, rotation, and relative strength analytics inside Theme Research",
     iconKey: "refresh-cw",
     railGroup: "middle",
     target_tab: "market-intel",
     searchKeywords: ["sector", "sectors", "sector rotation", "market intel", "relative strength"],
     workspaceType: "sector",
-    enabled: true,
+    enabled: false,
     order: 40,
   },
   {
     id: "stock-analysis",
     title: "個股工作區 Workspace",
     shortTitle: "Stock",
-    labelZh: "工作區",
+    labelZh: "個股",
     labelEn: "Workspace",
     description: "Single-stock intelligence workspace with quote, valuation, and regime context",
     iconKey: "panels-top-left",
@@ -136,4 +147,9 @@ export const enabledTerminalModules = terminalModules
 
 export function getTerminalModule(id: OmniboxTargetTab | string | undefined): TerminalModule | undefined {
   return terminalModules.find((module) => module.id === id);
+}
+
+export function getEnabledTerminalModule(id: OmniboxTargetTab | string | undefined): TerminalModule | undefined {
+  const module = getTerminalModule(id);
+  return module?.enabled ? module : undefined;
 }

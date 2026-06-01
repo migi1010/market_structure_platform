@@ -23,15 +23,15 @@ function fmtPct(value: number | null | undefined): string {
 function DriverList({ title, items, tone }: { title: string; items: string[]; tone: "positive" | "negative" }) {
   return (
     <div>
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{title}</p>
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">{title}</p>
       <div className="flex flex-wrap gap-2">
         {(items.length ? items : ["awaiting confirmation"]).map((item) => (
           <span
             key={item}
             className={
               tone === "positive"
-                ? "rounded border border-[var(--theme-bullish)]/40 bg-[var(--theme-bg-secondary)] px-2 py-1 text-[11px] text-[var(--theme-bullish)]"
-                : "rounded border border-[var(--theme-bearish)]/40 bg-[var(--theme-bg-secondary)] px-2 py-1 text-[11px] text-[var(--theme-bearish)]"
+                ? "rounded-md border border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--theme-bullish)]"
+                : "rounded-md border border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--theme-bearish)]"
             }
           >
             {item.replace(/_/g, " ")}
@@ -44,26 +44,32 @@ function DriverList({ title, items, tone }: { title: string; items: string[]; to
 
 function ForecastCard({ item }: { item: ThemeForecastRecord }) {
   const score = item.forecast_score ?? null;
-  const scoreTone = finite(score) && score >= 65 ? "text-[var(--theme-bullish)]" : finite(score) && score <= 45 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-warning)]";
+  const scoreTone = finite(score) && score >= 65 ? "text-[var(--theme-bullish)]" : finite(score) && score <= 45 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-highlight)]";
   return (
     <article className="terminal-panel terminal-panel-hover p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-5">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{item.theme}</p>
-          <p className="mt-1 text-[11px] uppercase tracking-wide text-[var(--theme-muted)]">{item.forecast_label} / {item.lifecycle_state}</p>
+          <p className="truncate text-lg font-bold text-[var(--theme-text)]">{item.theme}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-text-secondary)]">{item.lifecycle_state}</span>
+            <span className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{item.forecast_label}</span>
+          </div>
         </div>
-        <div className={`font-mono text-2xl font-semibold ${scoreTone}`}>{fmtScore(score)}</div>
+        <div className="shrink-0 text-right">
+          <div className={`font-mono text-4xl font-bold leading-none ${scoreTone}`}>{fmtScore(score)}</div>
+          <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">Forecast Score</p>
+        </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Metric label="Excess" value={item.expected_excess_return} percent />
         <Metric label="Prob." value={item.outperformance_probability} percent />
         <Metric label="Conf." value={item.confidence} />
       </div>
-      <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
-        <span className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[var(--theme-text-secondary)]">Risk {item.risk_state}</span>
-        <span className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[var(--theme-warning)]">Crowding {item.crowding_state}</span>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+        <span className="rounded-md border border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] px-2.5 py-1.5 text-[var(--theme-text-secondary)]">Risk {item.risk_state}</span>
+        <span className="rounded-md border border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] px-2.5 py-1.5 text-[var(--theme-warning)]">Crowding {item.crowding_state}</span>
       </div>
-      <p className="mt-4 text-sm leading-6 text-[var(--theme-text-secondary)]">{item.explanation}</p>
+      <p className="mt-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2 text-sm font-medium leading-6 text-[var(--theme-text-secondary)]">{item.explanation}</p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <DriverList title="Positive Drivers" items={item.top_positive_drivers ?? []} tone="positive" />
         <DriverList title="Negative Drivers" items={item.top_negative_drivers ?? []} tone="negative" />
@@ -74,9 +80,9 @@ function ForecastCard({ item }: { item: ThemeForecastRecord }) {
 
 function Metric({ label, value, percent = false }: { label: string; value: number | null | undefined; percent?: boolean }) {
   return (
-    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
-      <p className="mt-2 font-mono text-lg font-semibold text-[var(--theme-text)]">{percent ? fmtPct(value) : fmtScore(value)}</p>
+    <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
+      <p className="mt-2 font-mono text-lg font-bold text-[var(--theme-highlight)]">{percent ? fmtPct(value) : fmtScore(value)}</p>
     </div>
   );
 }
@@ -116,11 +122,11 @@ export default function ThemeForecastAIPage() {
         <div>
           <p className="terminal-micro-label">主題預測 Forecast</p>
           <h1 className="terminal-page-title mt-1">Theme Forecast AI</h1>
-          <p className="mt-2 max-w-3xl text-sm text-[var(--theme-text-secondary)]">Explainable theme leadership forecasts with regime context, driver decomposition, and walk-forward validation discipline.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--theme-text-secondary)]">Explainable theme leadership forecasts with regime context, driver decomposition, and walk-forward validation discipline.</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel)] p-1">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--theme-border-strong)] bg-[var(--theme-panel)] p-1">
           {HORIZONS.map((item) => (
-            <button key={item} onClick={() => setHorizon(item)} className={item === horizon ? "rounded bg-[var(--theme-panel-hover)] px-3 py-2 text-xs font-semibold text-[var(--theme-text)]" : "rounded px-3 py-2 text-xs font-semibold text-[var(--theme-muted)] hover:text-[var(--theme-text)]"}>
+            <button key={item} onClick={() => setHorizon(item)} className={item === horizon ? "rounded bg-[var(--theme-panel-hover)] px-3 py-2 text-xs font-bold text-[var(--theme-highlight)]" : "rounded px-3 py-2 text-xs font-semibold text-[var(--theme-muted)] hover:text-[var(--theme-text)]"}>
               {item.toUpperCase()}
             </button>
           ))}
@@ -130,12 +136,12 @@ export default function ThemeForecastAIPage() {
       <section className="mb-5 grid gap-3 md:grid-cols-4">
         <TerminalPanel>
           <div className="flex items-center gap-2 text-[var(--theme-accent-soft)]"><BrainCircuit size={16} /><span className="text-[10px] font-semibold uppercase tracking-wide">Forecast State</span></div>
-          <p className="mt-3 text-lg font-semibold">{forecast?.status ?? "loading"}</p>
+          <p className="mt-3 text-lg font-bold text-[var(--theme-highlight)]">{forecast?.status ?? "loading"}</p>
           <p className="mt-1 text-xs text-[var(--theme-muted)]">{forecast?.lifecycle_state ?? "warming"}</p>
         </TerminalPanel>
         <TerminalPanel>
           <div className="flex items-center gap-2 text-[var(--theme-bullish)]"><Activity size={16} /><span className="text-[10px] font-semibold uppercase tracking-wide">Regime</span></div>
-          <p className="mt-3 text-lg font-semibold">{regimeName}</p>
+          <p className="mt-3 text-lg font-bold text-[var(--theme-highlight)]">{regimeName}</p>
           <p className="mt-1 text-xs text-[var(--theme-muted)]">Overlay context</p>
         </TerminalPanel>
         <Metric label="Hit Rate" value={validation?.hit_rate ?? null} />
@@ -159,17 +165,17 @@ export default function ThemeForecastAIPage() {
           </section>
           <aside className="space-y-4">
             <TerminalPanel>
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><CheckCircle2 size={16} /> 驗證 Validation</div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[var(--theme-text)]"><CheckCircle2 size={16} /> 驗證 Validation</div>
               <div className="grid grid-cols-2 gap-3">
                 <Metric label="Info Ratio" value={validation?.information_ratio ?? null} />
                 <Metric label="Max DD" value={validation?.max_drawdown ?? null} />
                 <Metric label="Calibration" value={validation?.calibration_quality ?? null} />
                 <Metric label="Turnover" value={validation?.turnover ?? null} />
               </div>
-              {validation?.reason && <p className="mt-3 text-xs leading-5 text-[var(--theme-muted)]">{validation.reason}</p>}
+              {validation?.reason && <p className="mt-3 text-xs leading-5 text-[var(--theme-text-secondary)]">{validation.reason}</p>}
             </TerminalPanel>
             <TerminalPanel>
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><TrendingDown size={16} /> 風險分組 Risk Buckets</div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-[var(--theme-text)]"><TrendingDown size={16} /> 風險分組 Risk Buckets</div>
               <p className="text-xs uppercase text-[var(--theme-muted)]">新興 Emerging</p>
               <p className="mb-3 text-sm text-[var(--theme-text)]">{forecast?.emerging_themes?.map((item) => item.theme).join(", ") || "--"}</p>
               <p className="text-xs uppercase text-[var(--theme-muted)]">擁擠 Crowded</p>

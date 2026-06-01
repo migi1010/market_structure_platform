@@ -95,7 +95,7 @@ function createStockViewModel(ticker: string, analysis: StockAnalysis | null, re
 }
 
 export default function StockAnalysisWorkspace() {
-  const { selectedTicker, setSelectedTicker } = useWorkspace();
+  const { selectedTicker, selectedTheme, selectedThemeView, selectedSector, setSelectedTicker } = useWorkspace();
   const ticker = normalizeWorkspaceTicker(selectedTicker);
   const [stockView, setStockView] = useState<StockViewModel>(() => createFallbackStockView(ticker));
   const [loading, setLoading] = useState(false);
@@ -193,15 +193,53 @@ export default function StockAnalysisWorkspace() {
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <p className="terminal-micro-label">個股工作區 Stock Workspace</p>
-          <h1 className="mt-1 break-words text-2xl font-semibold tracking-wide text-[var(--theme-text)] sm:text-3xl">
+          <h1 className="mt-1 break-words text-2xl font-bold tracking-wide text-[var(--theme-text)] sm:text-3xl">
             {formatTickerCompanyLabel(stockView.ticker, stockView.companyName)}
           </h1>
-          <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{sectorDisplay} / {priceDisplay} / {changeDisplay} / {changePercentDisplay} / MCap {marketCapDisplay} / {quoteStatusDisplay}</p>
+          <p className="mt-1 text-sm font-medium text-[var(--theme-text-secondary)]">{sectorDisplay} / <span className="font-mono font-bold text-[var(--theme-highlight)]">{priceDisplay}</span> / {changeDisplay} / {changePercentDisplay} / MCap {marketCapDisplay} / {quoteStatusDisplay}</p>
         </div>
         {loading && <div className="flex items-center gap-2 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 text-[var(--theme-warning)]"><Loader2 className="animate-spin" size={16} /> Updating market data</div>}
       </div>
 
       {error && <div className="mb-5 rounded-xl border border-[var(--theme-danger)] bg-[var(--theme-panel)] p-4 text-[var(--theme-danger)]">{error}</div>}
+
+      {(selectedTheme || selectedSector) && (
+        <section className="mb-5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel)] p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="terminal-micro-label">主題暴露 Theme Exposure</p>
+              <h2 className="terminal-panel-title text-[var(--theme-text)]">
+                {stockView.ticker} linked to {selectedTheme || selectedSector}
+              </h2>
+            </div>
+            <span className="rounded-[8px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-2 py-1 text-[11px] font-semibold uppercase text-[var(--theme-muted)]">
+              {selectedThemeView || "command"}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-5">
+            <div className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <p className="terminal-micro-label">Theme</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">{selectedTheme || "--"}</p>
+            </div>
+            <div className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <p className="terminal-micro-label">Sector</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">{selectedSector || stockView.sector}</p>
+            </div>
+            <div className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <p className="terminal-micro-label">Lifecycle</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">{stock?.lifecycle_state?.replace(/_/g, " ") || "partial live"}</p>
+            </div>
+            <div className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <p className="terminal-micro-label">Quote</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">{quoteStatusDisplay}</p>
+            </div>
+            <div className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <p className="terminal-micro-label">Context</p>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--theme-text)]">{selectedThemeView === "forecast" ? "Forecast alignment" : selectedThemeView === "rotation" ? "Capital rotation" : "Theme research"}</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="miji-stock-grid grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="miji-chart-column min-w-0 space-y-5">
@@ -218,14 +256,14 @@ export default function StockAnalysisWorkspace() {
               <BrainCircuit className="text-[var(--theme-accent)]" size={22} />
             </div>
             <div className="miji-card-metrics grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
                 <span className="text-xs text-[var(--theme-muted)]">Predicted Trend</span>
                 <p className={`mt-2 flex items-center gap-2 text-xl font-black ${forecastTone}`}>
                   {hmmAvailable && forecastTrend === "Bearish" ? <TrendingDown size={18} /> : hmmAvailable ? <TrendingUp size={18} /> : <BrainCircuit size={18} />}
                   {hmmAvailable ? forecastTrend : "Calibrating model..."}
                 </p>
               </div>
-              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
                 <span className="text-xs text-[var(--theme-muted)]">Forecast Confidence</span>
                 <p className="mt-2 font-mono text-xl font-black text-[var(--theme-warning)]">{hmmAvailable && forecastConfidence !== null ? forecastConfidence.toFixed(2) : "Calibrating"}</p>
               </div>
@@ -233,15 +271,15 @@ export default function StockAnalysisWorkspace() {
             <div className="mt-4 space-y-3">
               <div>
                 <div className="mb-1 flex justify-between text-xs"><span>Bull Probability</span><span className="text-[var(--theme-bullish)]">{hmmAvailable ? `${bull}%` : bull}</span></div>
-                <div className="h-2 rounded bg-[var(--theme-bg-secondary)]"><div className="h-full rounded bg-[var(--theme-bullish)]" style={{ width: bullWidth }} /></div>
+                <div className="h-2 rounded bg-[var(--theme-panel-inset)]"><div className="h-full rounded bg-[var(--theme-bullish)]" style={{ width: bullWidth }} /></div>
               </div>
               <div>
                 <div className="mb-1 flex justify-between text-xs"><span>Bear Probability</span><span className="text-[var(--theme-bearish)]">{hmmAvailable ? `${bear}%` : bear}</span></div>
-                <div className="h-2 rounded bg-[var(--theme-bg-secondary)]"><div className="h-full rounded bg-[var(--theme-bearish)]" style={{ width: bearWidth }} /></div>
+                <div className="h-2 rounded bg-[var(--theme-panel-inset)]"><div className="h-full rounded bg-[var(--theme-bearish)]" style={{ width: bearWidth }} /></div>
               </div>
-              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
                 <span className="text-xs text-[var(--theme-muted)]">Regime State</span>
-                <p className="mt-1 font-semibold text-[var(--theme-text)]">{hmmAvailable ? regimeState : regimeFallbackMessage}</p>
+                <p className="mt-1 font-bold text-[var(--theme-text)]">{hmmAvailable ? regimeState : regimeFallbackMessage}</p>
               </div>
             </div>
           </section>

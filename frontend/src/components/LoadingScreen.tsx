@@ -5,15 +5,15 @@ import { Activity, Cpu, Radar } from "lucide-react";
 export default function LoadingScreen() {
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-[#0A0C10] px-6 text-[#E6EDF3]">
-      <div className="w-full max-w-xl rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-8 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+      <div className="w-full max-w-xl rounded-2xl border border-[#2B313C] bg-[#161B22] p-8 shadow-sm">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-amber-200">Institutional Terminal</p>
             <h1 className="mt-2 text-2xl font-black text-[#E6EDF3]">Quant Engine Booting</h1>
           </div>
           <div className="relative flex h-16 w-16 items-center justify-center">
-            <div className="absolute inset-0 animate-ping rounded-full border border-amber-400/30/40" />
-            <div className="absolute inset-2 rounded-full bg-amber-400/10 blur-md" />
+            <div className="absolute inset-0 rounded-full border border-amber-400/30" />
+            <div className="absolute inset-2 rounded-full bg-amber-400/10" />
             <Radar className="relative animate-spin text-amber-200" size={30} />
           </div>
         </div>
@@ -25,7 +25,7 @@ export default function LoadingScreen() {
               Loading Market Intelligence...
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-emerald-300 to-teal-400" />
+              <div className="h-full w-2/3 animate-pulse rounded-full bg-emerald-300" />
             </div>
           </div>
           <div className="rounded-xl border border-[#2B313C] bg-[#0A0C10] p-4">

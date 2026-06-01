@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getTerminalModule, type TerminalModuleId } from "@/modules/terminalModules";
+import { getEnabledTerminalModule, type TerminalModuleId } from "@/modules/terminalModules";
 import type { WorkspaceAction } from "@/types/stock";
 
 const WORKSPACE_STORAGE_KEY = "miji:workspace-context";
@@ -9,9 +9,10 @@ const WORKSPACE_SCHEMA_VERSION = "workspace_v1";
 const DEFAULT_TICKER = "NVDA";
 const DEFAULT_THEME = "";
 const DEFAULT_SECTOR = "Technology";
+const DEFAULT_THEME_VIEW = "command";
 const DEFAULT_ALPHA_VIEW = "top-alpha";
 const DEFAULT_PORTFOLIO_VIEW = "watchlist";
-const DEFAULT_MODULE: TerminalModuleId = "stock-analysis";
+const DEFAULT_MODULE: TerminalModuleId = "theme-intelligence";
 const MAX_RECENTS = 8;
 
 interface WorkspaceEnvelope {
@@ -23,6 +24,7 @@ interface WorkspaceState {
   selectedTicker: string;
   selectedTheme: string;
   selectedSector: string;
+  selectedThemeView: string;
   selectedAlphaView: string;
   selectedPortfolioView: string;
   activeModule: TerminalModuleId;
@@ -35,6 +37,7 @@ interface WorkspaceContextValue extends WorkspaceState {
   setSelectedTicker: (ticker: string) => void;
   setSelectedTheme: (theme: string) => void;
   setSelectedSector: (sector: string) => void;
+  setSelectedThemeView: (view: string) => void;
   setSelectedAlphaView: (view: string) => void;
   setSelectedPortfolioView: (view: string) => void;
   setActiveModule: (module: TerminalModuleId) => void;
@@ -62,7 +65,7 @@ function uniqueRecent(value: string, existing: string[]): string[] {
 }
 
 function validModule(value: unknown): TerminalModuleId {
-  return typeof value === "string" && getTerminalModule(value) ? (value as TerminalModuleId) : DEFAULT_MODULE;
+  return typeof value === "string" && getEnabledTerminalModule(value) ? (value as TerminalModuleId) : DEFAULT_MODULE;
 }
 
 function validStringList(value: unknown, normalizer: (item: string) => string): string[] {
@@ -79,6 +82,7 @@ function readWorkspaceState(): WorkspaceState {
     selectedTicker: DEFAULT_TICKER,
     selectedTheme: DEFAULT_THEME,
     selectedSector: DEFAULT_SECTOR,
+    selectedThemeView: DEFAULT_THEME_VIEW,
     selectedAlphaView: DEFAULT_ALPHA_VIEW,
     selectedPortfolioView: DEFAULT_PORTFOLIO_VIEW,
     activeModule: DEFAULT_MODULE,
@@ -106,6 +110,7 @@ function readWorkspaceState(): WorkspaceState {
       selectedTicker,
       selectedTheme,
       selectedSector: normalizeWorkspaceLabel(data.selectedSector ?? DEFAULT_SECTOR) || DEFAULT_SECTOR,
+      selectedThemeView: normalizeWorkspaceLabel(data.selectedThemeView ?? DEFAULT_THEME_VIEW) || DEFAULT_THEME_VIEW,
       selectedAlphaView: normalizeWorkspaceLabel(data.selectedAlphaView ?? DEFAULT_ALPHA_VIEW) || DEFAULT_ALPHA_VIEW,
       selectedPortfolioView: normalizeWorkspaceLabel(data.selectedPortfolioView ?? DEFAULT_PORTFOLIO_VIEW) || DEFAULT_PORTFOLIO_VIEW,
       activeModule: validModule(data.activeModule),
@@ -138,6 +143,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     selectedTicker: DEFAULT_TICKER,
     selectedTheme: DEFAULT_THEME,
     selectedSector: DEFAULT_SECTOR,
+    selectedThemeView: DEFAULT_THEME_VIEW,
     selectedAlphaView: DEFAULT_ALPHA_VIEW,
     selectedPortfolioView: DEFAULT_PORTFOLIO_VIEW,
     activeModule: DEFAULT_MODULE,
@@ -185,6 +191,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setSelectedThemeView = useCallback((view: string) => {
+    const normalized = normalizeWorkspaceLabel(view);
+    if (!normalized) return;
+    setState((current) => ({
+      ...current,
+      selectedThemeView: normalized,
+    }));
+  }, []);
+
   const setSelectedAlphaView = useCallback((view: string) => {
     const normalized = normalizeWorkspaceLabel(view);
     if (!normalized) return;
@@ -204,7 +219,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setActiveModule = useCallback((module: TerminalModuleId) => {
-    if (!getTerminalModule(module)) return;
+    if (!getEnabledTerminalModule(module)) return;
     setState((current) => ({
       ...current,
       activeModule: module,
@@ -212,19 +227,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const dispatchWorkspaceAction = useCallback((action: WorkspaceAction) => {
-    if (!getTerminalModule(action.target_tab)) return;
+    const resolvedTarget = getEnabledTerminalModule(action.target_tab)?.id ?? (action.target_tab === "theme-forecast" || action.target_tab === "market-intel" ? "theme-intelligence" : null);
+    if (!resolvedTarget) return;
     setState((current) => {
       const payload = action.contextPayload ?? {};
       const ticker = payload.ticker ? normalizeTicker(payload.ticker) : "";
       const theme = payload.theme ? normalizeTheme(payload.theme) : "";
+      const themeView = payload.themeView ? normalizeWorkspaceLabel(payload.themeView) : "";
       const sector = payload.sector ? normalizeWorkspaceLabel(payload.sector) : "";
       const alphaView = payload.alphaView ? normalizeWorkspaceLabel(payload.alphaView) : "";
       const portfolioView = payload.portfolioView ? normalizeWorkspaceLabel(payload.portfolioView) : "";
       return {
         ...current,
-        activeModule: action.target_tab,
+        activeModule: resolvedTarget,
         selectedTicker: ticker || current.selectedTicker,
         selectedTheme: theme || current.selectedTheme,
+        selectedThemeView: themeView || current.selectedThemeView,
         selectedSector: sector || current.selectedSector,
         selectedAlphaView: alphaView || current.selectedAlphaView,
         selectedPortfolioView: portfolioView || current.selectedPortfolioView,
@@ -240,11 +258,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSelectedTicker,
     setSelectedTheme,
     setSelectedSector,
+    setSelectedThemeView,
     setSelectedAlphaView,
     setSelectedPortfolioView,
     setActiveModule,
     dispatchWorkspaceAction,
-  }), [dispatchWorkspaceAction, setActiveModule, setSelectedAlphaView, setSelectedPortfolioView, setSelectedSector, setSelectedTheme, setSelectedTicker, state]);
+  }), [dispatchWorkspaceAction, setActiveModule, setSelectedAlphaView, setSelectedPortfolioView, setSelectedSector, setSelectedTheme, setSelectedThemeView, setSelectedTicker, state]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

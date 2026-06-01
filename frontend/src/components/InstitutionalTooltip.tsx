@@ -17,7 +17,7 @@ export default function InstitutionalTooltip({ label, description }: Institution
       >
         <Info size={12} />
       </button>
-      <span className="pointer-events-none absolute left-1/2 top-7 z-[80] hidden w-72 -translate-x-1/2 rounded-xl border border-[#2B313C] bg-[#0A0C10]/95 p-3 text-xs leading-relaxed text-[#C9D1D9] shadow-[0_18px_48px_rgba(0,0,0,0.42)] backdrop-blur-md group-hover:block group-focus-within:block">
+      <span className="pointer-events-none absolute left-1/2 top-7 z-[80] hidden w-72 -translate-x-1/2 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3 text-xs leading-relaxed text-[#C9D1D9] shadow-sm group-hover:block group-focus-within:block">
         {description}
       </span>
     </span>
