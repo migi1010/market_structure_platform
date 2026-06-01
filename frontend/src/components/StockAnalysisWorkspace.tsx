@@ -192,7 +192,7 @@ export default function StockAnalysisWorkspace() {
     <main className="miji-page miji-stock-page min-h-full overflow-x-hidden bg-[var(--theme-bg)] px-3 py-4 text-[var(--theme-text)] sm:p-5">
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="terminal-micro-label">?撌乩?? Stock Workspace</p>
+          <p className="terminal-micro-label">個股工作區 Stock Workspace</p>
           <h1 className="mt-1 break-words text-2xl font-semibold tracking-wide text-[var(--theme-text)] sm:text-3xl">
             {formatTickerCompanyLabel(stockView.ticker, stockView.companyName)}
           </h1>
@@ -212,7 +212,7 @@ export default function StockAnalysisWorkspace() {
           <section className="miji-card terminal-panel p-5">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className="terminal-micro-label">?葫撠? Forecast Alignment</p>
+                <p className="terminal-micro-label">預測對齊 Forecast Alignment</p>
                 <h3 className="terminal-panel-title text-[var(--theme-text)]">HMM Regime Inference</h3>
               </div>
               <BrainCircuit className="text-[var(--theme-accent)]" size={22} />

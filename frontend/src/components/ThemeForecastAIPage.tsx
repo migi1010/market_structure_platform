@@ -114,7 +114,7 @@ export default function ThemeForecastAIPage() {
     <main id="theme-forecast" tabIndex={-1} className="miji-page bg-[var(--theme-bg)] p-5 text-[var(--theme-text)] outline-none">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="terminal-micro-label">銝駁??葫 Forecast</p>
+          <p className="terminal-micro-label">主題預測 Forecast</p>
           <h1 className="terminal-page-title mt-1">Theme Forecast AI</h1>
           <p className="mt-2 max-w-3xl text-sm text-[var(--theme-text-secondary)]">Explainable theme leadership forecasts with regime context, driver decomposition, and walk-forward validation discipline.</p>
         </div>
@@ -152,14 +152,14 @@ export default function ThemeForecastAIPage() {
       ) : (
         <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
           <section>
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--theme-text)]"><TrendingUp size={16} /> ?芯???銝駁? Top Future Themes</div>
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--theme-text)]"><TrendingUp size={16} /> 未來領導主題 Top Future Themes</div>
             <div className="grid gap-4">
               {top.map((item) => <ForecastCard key={`${item.theme}-${item.forecast_horizon}`} item={item} />)}
             </div>
           </section>
           <aside className="space-y-4">
             <TerminalPanel>
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><CheckCircle2 size={16} /> 撽? Validation</div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><CheckCircle2 size={16} /> 驗證 Validation</div>
               <div className="grid grid-cols-2 gap-3">
                 <Metric label="Info Ratio" value={validation?.information_ratio ?? null} />
                 <Metric label="Max DD" value={validation?.max_drawdown ?? null} />
@@ -169,12 +169,12 @@ export default function ThemeForecastAIPage() {
               {validation?.reason && <p className="mt-3 text-xs leading-5 text-[var(--theme-muted)]">{validation.reason}</p>}
             </TerminalPanel>
             <TerminalPanel>
-              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><TrendingDown size={16} /> 憸券?? Risk Buckets</div>
-              <p className="text-xs uppercase text-[var(--theme-muted)]">?啗? Emerging</p>
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold"><TrendingDown size={16} /> 風險分組 Risk Buckets</div>
+              <p className="text-xs uppercase text-[var(--theme-muted)]">新興 Emerging</p>
               <p className="mb-3 text-sm text-[var(--theme-text)]">{forecast?.emerging_themes?.map((item) => item.theme).join(", ") || "--"}</p>
-              <p className="text-xs uppercase text-[var(--theme-muted)]">?? Crowded</p>
+              <p className="text-xs uppercase text-[var(--theme-muted)]">擁擠 Crowded</p>
               <p className="mb-3 text-sm text-[var(--theme-text)]">{forecast?.crowded_themes?.map((item) => item.theme).join(", ") || "--"}</p>
-              <p className="text-xs uppercase text-[var(--theme-muted)]">撘勗? Weakening</p>
+              <p className="text-xs uppercase text-[var(--theme-muted)]">弱化 Weakening</p>
               <p className="text-sm text-[var(--theme-text)]">{forecast?.weakening_themes?.map((item) => item.theme).join(", ") || "--"}</p>
             </TerminalPanel>
           </aside>
@@ -183,4 +183,3 @@ export default function ThemeForecastAIPage() {
     </main>
   );
 }
-

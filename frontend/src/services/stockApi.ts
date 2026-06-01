@@ -1122,11 +1122,9 @@ function toFiniteNumber(v: unknown): number | undefined {
 
 function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
   const rows = sectorRowsFromPayload(data);
-  console.log("RAW_SECTOR_PAYLOAD", data);
   return rows
     .filter(isRecord)
     .map((row) => {
-      console.log("RAW_SECTOR_ROW", row);
       const raw = unwrapSectorRow(row);
       const normalized = normalizeSectorRotationRow(raw as unknown as SectorRotation);
       const normalizedRow = {
@@ -1184,7 +1182,6 @@ function normalizeSectorRotationResponse(data: unknown): SectorRotation[] {
         acceleration: firstRecordNumber(raw, ["acceleration", "acceleration_velocity", "narrative_intelligence.acceleration_velocity", "momentum_20d"]),
         confidence_score: firstRecordNumber(raw, ["confidence_score", "confidence", "leadership_intelligence.confidence"]),
       };
-      console.log("NORMALIZED_SECTOR_ROW", normalizedRow);
       return normalizedRow;
     });
 }
@@ -1229,25 +1226,19 @@ export async function fetchStockAnalysis(ticker: string): Promise<StockAnalysis>
   const url = `${API_URL}/stock/${encodeURIComponent(symbol)}`;
   const proxyUrl = `${STOCK_PROXY_URL}?ticker=${encodeURIComponent(symbol)}`;
   try {
-    if (IS_DEVELOPMENT) console.debug("[stockApi] fetchStockAnalysis", { symbol, url });
     const response = await fetchWithRetry(url, {
       cache: "no-store",
     });
     const data = normalizeStockAnalysis(unwrapStockPayload(await readJson<unknown>(response)), symbol);
     writeLocalCache(cacheKey, data);
-    if (IS_DEVELOPMENT) console.debug("[stockApi] stock response", { symbol, price: data.canonicalPrice, status: data.canonicalQuoteStatus });
     return data;
-  } catch (error) {
-    if (IS_DEVELOPMENT) console.debug("[stockApi] stock fetch failed", { symbol, url, error });
+  } catch {
     try {
       const response = await fetchWithRetry(proxyUrl, { cache: "no-store" });
       const data = normalizeStockAnalysis(unwrapStockPayload(await readJson<unknown>(response)), symbol);
       writeLocalCache(cacheKey, data);
-      if (IS_DEVELOPMENT) console.debug("[stockApi] stock proxy response", { symbol, price: data.canonicalPrice, status: data.canonicalQuoteStatus });
       return data;
-    } catch (proxyError) {
-      if (IS_DEVELOPMENT) console.debug("[stockApi] stock proxy failed", { symbol, proxyUrl, proxyError });
-    }
+    } catch {}
     if (!fallback.canonicalPrice) clearLocalCache(cacheKey);
     return fallback;
   }
@@ -1314,17 +1305,8 @@ export async function searchStocks(query: string): Promise<SearchResult[]> {
 
 export async function fetchSectorRotation(): Promise<SectorRotation[]> {
   const data = await fetchFreshJson<unknown>("miji:sector-rotation:v5", `${API_URL}/sector/rotation`, FALLBACK_SECTORS);
-  if (IS_DEVELOPMENT) {
-    console.log("SECTOR_RAW_API_PAYLOAD", data);
-  }
   const sectors = normalizeSectorRotationResponse(data);
-  if (IS_DEVELOPMENT) {
-    console.log("SECTOR_NORMALIZED_PAYLOAD", sectors);
-  }
   const result = sectors.length > 0 ? sectors : FALLBACK_SECTORS.map(normalizeSectorRotationRow);
-  if (IS_DEVELOPMENT) {
-    console.log("SECTOR_FETCH_RETURN", result);
-  }
   return result;
 }
 

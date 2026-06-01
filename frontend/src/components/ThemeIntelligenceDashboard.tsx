@@ -62,7 +62,7 @@ function scoreTone(score: number | null | undefined): string {
 
 function barTone(score: number | null | undefined): string {
   const value = finiteScore(score);
-  if (value === null) return "bg-[#2B313C]";
+  if (value === null) return "bg-[var(--theme-border)]";
   if (value >= 75) return "bg-[var(--theme-bullish)]";
   if (value >= 55) return "bg-[var(--theme-warning)]";
   return "bg-[var(--theme-bearish)]";
@@ -102,7 +102,7 @@ function isNarrativeIntelligence(value: ThemeScore["narrative_intelligence"]): v
 }
 
 function ShimmerBlock({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-xl bg-[#1C2128] ${className}`} />;
+  return <div className={`animate-pulse rounded-xl bg-[var(--theme-bg-secondary)] ${className}`} />;
 }
 
 function EmptyState({
@@ -320,10 +320,10 @@ function ThemeDetailPanel({
   const alpha = detail.top_alpha_stocks ?? related;
   const chainRoles = Object.entries(detail.supply_chain ?? {}).slice(0, 4);
   return (
-    <section id="theme-detail" tabIndex={-1} className={`${cardClass} mb-4 outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]`}>
+    <section id="theme-detail" tabIndex={-1} className={`${cardClass} mb-4 outline-none ring-0`}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Theme Detail / 銝駁??圾</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">主題拆解 Theme Detail</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-wide text-[var(--theme-text)]">{detail.theme}</h2>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--theme-muted)]">{detail.description ?? detail.summary}</p>
         </div>
@@ -358,7 +358,7 @@ function ThemeDetailPanel({
                   <div className="min-w-0">
                     <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{stock.ticker}</p>
                     <p className="truncate text-xs text-[var(--theme-muted)]">{stock.company_name ?? stock.role ?? "Theme exposure"}</p>
-                    <p className="mt-1 text-[11px] text-[var(--theme-accent)]">{stock.role ?? "related stock"}</p>
+                    <p className="mt-1 text-[11px] text-[var(--theme-accent)]">{stock.role ?? "theme exposure"}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-mono text-sm font-semibold text-[var(--theme-text-secondary)]">{typeof stock.price === "number" ? `$${stock.price.toFixed(2)}` : "--"}</p>
@@ -395,7 +395,7 @@ function ThemeDetailPanel({
               {chainRoles.map(([role, stocks]) => (
                 <div key={role} className="flex items-start justify-between gap-3 text-xs">
                   <span className="capitalize text-[var(--theme-muted)]">{role.replaceAll("_", " ")}</span>
-                  <span className="max-w-[70%] text-right font-mono text-[var(--theme-text-secondary)]">{stocks.slice(0, 4).map((stock) => stock.ticker).join(" 繚 ")}</span>
+                  <span className="max-w-[70%] text-right font-mono text-[var(--theme-text-secondary)]">{stocks.slice(0, 4).map((stock) => stock.ticker).join(" / ")}</span>
                 </div>
               ))}
               {chainRoles.length === 0 && <p className="text-sm text-[var(--theme-muted)]">Supply chain map calibrating...</p>}
@@ -509,9 +509,6 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   const topThemes = top?.themes ?? [];
   const emergingThemes = emerging?.emerging_themes ?? [];
   const flowItems = flow?.capital_flow ?? topThemes;
-  const narrativeItems = narrative?.top_narratives?.length
-    ? narrative.top_narratives
-    : topThemes.map((theme) => theme.narrative_intelligence).filter(isNarrativeIntelligence);
   const overheatedThemes = rotation?.overheated_themes ?? [];
   const undervaluedThemes = rotation?.undervalued_themes ?? [];
   const regime = top?.cross_asset_regime;
@@ -523,11 +520,11 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
     <main className="miji-page bg-[var(--theme-bg)] p-5 text-[var(--theme-text)]">
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="terminal-micro-label">AI 銝駁??銝剖? Theme Command Center</p>
+          <p className="terminal-micro-label">主題指揮中心 Theme Command Center</p>
           <h1 className="terminal-page-title mt-1 text-[var(--theme-text)]">AI Theme Command Center</h1>
           {selectedTheme && <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Focus: {selectedTheme}</p>}
           <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--theme-text-secondary)]">
-            Cross-asset theme discovery across capital flow, supply chains, macro regime, narrative acceleration and institutional positioning.
+            追蹤主題領導、資金輪動與受益個股，聚焦現在最值得關注的市場方向。
           </p>
         </div>
         {loading && (
@@ -547,49 +544,14 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
         </div>
       )}
 
-      <div className="miji-card-grid mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Risk Regime" value={regime?.risk_on_off ?? "Warming"} sublabel={`Risk score ${formatOptionalScore(regime?.risk_on_score)} - liquidity ${regime?.liquidity_regime ?? "pending"}`} icon={<Activity size={17} />} />
-        <MetricCard label="AI CapEx Regime" value={regime?.AI_capex_regime ?? "Warming"} sublabel={`AI capex score ${formatOptionalScore(regime?.AI_capex_score)} from SOXX, QQQ and growth proxies`} icon={<BrainCircuit size={17} />} />
-        <MetricCard label="Volatility" value={regime?.volatility_regime ?? "Warming"} sublabel={`Volatility score ${formatOptionalScore(regime?.volatility_score)} using VIX proxy and equity vol`} icon={<ShieldAlert size={17} />} />
-        <MetricCard label="Inflation" value={regime?.inflation_regime ?? "Warming"} sublabel={`Inflation score ${formatOptionalScore(regime?.inflation_score)} from oil, gold and yields`} icon={<RadioTower size={17} />} />
-      </div>
-
-      <section className={`${cardClass} mb-4`}>
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="terminal-panel-title text-[var(--theme-text)]">??? Narrative Acceleration</p>
-            <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{narrative?.summary ?? "Ranking leadership, participation, acceleration and institutional alignment across themes."}</p>
-          </div>
-          <Activity className="text-[var(--theme-warning)]" size={19} />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {narrativeItems.slice(0, 4).map((item) => (
-            <div key={item.narrative_id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{item.narrative_name}</p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">{item.narrative_state.replaceAll("_", " ")}</p>
-                </div>
-                <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}`}>
-                  {formatOptionalScore(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}
-                </p>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-[var(--theme-muted)]">{item.capital_flow_semantics ?? item.explanation}</p>
-            </div>
-          ))}
-          {loading && narrativeItems.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-28" />)}
-          {!loading && narrativeItems.length === 0 && <EmptyState detail="Narrative acceleration appears once theme leadership factors are available." />}
-        </div>
-      </section>
-
       <ThemeDetailPanel detail={themeDetail} loading={detailLoading} onTickerSelect={onTickerSelect} />
 
       <div className="miji-card-grid grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <section className={cardClass}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="terminal-panel-title text-[var(--theme-text)]">隞??銝駁? Today&apos;s Leading Themes</p>
-              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{top?.summary ?? "Scoring universal themes across market structure and capital flow."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">今日領導主題 Today&apos;s Leading Themes</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">What matters now: strongest theme leadership, flow, and participation.</p>
             </div>
             <TrendingUp className="text-[var(--theme-warning)]" size={20} />
           </div>
@@ -608,8 +570,8 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           <div className="mb-4 flex items-center gap-3">
             <ArrowUpRight className="text-[var(--theme-bullish)]" size={20} />
             <div>
-              <p className="terminal-panel-title text-[var(--theme-text)]">?啗?銝駁? Emerging Themes</p>
-              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{emerging?.summary ?? "Detecting early capital-flow acceleration."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">新興主題 Emerging Themes</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Early rotation candidates with improving factor support.</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -640,8 +602,8 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           <div className="mb-4 flex items-center gap-3">
             <Network className="text-[var(--theme-warning)]" size={19} />
             <div>
-              <p className="terminal-panel-title text-[var(--theme-text)]">鞈?瘚? Capital Rotation Flow</p>
-              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{flow?.summary ?? "Ranking flow by breadth, relative volume and ETF leadership."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">資金輪動 Capital Rotation Flow</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Where institutional participation is moving next.</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -663,7 +625,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           <div className="mb-4 flex items-center gap-3">
             <Blocks className="text-[var(--theme-warning)]" size={19} />
             <div>
-              <p className="terminal-panel-title text-[var(--theme-text)]">銝駁??啣 Theme -&gt; Stock Drilldown</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">受益個股 Theme -&gt; Stock Drilldown</p>
               <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Upstream, equipment, infrastructure and downstream exposure.</p>
             </div>
           </div>
@@ -695,7 +657,7 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
           <div className="mb-4 flex items-center gap-3">
             <ArrowDownRight className="text-[var(--theme-bearish)]" size={19} />
             <div>
-              <p className="terminal-panel-title text-[var(--theme-text)]">?葫?勗? Forecast Heatmap</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">預測熱區 Forecast Heatmap</p>
               <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Overheated and undervalued theme divergence.</p>
             </div>
           </div>

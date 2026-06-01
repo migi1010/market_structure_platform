@@ -431,8 +431,8 @@ function DashboardApp() {
                 onClick={() => setActiveModule(item.id)}
               />
             ))}
-            <TerminalRailButton label="?" secondaryLabel="Alerts" icon={<Bell size={18} />} />
-            <TerminalRailButton label="閮剖?" secondaryLabel="Settings" icon={<Settings2 size={18} />} />
+            <TerminalRailButton label="通知" secondaryLabel="Alerts" icon={<Bell size={18} />} />
+            <TerminalRailButton label="設定" secondaryLabel="Settings" icon={<Settings2 size={18} />} />
           </>
         }
       />
@@ -469,7 +469,7 @@ function DashboardApp() {
           <div className="miji-header-actions flex w-full min-w-0 items-center gap-3 md:w-auto">
             <GlobalStockSearch onSelect={openStock} onSelectResult={openSearchResult} onAddToWatchlist={addToWatchlist} />
             <div className="hidden min-w-0 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 text-[11px] text-[var(--theme-muted)] md:block">
-              <span className="font-semibold uppercase tracking-wide text-[var(--theme-accent)]">撌乩?? Workspace</span>
+              <span className="font-semibold uppercase tracking-wide text-[var(--theme-accent)]">工作區 Workspace</span>
               <span className="ml-2 font-mono text-[var(--theme-text-secondary)]">{activeContextLabel}</span>
             </div>
             <div className="hidden rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 font-mono text-[11px] text-[var(--theme-muted)] lg:block" suppressHydrationWarning>
@@ -485,7 +485,7 @@ function DashboardApp() {
         {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
         {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} /></div>}
         {activeTab === "market-intel" && <div id="sector-rotation" tabIndex={-1} className="outline-none ring-0"><SectorRotationPanel onTickerSelect={openStock} /></div>}
-        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]"><StockAnalysisWorkspace /></div>}
+        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0"><StockAnalysisWorkspace /></div>}
       </div>
       {mobileMenuOpen && (
         <motion.div
