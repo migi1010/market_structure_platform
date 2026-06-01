@@ -328,7 +328,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
       <button
         type="button"
         aria-label="Close command palette"
-        className="pointer-events-auto absolute inset-0 z-0 cursor-default bg-[#05070A]/65 backdrop-blur-[3px]"
+        className="pointer-events-auto absolute inset-0 z-0 cursor-default bg-[var(--theme-bg)]/70"
         onMouseDown={(event) => {
           event.preventDefault();
           setOpen(false);
@@ -339,32 +339,32 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         }}
       />
       <div
-        className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-xl border border-[#2B313C] bg-[#090B0F]/98 shadow-[0_28px_80px_rgba(0,0,0,0.62)] ring-1 ring-amber-200/10 backdrop-blur-xl"
+        className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel)] shadow-sm"
         style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, maxHeight: overlayPosition.maxHeight, zIndex: 10000 }}
       >
-        <div className="border-b border-[#2B313C] bg-[#0D1117]/95 px-3 py-3">
+        <div className="border-b border-[var(--theme-border)] bg-[#0D1117]/95 px-3 py-3">
           <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <CommandIcon size={14} className="text-amber-200" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#C9D1D9]">Terminal Command Palette</span>
+            <CommandIcon size={14} className="text-[var(--theme-warning)]" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">Terminal Command Palette</span>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">
+          <div className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent)]">
             <span>Enter</span>
             <span>Open</span>
             <span>Esc</span>
             <span>Close</span>
           </div>
           </div>
-          <div className="mt-3 rounded-xl border border-amber-400/20 bg-[#05070A] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.04)]">
+          <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3 ">
             <div className="mb-1 flex items-center justify-between gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">{intentLabel}</span>
-              {loading && <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]"><Loader2 size={12} className="animate-spin" /> Searching</span>}
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">{intentLabel}</span>
+              {loading && <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]"><Loader2 size={12} className="animate-spin" /> Searching</span>}
             </div>
-            <div className="flex min-w-0 items-center gap-1 font-mono text-xl font-semibold uppercase tracking-wide text-[#E6EDF3]">
-              <span className={query.trim() ? "truncate" : "truncate text-[#6E7681]"}>{query.trim() || "TYPE COMMAND OR SYMBOL"}</span>
-              <span className="h-6 w-2 animate-pulse bg-amber-200/80" aria-hidden="true" />
+            <div className="flex min-w-0 items-center gap-1 font-mono text-xl font-semibold uppercase tracking-wide text-[var(--theme-text)]">
+              <span className={query.trim() ? "truncate" : "truncate text-[var(--theme-accent)]"}>{query.trim() || "TYPE COMMAND OR SYMBOL"}</span>
+              <span className="h-6 w-2 animate-pulse bg-[var(--theme-warning)]/80" aria-hidden="true" />
             </div>
-            <p className="mt-2 truncate text-xs font-medium text-[#9BA7B4]">{actionSummary}</p>
+            <p className="mt-2 truncate text-xs font-medium text-[var(--theme-muted)]">{actionSummary}</p>
           </div>
         </div>
 
@@ -376,12 +376,12 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                   event.preventDefault();
                   commit(query);
                 }}
-                className="w-full rounded-lg border border-[#2B313C] bg-[#111318] px-3 py-3 text-left font-mono text-sm text-[#C9D1D9] transition hover:border-amber-400/20 hover:bg-[#161B22]"
+                className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3 text-left font-mono text-sm text-[var(--theme-text-secondary)] transition hover:border-[var(--theme-highlight)] hover:bg-[var(--theme-panel)]"
               >
                 Open {query || "ticker"} Analysis
               </button>
-              <div className="rounded-lg border border-[#2B313C] bg-[#0A0C10] p-3">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681]">Try</p>
+              <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent)]">Try</p>
                 <div className="flex flex-wrap gap-2">
                   {EMPTY_SUGGESTIONS.map((suggestion) => (
                     <button
@@ -393,7 +393,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                         setOpen(true);
                         inputRef.current?.focus();
                       }}
-                      className="rounded border border-[#2B313C] bg-[#111318] px-2.5 py-1.5 text-xs font-semibold text-[#C9D1D9] transition hover:border-amber-400/25 hover:text-amber-200"
+                      className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2.5 py-1.5 text-xs font-semibold text-[var(--theme-text-secondary)] transition hover:border-[var(--theme-highlight)] hover:text-[var(--theme-highlight)]"
                     >
                       {suggestion}
                     </button>
@@ -403,10 +403,10 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
             </div>
           ) : (
             <>
-              {!query.trim() && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Recent and Quick Actions</div>}
+              {!query.trim() && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Recent and Quick Actions</div>}
               {groupedResults.map(({ group, items }) => (
                 <section key={group} className="pb-2">
-                  <div className="sticky top-0 z-10 bg-[#090B0F]/95 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681] backdrop-blur-md">{group}</div>
+                  <div className="sticky top-0 z-10 bg-[var(--theme-panel)] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent)]">{group}</div>
                   <div className="space-y-1">
                     {items.map((item) => {
                       const index = visibleResults.indexOf(item);
@@ -420,8 +420,8 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                           key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
                           className={`group rounded-lg border px-3 py-2.5 transition ${
                             active
-                              ? "border-amber-400/35 bg-[#1A1F29] shadow-[inset_3px_0_0_rgba(251,191,36,0.75),0_10px_30px_rgba(0,0,0,0.24)]"
-                              : "border-transparent hover:border-[#2B313C] hover:bg-[#111318]"
+                              ? "border-[var(--theme-highlight)] bg-[var(--theme-panel-hover)]"
+                              : "border-transparent hover:border-[var(--theme-border)] hover:bg-[var(--theme-bg-secondary)]"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-3">
@@ -433,14 +433,14 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                               className="min-w-0 flex-1 text-left"
                             >
                               <div className="flex min-w-0 items-center gap-2">
-                                <span className="min-w-[4.25rem] shrink-0 font-mono text-sm font-semibold text-[#E6EDF3]">{symbolLabel}</span>
-                                <span className="truncate text-sm font-medium text-[#C9D1D9]">{title}</span>
-                                <span className="shrink-0 rounded border border-[#2B313C] bg-[#0A0C10] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{item.type}</span>
-                                <span className="hidden shrink-0 rounded border border-[#2B313C] bg-[#0A0C10] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6E7681] sm:inline">{item.exchange}</span>
+                                <span className="min-w-[4.25rem] shrink-0 font-mono text-sm font-semibold text-[var(--theme-text)]">{symbolLabel}</span>
+                                <span className="truncate text-sm font-medium text-[var(--theme-text-secondary)]">{title}</span>
+                                <span className="shrink-0 rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{item.type}</span>
+                                <span className="hidden shrink-0 rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent)] sm:inline">{item.exchange}</span>
                               </div>
                               <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
                                 <span className="truncate text-[#7D8590]">{description}</span>
-                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">{active ? "Enter to open" : target}</span>
+                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]/80">{active ? "Enter to open" : target}</span>
                               </div>
                             </button>
                             {onAddToWatchlist && canAddToWatchlist(item) && (
@@ -451,7 +451,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                                   event.stopPropagation();
                                   onAddToWatchlist(item.ticker ?? item.symbol);
                                 }}
-                                className="inline-flex shrink-0 items-center gap-1 rounded border border-amber-400/20 px-2 py-1 text-[10px] font-semibold text-amber-200 opacity-80 transition hover:bg-amber-400/10 group-hover:opacity-100"
+                                className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-warning)] opacity-80 transition hover:bg-[var(--theme-panel-hover)] group-hover:opacity-100"
                               >
                                 <Plus size={12} />
                                 Add
@@ -479,9 +479,9 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
           event.preventDefault();
           commitFromCurrentInput();
         }}
-        className="flex h-10 items-center gap-2 rounded-2xl border border-[#2B313C] bg-[#111318] px-3 text-[#E6EDF3] backdrop-blur-md transition focus-within:border-amber-400/30 focus-within:shadow-[0_0_0_1px_rgba(251,191,36,0.15)]"
+        className="flex h-10 items-center gap-2 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 text-[var(--theme-text)] transition focus-within:border-[var(--theme-highlight)]"
       >
-        <Search size={16} className="text-[#9BA7B4]" />
+        <Search size={16} className="text-[var(--theme-muted)]" />
         <input
           ref={inputRef}
           value={query}
@@ -516,9 +516,9 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
             if (event.key === "Escape") setOpen(false);
           }}
           placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-[#E6EDF3] outline-none placeholder:text-[#6E7681]"
+          className="min-w-0 flex-1 bg-transparent font-mono text-sm uppercase text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-accent)]"
         />
-        {loading && <Loader2 size={15} className="animate-spin text-amber-200" />}
+        {loading && <Loader2 size={15} className="animate-spin text-[var(--theme-warning)]" />}
       </form>
       {overlay}
     </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { BrainCircuit, Loader2, TrendingDown, TrendingUp } from "lucide-react";
@@ -150,7 +150,7 @@ export default function StockAnalysisWorkspace() {
   // fires on the initial null state before any fetch completes.
   useEffect(() => {
     if (loading) return;
-    if (!hasFetchedOnce.current) return;     // initial state — fetch not yet complete
+    if (!hasFetchedOnce.current) return;     // initial state ??fetch not yet complete
     if (retryFiredRef.current) return;
     const isFallback = stockView.price === null && (stockView.quoteStatus === "unavailable" || stockView.quoteStatus === "updating");
     if (!isFallback) return;
@@ -161,7 +161,7 @@ export default function StockAnalysisWorkspace() {
         const failed = result.canonicalPrice === null && result.canonicalQuoteStatus === "unavailable";
         setStockView(createStockViewModel(ticker, result, failed));
       } catch {
-        // Retry failure is silent — original fallback state remains.
+        // Retry failure is silent ??original fallback state remains.
       }
     }, 10_000);
     return () => window.clearTimeout(handle);
@@ -186,22 +186,22 @@ export default function StockAnalysisWorkspace() {
   const forecastTrend = hmm?.predicted_trend ?? "Calibrating model...";
   const regimeState = hmm?.regime_state ?? "Awaiting regime confirmation...";
   const regimeFallbackMessage = hmm?.message ?? "Using fallback market regime...";
-  const forecastTone = hmmAvailable && forecastTrend === "Bearish" ? "text-rose-300" : hmmAvailable ? "text-emerald-300" : "text-amber-200";
+  const forecastTone = hmmAvailable && forecastTrend === "Bearish" ? "text-[var(--theme-bearish)]" : hmmAvailable ? "text-[var(--theme-bullish)]" : "text-[var(--theme-warning)]";
 
   return (
-    <main className="miji-page miji-stock-page min-h-full overflow-x-hidden bg-[#0A0C10] px-3 py-4 text-[#E6EDF3] sm:p-5">
+    <main className="miji-page miji-stock-page min-h-full overflow-x-hidden bg-[var(--theme-bg)] px-3 py-4 text-[var(--theme-text)] sm:p-5">
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Stock Analysis Workspace</p>
-          <h1 className="mt-1 break-words text-2xl font-semibold tracking-wide text-[#E6EDF3] sm:text-3xl">
+          <p className="terminal-micro-label">?撌乩?? Stock Workspace</p>
+          <h1 className="mt-1 break-words text-2xl font-semibold tracking-wide text-[var(--theme-text)] sm:text-3xl">
             {formatTickerCompanyLabel(stockView.ticker, stockView.companyName)}
           </h1>
-          <p className="mt-1 text-sm text-[#9BA7B4]">{sectorDisplay} · {priceDisplay} · {changeDisplay} · {changePercentDisplay} · MCap {marketCapDisplay} · {quoteStatusDisplay}</p>
+          <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{sectorDisplay} / {priceDisplay} / {changeDisplay} / {changePercentDisplay} / MCap {marketCapDisplay} / {quoteStatusDisplay}</p>
         </div>
-        {loading && <div className="flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-amber-200"><Loader2 className="animate-spin" size={16} /> Updating market data</div>}
+        {loading && <div className="flex items-center gap-2 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 text-[var(--theme-warning)]"><Loader2 className="animate-spin" size={16} /> Updating market data</div>}
       </div>
 
-      {error && <div className="mb-5 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-rose-200">{error}</div>}
+      {error && <div className="mb-5 rounded-xl border border-[var(--theme-danger)] bg-[var(--theme-panel)] p-4 text-[var(--theme-danger)]">{error}</div>}
 
       <div className="miji-stock-grid grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="miji-chart-column min-w-0 space-y-5">
@@ -209,39 +209,39 @@ export default function StockAnalysisWorkspace() {
           <BubbleDiagnosisPanel data={stock?.bubble_analysis_data} />
         </div>
         <aside className="miji-info-panel min-w-0 space-y-5">
-          <section className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+          <section className="miji-card terminal-panel p-5">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-amber-200">AI Forecast Engine</p>
-                <h3 className="text-lg font-black text-[#E6EDF3]">HMM Regime Inference</h3>
+                <p className="terminal-micro-label">?葫撠? Forecast Alignment</p>
+                <h3 className="terminal-panel-title text-[var(--theme-text)]">HMM Regime Inference</h3>
               </div>
-              <BrainCircuit className="text-amber-200" size={22} />
+              <BrainCircuit className="text-[var(--theme-accent)]" size={22} />
             </div>
             <div className="miji-card-metrics grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
-                <span className="text-xs text-[#9BA7B4]">Predicted Trend</span>
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+                <span className="text-xs text-[var(--theme-muted)]">Predicted Trend</span>
                 <p className={`mt-2 flex items-center gap-2 text-xl font-black ${forecastTone}`}>
                   {hmmAvailable && forecastTrend === "Bearish" ? <TrendingDown size={18} /> : hmmAvailable ? <TrendingUp size={18} /> : <BrainCircuit size={18} />}
                   {hmmAvailable ? forecastTrend : "Calibrating model..."}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
-                <span className="text-xs text-[#9BA7B4]">Forecast Confidence</span>
-                <p className="mt-2 font-mono text-xl font-black text-amber-200">{hmmAvailable && forecastConfidence !== null ? forecastConfidence.toFixed(2) : "Calibrating"}</p>
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+                <span className="text-xs text-[var(--theme-muted)]">Forecast Confidence</span>
+                <p className="mt-2 font-mono text-xl font-black text-[var(--theme-warning)]">{hmmAvailable && forecastConfidence !== null ? forecastConfidence.toFixed(2) : "Calibrating"}</p>
               </div>
             </div>
             <div className="mt-4 space-y-3">
               <div>
-                <div className="mb-1 flex justify-between text-xs"><span>Bull Probability</span><span className="text-emerald-300">{hmmAvailable ? `${bull}%` : bull}</span></div>
-                <div className="h-2 rounded bg-slate-800"><div className="h-full rounded bg-gradient-to-r from-emerald-300 to-teal-400" style={{ width: bullWidth }} /></div>
+                <div className="mb-1 flex justify-between text-xs"><span>Bull Probability</span><span className="text-[var(--theme-bullish)]">{hmmAvailable ? `${bull}%` : bull}</span></div>
+                <div className="h-2 rounded bg-[var(--theme-bg-secondary)]"><div className="h-full rounded bg-[var(--theme-bullish)]" style={{ width: bullWidth }} /></div>
               </div>
               <div>
-                <div className="mb-1 flex justify-between text-xs"><span>Bear Probability</span><span className="text-rose-300">{hmmAvailable ? `${bear}%` : bear}</span></div>
-                <div className="h-2 rounded bg-slate-800"><div className="h-full rounded bg-gradient-to-r from-rose-500 to-orange-500" style={{ width: bearWidth }} /></div>
+                <div className="mb-1 flex justify-between text-xs"><span>Bear Probability</span><span className="text-[var(--theme-bearish)]">{hmmAvailable ? `${bear}%` : bear}</span></div>
+                <div className="h-2 rounded bg-[var(--theme-bg-secondary)]"><div className="h-full rounded bg-[var(--theme-bearish)]" style={{ width: bearWidth }} /></div>
               </div>
-              <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3">
-                <span className="text-xs text-[#9BA7B4]">Regime State</span>
-                <p className="mt-1 font-semibold text-[#E6EDF3]">{hmmAvailable ? regimeState : regimeFallbackMessage}</p>
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+                <span className="text-xs text-[var(--theme-muted)]">Regime State</span>
+                <p className="mt-1 font-semibold text-[var(--theme-text)]">{hmmAvailable ? regimeState : regimeFallbackMessage}</p>
               </div>
             </div>
           </section>

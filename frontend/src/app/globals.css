@@ -2,19 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Institutional-grade Market Structure Platform Theme */
+/* Institutional Terminal Theme */
 :root {
-  --theme-bg: #0B0E14;
-  --theme-panel: #151922;
-  --theme-panel-secondary: #1B2130;
-  --theme-border: #2A2F3D;
-  --theme-text: #F8FAFC;
-  --theme-text-secondary: #94A3B8;
-  --theme-cyan: #06B6D4;
-  --theme-green: #10B981;
-  --theme-red: #EF4444;
-  --theme-yellow: #F59E0B;
-  --theme-purple: #8B5CF6;
+  --theme-bg: #20242B;
+  --theme-bg-secondary: #262B33;
+  --theme-panel: #2A2F37;
+  --theme-panel-hover: #313743;
+  --theme-border: #3A404A;
+  --theme-accent: #7C8796;
+  --theme-accent-soft: #909BA8;
+  --theme-bullish: #7E9C8C;
+  --theme-bearish: #A07B7B;
+  --theme-warning: #B39C72;
+  --theme-highlight: #D8D3C9;
+  --theme-text: #E2E6EB;
+  --theme-text-secondary: #B5BDC8;
+  --theme-muted: #8D97A5;
+  --theme-success: #7E9C8C;
+  --theme-danger: #B08989;
+  --theme-radius-panel: 12px;
+  --theme-radius-control: 10px;
+  --theme-rail-width: 64px;
 }
 
 html {
@@ -35,6 +43,8 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
   background-color: var(--theme-bg) !important;
   color: var(--theme-text);
+  font-family: "IBM Plex Sans", "Noto Sans TC", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
   min-height: 100dvh;
   min-height: 100vh;
   width: 100%;
@@ -45,6 +55,81 @@ body {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   touch-action: manipulation;
+}
+
+.terminal-shell {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+
+.terminal-main {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+
+.terminal-panel {
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-panel);
+  background: var(--theme-panel);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.terminal-panel-hover {
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.terminal-panel-hover:hover {
+  background: var(--theme-panel-hover);
+}
+
+.terminal-rail {
+  width: var(--theme-rail-width);
+  border-right: 1px solid var(--theme-border);
+  background: var(--theme-bg-secondary);
+}
+
+.terminal-rail-button {
+  color: var(--theme-accent);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.terminal-rail-button:hover {
+  color: var(--theme-highlight);
+  background: var(--theme-panel-hover);
+}
+
+.terminal-rail-button[data-active="true"] {
+  color: var(--theme-text);
+  background: var(--theme-panel-hover);
+}
+
+.terminal-micro-label {
+  color: var(--theme-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.terminal-page-title {
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.terminal-section-title {
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.terminal-panel-title {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 #__next {

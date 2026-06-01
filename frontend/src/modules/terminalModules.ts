@@ -2,14 +2,34 @@ import type { OmniboxTargetTab } from "@/types/stock";
 
 export type TerminalModuleId = OmniboxTargetTab;
 export type TerminalWorkspaceType = "stock" | "theme" | "sector" | "portfolio" | "alpha" | "general";
-export type TerminalIconKey = "radar" | "briefcase" | "brain" | "line-chart";
+export type TerminalIconKey =
+  | "activity"
+  | "bell"
+  | "bookmark"
+  | "brain-circuit"
+  | "briefcase"
+  | "layout-dashboard"
+  | "line-chart"
+  | "newspaper"
+  | "panels-top-left"
+  | "radar"
+  | "refresh-cw"
+  | "scan-search"
+  | "search"
+  | "settings-2"
+  | "star"
+  | "waves";
+export type TerminalRailGroup = "top" | "middle" | "bottom";
 
 export interface TerminalModule {
   id: TerminalModuleId;
   title: string;
   shortTitle: string;
+  labelZh: string;
+  labelEn: string;
   description: string;
   iconKey: TerminalIconKey;
+  railGroup: TerminalRailGroup;
   target_tab: OmniboxTargetTab;
   searchKeywords: string[];
   workspaceType: TerminalWorkspaceType;
@@ -20,10 +40,13 @@ export interface TerminalModule {
 export const terminalModules: TerminalModule[] = [
   {
     id: "theme-intelligence",
-    title: "Theme Intelligence",
+    title: "主題情報 Theme Intelligence",
     shortTitle: "Themes",
+    labelZh: "主題情報",
+    labelEn: "Themes",
     description: "Macro themes, supply chains, and capital-flow intelligence",
-    iconKey: "radar",
+    iconKey: "layout-dashboard",
+    railGroup: "top",
     target_tab: "theme-intelligence",
     searchKeywords: ["theme", "themes", "theme intelligence", "macro themes", "ai themes"],
     workspaceType: "theme",
@@ -32,10 +55,13 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "portfolio",
-    title: "Portfolio",
+    title: "觀察名單 Portfolio",
     shortTitle: "Portfolio",
+    labelZh: "觀察名單",
+    labelEn: "Portfolio",
     description: "Institutional watchlist and portfolio command center",
-    iconKey: "briefcase",
+    iconKey: "star",
+    railGroup: "bottom",
     target_tab: "portfolio",
     searchKeywords: ["portfolio", "watchlist", "holdings", "positions"],
     workspaceType: "portfolio",
@@ -44,10 +70,13 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "theme-forecast",
-    title: "Theme Forecast AI",
+    title: "主題預測 Forecast",
     shortTitle: "Forecast",
+    labelZh: "主題預測",
+    labelEn: "Forecast",
     description: "Forward theme leadership forecasts, regime overlays, and validation diagnostics",
-    iconKey: "brain",
+    iconKey: "brain-circuit",
+    railGroup: "middle",
     target_tab: "theme-forecast",
     searchKeywords: ["forecast", "theme forecast", "future themes", "theme ai", "regime forecast"],
     workspaceType: "theme",
@@ -56,10 +85,13 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "alpha-quant",
-    title: "Alpha Quant",
+    title: "因子訊號 Signals",
     shortTitle: "Alpha",
+    labelZh: "因子訊號",
+    labelEn: "Signals",
     description: "Alpha ranking, factor scores, and quant recommendations",
-    iconKey: "brain",
+    iconKey: "activity",
+    railGroup: "middle",
     target_tab: "alpha-quant",
     searchKeywords: ["alpha", "alpha quant", "ranking", "rankings", "top alpha", "factors"],
     workspaceType: "alpha",
@@ -68,10 +100,13 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "market-intel",
-    title: "Sector Rotation",
+    title: "板塊輪動 Rotation",
     shortTitle: "Sectors",
+    labelZh: "板塊輪動",
+    labelEn: "Rotation",
     description: "Sector leadership, rotation, and relative strength analytics",
-    iconKey: "radar",
+    iconKey: "refresh-cw",
+    railGroup: "middle",
     target_tab: "market-intel",
     searchKeywords: ["sector", "sectors", "sector rotation", "market intel", "relative strength"],
     workspaceType: "sector",
@@ -80,10 +115,13 @@ export const terminalModules: TerminalModule[] = [
   },
   {
     id: "stock-analysis",
-    title: "Stock Analysis",
+    title: "個股工作區 Workspace",
     shortTitle: "Stock",
+    labelZh: "個股工作區",
+    labelEn: "Workspace",
     description: "Single-stock intelligence workspace with quote, valuation, and regime context",
-    iconKey: "line-chart",
+    iconKey: "panels-top-left",
+    railGroup: "middle",
     target_tab: "stock-analysis",
     searchKeywords: ["stock", "stock analysis", "ticker", "equity", "quote"],
     workspaceType: "stock",

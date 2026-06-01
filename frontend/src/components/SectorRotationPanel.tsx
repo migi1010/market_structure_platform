@@ -7,6 +7,7 @@ import { useWorkspace } from "@/context/WorkspaceContext";
 import { sanitizeCompanyName } from "@/lib/sanitize";
 import { fetchSectorRotation } from "@/services/stockApi";
 import type { SectorRotation } from "@/types/stock";
+import { TerminalPanel } from "./terminal";
 
 interface SectorRotationPanelProps {
   onTickerSelect: (ticker: string) => void;
@@ -58,16 +59,6 @@ function money(value: number | null | undefined): string {
   if (abs >= 1e9) return `$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `$${(abs / 1e6).toFixed(2)}M`;
   return `$${abs.toFixed(0)}`;
-}
-
-function gradient(score: number | null | undefined): string {
-  const value = finiteScore(score);
-  if (value === null) return "from-[#1C2128] to-[#111318]";
-  if (value >= 90) return "from-emerald-300 to-teal-400";
-  if (value >= 75) return "from-emerald-500 to-cyan-500";
-  if (value >= 50) return "from-slate-500 to-slate-700";
-  if (value >= 25) return "from-orange-500 to-rose-500";
-  return "from-rose-600 to-red-700";
 }
 
 function scoreLabel(score: number | null | undefined): string {
@@ -135,7 +126,7 @@ function SectorSkeleton() {
   return (
     <div className="miji-sector-heatmap grid auto-rows-[138px] grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: 9 }).map((_, index) => (
-        <div key={index} className="animate-pulse rounded-2xl border border-[#2B313C] bg-[#1C2128]" />
+        <div key={index} className="animate-pulse rounded-2xl border border-[var(--theme-border)] bg-[#1C2128]" />
       ))}
     </div>
   );
@@ -162,9 +153,6 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
       try {
         const result = await fetchSectorRotation();
         if (!cancelled) {
-          if (process.env.NODE_ENV === "development") {
-            console.log("SECTOR_STATE_SET_INPUT", result);
-          }
           setSectors(result);
           setActiveSector((current) => {
             const currentMatch = result.find((sector) => sector.sector.toLowerCase() === current.toLowerCase());
@@ -205,15 +193,6 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
   const active = renderArray.find((sector) => sector.sector.toLowerCase() === activeSector.toLowerCase());
   const activeRanking = active?.universe_ranking;
 
-  useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
-      console.log("SECTORS_STATE", sectors);
-      console.log("RENDER_SOURCE_ARRAY", renderArray);
-      console.log("ACTIVE_SECTOR", activeSector);
-      console.log("SECTOR_RENDER_ROW", active ?? null);
-    }
-  }, [active, activeSector, renderArray, sectors]);
-
   const activeCompanies = useMemo(() => {
     if ((active?.companies ?? []).length > 0) return active?.companies ?? [];
     return (FALLBACK_COMPANIES[activeSector] ?? []).map((ticker, index) => ({
@@ -239,42 +218,21 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
   };
 
   return (
-    <section className="miji-page miji-sector-page bg-[#0A0C10] p-5 text-[#E6EDF3]">
+    <section className="miji-page miji-sector-page bg-[var(--theme-bg)] p-5 text-[var(--theme-text)]">
       <div className="miji-page-header mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Capital Rotation System</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#E6EDF3]">Sector Rotation Heatmap</h1>
-          <p className="mt-2 text-sm text-[#9BA7B4]">Momentum, relative strength, volume participation, cap-weighted flow, volatility and bubble risk.</p>
+          <p className="terminal-micro-label">板塊輪動 Rotation</p>
+          <h1 className="terminal-page-title mt-1 text-[var(--theme-text)]">Sector Rotation Heatmap</h1>
+          <p className="mt-2 text-sm text-[var(--theme-text-secondary)]">Momentum, relative strength, volume participation, cap-weighted flow, volatility and bubble risk.</p>
         </div>
-        {loading && <div className="flex items-center gap-2 text-sm font-medium text-[#9BA7B4]"><Loader2 className="animate-spin" size={16} /> Loading live sector tape</div>}
+        {loading && <div className="flex items-center gap-2 text-sm font-medium text-[var(--theme-muted)]"><Loader2 className="animate-spin" size={16} /> Loading live sector tape</div>}
       </div>
 
       <div className="miji-card-grid mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Leadership</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{renderArray?.[0]?.sector ?? "Calibrating"}</p>
-          <p className="mt-1 text-sm text-[#9BA7B4]">Top sector by composite strength</p>
-        </div>
-        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Avg Strength</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(averageFinite(renderArray.map(sectorFactorScore)))}</p>
-          <p className="mt-1 text-sm text-[#9BA7B4]">Across institutional sector universe</p>
-        </div>
-        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Flow Bias</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-emerald-300">{formatOptionalScore(active?.flow)}</p>
-          <p className="mt-1 text-sm text-[#9BA7B4]">{active?.sector ?? activeSector} capital flow score</p>
-        </div>
-        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Screener Rank</p>
-          <p className="mt-2 font-mono text-xl font-semibold text-amber-200">{formatOptionalScore(activeRanking?.ranking_score ?? active?.score)}</p>
-          <p className="mt-1 text-sm text-[#9BA7B4]">{activeRanking?.market_classification?.replaceAll("_", " ") ?? "Awaiting factors"}</p>
-        </div>
-        <div className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Rotation State</p>
-          <p className="mt-2 text-xl font-semibold text-[#E6EDF3]">{active?.rotation_state ?? active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? scoreLabel(active?.score)}</p>
-          <p className="mt-1 text-sm text-[#9BA7B4]">Momentum and risk-adjusted sector status</p>
-        </div>
+        <TerminalPanel eyebrow="領導強度 Leadership" title={renderArray?.[0]?.sector ?? "Calibrating"} description="Top sector by composite strength" />
+        <TerminalPanel eyebrow="平均強度 Avg Strength" title={<span className="font-mono text-[var(--theme-warning)]">{formatOptionalScore(averageFinite(renderArray.map(sectorFactorScore)))}</span>} description="Across institutional sector universe" />
+        <TerminalPanel eyebrow="資金流向 Flow" title={<span className="font-mono text-[var(--theme-bullish)]">{formatOptionalScore(active?.flow)}</span>} description={`${active?.sector ?? activeSector} capital flow score`} />
+        <TerminalPanel eyebrow="輪動狀態 Rotation" title={active?.rotation_state ?? active?.narrative_state?.replaceAll("_", " ") ?? active?.leadership_state ?? scoreLabel(active?.score)} description={activeRanking?.market_classification?.replaceAll("_", " ") ?? "Awaiting factors"} />
       </div>
 
       <div className="miji-sector-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_500px]">
@@ -283,9 +241,6 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
         ) : (
           <div className="miji-sector-heatmap grid auto-rows-[148px] grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {renderArray.map((sector) => {
-              if (process.env.NODE_ENV === "development") {
-                console.log("CARD_ROW", sector);
-              }
               const rawScore = typeof sector.score === "number" ? sector.score.toFixed(2) : String(sector.score);
               const rawRelativeStrength = typeof sector.relative_strength === "number" ? sector.relative_strength.toFixed(2) : String(sector.relative_strength);
               const rawFlow = typeof sector.flow === "number" ? sector.flow.toFixed(2) : String(sector.flow);
@@ -296,31 +251,23 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.18 }}
-                  className={`miji-card relative overflow-hidden rounded-2xl border p-5 text-left shadow-[0_4px_24px_rgba(0,0,0,0.25)] transition ${
-                    activeSector === sector.sector ? "border-amber-400/30" : "border-[#2B313C]"
-                  } bg-gradient-to-br ${gradient(sector.score)}`}
+                  className={`miji-card terminal-panel terminal-panel-hover relative overflow-hidden p-5 text-left transition ${
+                    activeSector === sector.sector ? "border-[var(--theme-highlight)]" : "border-[var(--theme-border)]"
+                  }`}
                 >
-                  <div className="absolute inset-0 bg-[#0A0C10]/20" />
                   <div className="relative flex h-full flex-col justify-between">
                     <div className="flex items-center justify-between">
-                      <span className="text-lg font-semibold tracking-wide text-[#E6EDF3]">{sector.sector}</span>
-                      <Radar size={18} className="text-[#E6EDF3]/75" />
+                      <span className="text-lg font-semibold tracking-wide text-[var(--theme-text)]">{sector.sector}</span>
+                      <Radar size={18} className="text-[var(--theme-accent)]" />
                     </div>
                     <div>
                       <div className="flex items-end justify-between">
-                        <p className="font-mono text-4xl font-semibold text-[#E6EDF3]">{rawScore}</p>
-                        <span className="rounded-lg border border-white/20 bg-black/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/85">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
+                        <p className="font-mono text-4xl font-semibold text-[var(--theme-text)]">{rawScore}</p>
+                        <span className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">{sector.rotation_state ?? scoreLabel(sector.score)}</span>
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#E6EDF3]/80">
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">
                         <span>RS {rawRelativeStrength}</span>
                         <span>FLOW {rawFlow}</span>
-                      </div>
-                      <div className="mt-3 rounded-lg border border-amber-300/30 bg-black/35 p-2 font-mono text-[10px] leading-relaxed text-amber-100">
-                        <div className="font-semibold text-amber-200">DEBUG</div>
-                        <div>score: {String(sector.score)}</div>
-                        <div>rs: {String(sector.relative_strength)}</div>
-                        <div>flow: {String(sector.flow)}</div>
-                        <div>state: {String(sector.rotation_state)}</div>
                       </div>
                     </div>
                   </div>
@@ -330,7 +277,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           </div>
         )}
 
-        <aside id="sector-drilldown" tabIndex={-1} className="miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] outline-none ring-0 backdrop-blur-md">
+        <aside id="sector-drilldown" tabIndex={-1} className="miji-card terminal-panel p-5 outline-none ring-0">
           <div ref={dropdownRef} className="relative z-30 mb-5">
             <button
               type="button"
@@ -344,16 +291,16 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               aria-label="Select sector"
             >
               <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Sector Drilldown</p>
-              <h2 className="text-2xl font-semibold tracking-wide text-[#E6EDF3]">{active?.sector ?? activeSector}</h2>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Sector Drilldown</p>
+              <h2 className="text-2xl font-semibold tracking-wide text-[var(--theme-text)]">{active?.sector ?? activeSector}</h2>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
                 {active?.momentum_direction ? `${active.momentum_direction} / rank ${formatRank(active.sector_rank)}` : "Workspace Focus"}
               </p>
               </div>
-              <ChevronDown className={`shrink-0 text-[#9BA7B4] transition ${sectorDropdownOpen ? "rotate-180" : ""}`} size={20} />
+              <ChevronDown className={`shrink-0 text-[var(--theme-muted)] transition ${sectorDropdownOpen ? "rotate-180" : ""}`} size={20} />
             </button>
             {sectorDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full z-[80] mt-3 max-h-[60dvh] overflow-y-auto rounded-2xl border border-[#2B313C] bg-[#0A0C10]/98 p-2 shadow-[0_18px_48px_rgba(0,0,0,0.48)] backdrop-blur-md">
+              <div className="absolute left-0 right-0 top-full z-[80] mt-3 max-h-[60dvh] overflow-y-auto rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)]/98 p-2 shadow-sm">
                 {sectorOptions.map((sector) => (
                   <button
                     key={sector}
@@ -364,7 +311,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                       selectSector(sector);
                     }}
                     className={`w-full rounded-xl px-3 py-3 text-left text-sm font-semibold tracking-wide transition ${
-                      activeSector === sector ? "bg-[#1D2430] text-[#E6EDF3]" : "text-[#9BA7B4] hover:bg-[#151922] hover:text-[#E6EDF3]"
+                      activeSector === sector ? "bg-[var(--theme-panel-hover)] text-[var(--theme-text)]" : "text-[var(--theme-muted)] hover:bg-[var(--theme-panel)] hover:text-[var(--theme-text)]"
                     }`}
                   >
                     {sector}
@@ -373,17 +320,17 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               </div>
             )}
           </div>
-          <div className="mb-5 rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
-            <p className="text-sm font-semibold tracking-wide text-[#E6EDF3]">Sector Explanation</p>
-            <p className="mt-2 text-sm leading-relaxed text-[#9BA7B4]">{sectorExplanation(active, activeSector)}</p>
+          <div className="mb-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+            <p className="text-sm font-semibold tracking-wide text-[var(--theme-text)]">Sector Explanation</p>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--theme-muted)]">{sectorExplanation(active, activeSector)}</p>
             {active?.leadership_intelligence?.explanation && (
-              <p className="mt-2 text-sm leading-relaxed text-[#C9D1D9]">{active.leadership_intelligence.explanation}</p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{active.leadership_intelligence.explanation}</p>
             )}
             {active?.narrative_intelligence?.explanation && (
-              <p className="mt-2 text-sm leading-relaxed text-amber-100/80">{active.narrative_intelligence.explanation}</p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--theme-warning)]/80">{active.narrative_intelligence.explanation}</p>
             )}
             {activeRanking?.explanation && (
-              <p className="mt-2 text-sm leading-relaxed text-[#C9D1D9]">{activeRanking.explanation}</p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{activeRanking.explanation}</p>
             )}
             <div className="mt-4 space-y-3">
               {[
@@ -394,12 +341,12 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
                 ["Bubble Risk", averageFinite(activeCompanies.map((item) => item.bubble_score))],
               ].map(([label, value]) => (
                 <div key={label as string}>
-                  <div className="mb-1 flex justify-between text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
+                  <div className="mb-1 flex justify-between text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
                     <span>{label}</span>
-                    <span className="font-mono text-[#C9D1D9]">{formatOptionalScore(value as number | null | undefined)}</span>
+                    <span className="font-mono text-[var(--theme-text-secondary)]">{formatOptionalScore(value as number | null | undefined)}</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[#0A0C10]">
-                    <div className="h-full rounded-full bg-amber-200" style={{ width: metricBarWidth(value as number | null | undefined) }} />
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--theme-bg)]">
+                    <div className="h-full rounded-full bg-[var(--theme-warning)]" style={{ width: metricBarWidth(value as number | null | undefined) }} />
                   </div>
                 </div>
               ))}
@@ -407,7 +354,7 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
           </div>
           <div className="space-y-3">
             {(active?.companies ?? []).length === 0 && (
-              <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-4 text-sm text-[#9BA7B4]">
+              <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4 text-sm text-[var(--theme-muted)]">
                 Using latest cached sector constituents while live {activeSector} rotation data warms up.
               </div>
             )}
@@ -415,25 +362,25 @@ export default function SectorRotationPanel({ onTickerSelect }: SectorRotationPa
               <button
                 key={company.ticker}
                 onClick={() => onTickerSelect(company.ticker)}
-                className="group w-full rounded-xl border border-[#2B313C] bg-[#111318] p-4 text-left transition hover:border-amber-400/20"
+                className="group w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4 text-left transition hover:border-[var(--theme-border)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="font-mono text-xl font-semibold text-[#E6EDF3] group-hover:text-amber-200">{company.ticker}</p>
-                      <span className="rounded border border-[#2B313C] px-1.5 py-0.5 text-[10px] font-semibold text-[#9BA7B4]">#{company.sector_rank ?? "-"}</span>
+                      <p className="font-mono text-xl font-semibold text-[var(--theme-text)] group-hover:text-[var(--theme-warning)]">{company.ticker}</p>
+                      <span className="rounded border border-[var(--theme-border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--theme-muted)]">#{company.sector_rank ?? "-"}</span>
                     </div>
-                    <p className="mt-1 truncate text-sm text-[#9BA7B4]">{sanitizeCompanyName(company.company_name)}</p>
+                    <p className="mt-1 truncate text-sm text-[var(--theme-muted)]">{sanitizeCompanyName(company.company_name)}</p>
                   </div>
-                  <span className={finiteScore(company.change_percent) === null ? "font-mono text-sm font-semibold text-[#6E7681]" : (finiteScore(company.change_percent) as number) >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
+                  <span className={finiteScore(company.change_percent) === null ? "font-mono text-sm font-semibold text-[var(--theme-accent)]" : (finiteScore(company.change_percent) as number) >= 0 ? "font-mono text-sm font-semibold text-[var(--theme-bullish)]" : "font-mono text-sm font-semibold text-[var(--theme-bearish)]"}>
                     {formatPercent(company.change_percent)}
                   </span>
                 </div>
-                <div className="mt-4 grid grid-cols-4 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">
-                  <span>Cap <b className="block text-[#C9D1D9]">{money(company.market_cap)}</b></span>
-                  <span>Alpha <b className="block text-amber-200">{formatOptionalScore(company.alpha_score)}</b></span>
-                  <span>Bubble <b className={(finiteScore(company.bubble_score) ?? -Infinity) >= 70 ? "block text-rose-300" : "block text-[#C9D1D9]"}>{formatOptionalScore(company.bubble_score)}</b></span>
-                  <span>RS <b className="block text-emerald-300">{formatOptionalScore(company.relative_strength)}</b></span>
+                <div className="mt-4 grid grid-cols-4 gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+                  <span>Cap <b className="block text-[var(--theme-text-secondary)]">{money(company.market_cap)}</b></span>
+                  <span>Alpha <b className="block text-[var(--theme-warning)]">{formatOptionalScore(company.alpha_score)}</b></span>
+                  <span>Bubble <b className={(finiteScore(company.bubble_score) ?? -Infinity) >= 70 ? "block text-[var(--theme-bearish)]" : "block text-[var(--theme-text-secondary)]"}>{formatOptionalScore(company.bubble_score)}</b></span>
+                  <span>RS <b className="block text-[var(--theme-bullish)]">{formatOptionalScore(company.relative_strength)}</b></span>
                 </div>
               </button>
             ))}

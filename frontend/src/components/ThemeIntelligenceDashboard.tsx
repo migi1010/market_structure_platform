@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { memo, useEffect, useMemo, useState } from "react";
 import {
@@ -37,7 +37,7 @@ import type {
   ThemeTopResponse,
 } from "@/types/stock";
 
-const cardClass = "miji-card rounded-2xl border border-[#2B313C] bg-[#161B22]/95 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.25)] backdrop-blur-md";
+const cardClass = "miji-card terminal-panel p-5";
 const warmupMessages = [
   "Initializing Capital Flow Engine...",
   "Mapping Supply Chains...",
@@ -54,18 +54,18 @@ function finiteScore(value: number | null | undefined): number | null {
 
 function scoreTone(score: number | null | undefined): string {
   const value = finiteScore(score);
-  if (value === null) return "text-[#6E7681]";
-  if (value >= 75) return "text-emerald-300";
-  if (value >= 55) return "text-amber-200";
-  return "text-rose-300";
+  if (value === null) return "text-[var(--theme-accent)]";
+  if (value >= 75) return "text-[var(--theme-bullish)]";
+  if (value >= 55) return "text-[var(--theme-warning)]";
+  return "text-[var(--theme-bearish)]";
 }
 
 function barTone(score: number | null | undefined): string {
   const value = finiteScore(score);
   if (value === null) return "bg-[#2B313C]";
-  if (value >= 75) return "bg-emerald-300";
-  if (value >= 55) return "bg-amber-200";
-  return "bg-rose-300";
+  if (value >= 75) return "bg-[var(--theme-bullish)]";
+  if (value >= 55) return "bg-[var(--theme-warning)]";
+  return "bg-[var(--theme-bearish)]";
 }
 
 function pct(value: number | null | undefined): string {
@@ -113,9 +113,9 @@ function EmptyState({
   detail?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-5">
-      <p className="font-semibold tracking-wide text-[#E6EDF3]">{title}</p>
-      <p className="mt-2 text-sm leading-relaxed text-[#9BA7B4]">{detail}</p>
+    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-5">
+      <p className="font-semibold tracking-wide text-[var(--theme-text)]">{title}</p>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--theme-muted)]">{detail}</p>
     </div>
   );
 }
@@ -126,37 +126,37 @@ function WarmupExperience({ progress, messageIndex }: { progress: number; messag
     <section className={`${cardClass} mb-4 overflow-hidden transition-opacity duration-300`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Institutional System Boot</p>
-          <h2 className="mt-2 text-xl font-semibold tracking-wide text-[#E6EDF3]">Theme Intelligence Engine</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#9BA7B4]">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Institutional System Boot</p>
+          <h2 className="mt-2 text-xl font-semibold tracking-wide text-[var(--theme-text)]">Theme Intelligence Engine</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--theme-muted)]">
             Calibrating live market structure, supply chain exposure, capital flow and macro regime data. Render cold starts may take a moment.
           </p>
         </div>
-        <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2 font-mono text-xs text-[#C9D1D9]">
+        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2 font-mono text-xs text-[var(--theme-text-secondary)]">
           {progress.toFixed(0)}% READY
         </div>
       </div>
 
-      <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#0A0C10]">
-        <div className="h-full rounded-full bg-amber-200 transition-all duration-700 ease-out" style={{ width: `${Math.min(100, Math.max(6, progress))}%` }} />
+      <div className="mt-5 h-2 overflow-hidden rounded-full bg-[var(--theme-bg)]">
+        <div className="h-full rounded-full bg-[var(--theme-warning)] transition-all duration-700 ease-out" style={{ width: `${Math.min(100, Math.max(6, progress))}%` }} />
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-2 rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+        <div className="space-y-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
           {warmupMessages.map((message, index) => {
             const complete = index < activeIndex || progress >= 100;
             const active = index === activeIndex && progress < 100;
             const tone = complete
-              ? "border-emerald-300/30 text-emerald-300"
+              ? "border-[var(--theme-bullish)] text-[var(--theme-bullish)]"
               : active
-                ? "border-amber-400/30 text-amber-200"
-                : "border-[#2B313C] text-[#6E7681]";
+                ? "border-[var(--theme-highlight)] text-[var(--theme-warning)]"
+                : "border-[var(--theme-border)] text-[var(--theme-accent)]";
             return (
               <div key={message} className="flex items-center gap-3 text-sm">
                 <div className={`flex h-5 w-5 items-center justify-center rounded-full border ${tone}`}>
                   {complete ? <CheckCircle2 size={13} /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
                 </div>
-                <span className={complete ? "text-[#C9D1D9]" : active ? "text-[#E6EDF3]" : "text-[#6E7681]"}>{message}</span>
+                <span className={complete ? "text-[var(--theme-text-secondary)]" : active ? "text-[var(--theme-text)]" : "text-[var(--theme-accent)]"}>{message}</span>
               </div>
             );
           })}
@@ -164,7 +164,7 @@ function WarmupExperience({ progress, messageIndex }: { progress: number; messag
 
         <div className="grid gap-3 md:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+            <div key={index} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
               <div className="flex items-center justify-between gap-3">
                 <ShimmerBlock className="h-4 w-32" />
                 <ShimmerBlock className="h-7 w-12" />
@@ -213,53 +213,53 @@ function ThemeRow({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") onThemeSelect(theme.theme);
       }}
-      className="w-full cursor-pointer rounded-2xl border border-[#2B313C] bg-[#111318] p-4 text-left transition-colors hover:border-amber-400/20 hover:bg-[#151922]"
+      className="w-full cursor-pointer rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4 text-left transition-colors hover:border-[var(--theme-border)] hover:bg-[var(--theme-panel)]"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-wide text-[#E6EDF3]">{theme?.theme ?? "Theme"}</p>
-          <p className="mt-1 truncate text-xs text-[#9BA7B4]">{theme?.category ?? "Universal Market Theme"}</p>
+          <p className="truncate text-sm font-semibold tracking-wide text-[var(--theme-text)]">{theme?.theme ?? "Theme"}</p>
+          <p className="mt-1 truncate text-xs text-[var(--theme-muted)]">{theme?.category ?? "Universal Market Theme"}</p>
         </div>
         <div className={`font-mono text-xl font-semibold ${scoreTone(score)}`}>{formatOptionalScore(score)}</div>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#0A0C10]">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--theme-bg)]">
         <div className={`h-full rounded-full ${barTone(score)}`} style={{ width: `${score === null ? 0 : Math.min(100, Math.max(0, score))}%` }} />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
         <div>
-          <p className="text-[#6E7681]">Flow</p>
+          <p className="text-[var(--theme-accent)]">Flow</p>
           <p className={`font-mono font-semibold ${scoreTone(theme.flow)}`}>{formatOptionalScore(theme.flow)}</p>
         </div>
         <div>
-          <p className="text-[#6E7681]">RS vs SPY</p>
-          <p className="font-mono font-semibold text-[#C9D1D9]">{pct(theme.momentum)}</p>
+          <p className="text-[var(--theme-accent)]">RS vs SPY</p>
+          <p className="font-mono font-semibold text-[var(--theme-text-secondary)]">{pct(theme.momentum)}</p>
         </div>
         <div>
-          <p className="text-[#6E7681]">Breadth</p>
-          <p className="font-mono font-semibold text-[#C9D1D9]">{formatOptionalScore(theme.participation)}{finiteScore(theme.participation) !== null ? "%" : ""}</p>
+          <p className="text-[var(--theme-accent)]">Breadth</p>
+          <p className="font-mono font-semibold text-[var(--theme-text-secondary)]">{formatOptionalScore(theme.participation)}{finiteScore(theme.participation) !== null ? "%" : ""}</p>
         </div>
       </div>
       {leadership && (
-        <div className="mt-3 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
+        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200">Leadership</p>
-            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{formatOptionalScore(leadershipScore)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Leadership</p>
+            <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{formatOptionalScore(leadershipScore)}</p>
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-[#9BA7B4]">{leadership.capital_rotation}</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--theme-muted)]">{leadership.capital_rotation}</p>
         </div>
       )}
       {ranking && (
-        <div className="mt-3 rounded-xl border border-[#2B313C] bg-[#0A0C10] p-3">
+        <div className="mt-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Universe Rank</p>
-            <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{formatOptionalScore(ranking.ranking_score)}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Universe Rank</p>
+            <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{formatOptionalScore(ranking.ranking_score)}</p>
           </div>
-          <p className="mt-1 text-xs leading-relaxed text-[#9BA7B4]">{ranking.market_classification.replaceAll("_", " ")} - {ranking.risk_state ?? "balanced"}</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--theme-muted)]">{ranking.market_classification.replaceAll("_", " ")} - {ranking.risk_state ?? "balanced"}</p>
         </div>
       )}
       {leaders.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#6E7681]">Top Related</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-accent)]">Top Related</p>
           <div className="flex flex-wrap gap-2">
           {leaders.slice(0, 4).map((leader) => (
             <button
@@ -269,7 +269,7 @@ function ThemeRow({
                 event.stopPropagation();
                 onTickerSelect(leader.ticker);
               }}
-              className="rounded-lg border border-[#2B313C] bg-[#0A0C10] px-2 py-1 font-mono text-[11px] font-semibold text-[#C9D1D9]"
+              className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--theme-text-secondary)]"
             >
               {leader.ticker}
             </button>
@@ -283,13 +283,13 @@ function ThemeRow({
 
 function MetricCard({ label, value, sublabel, icon }: { label: string; value: string; sublabel: string; icon: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+    <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">{label}</p>
-        <div className="text-amber-200">{icon}</div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
+        <div className="text-[var(--theme-warning)]">{icon}</div>
       </div>
-      <p className="text-xl font-semibold tracking-wide text-[#E6EDF3]">{value}</p>
-      <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{sublabel}</p>
+      <p className="text-xl font-semibold tracking-wide text-[var(--theme-text)]">{value}</p>
+      <p className="mt-2 text-xs leading-relaxed text-[var(--theme-muted)]">{sublabel}</p>
     </div>
   );
 }
@@ -323,54 +323,54 @@ function ThemeDetailPanel({
     <section id="theme-detail" tabIndex={-1} className={`${cardClass} mb-4 outline-none ring-0 animate-[mijiResultGlow_1.4s_ease-out_1]`}>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Theme Detail / 主題拆解</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-wide text-[#E6EDF3]">{detail.theme}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#9BA7B4]">{detail.description ?? detail.summary}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Theme Detail / 銝駁??圾</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-wide text-[var(--theme-text)]">{detail.theme}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--theme-muted)]">{detail.description ?? detail.summary}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-right text-xs">
-          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
-            <p className="text-[#6E7681]">Score</p>
+          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <p className="text-[var(--theme-accent)]">Score</p>
             <p className={`font-mono text-lg font-semibold ${scoreTone(detail.theme_score ?? undefined)}`}>{formatOptionalScore(detail.theme_score)}</p>
           </div>
-          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
-            <p className="text-[#6E7681]">Confidence</p>
-            <p className="font-semibold text-[#C9D1D9]">{detail.confidence ?? "Partial"}</p>
+          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <p className="text-[var(--theme-accent)]">Confidence</p>
+            <p className="font-semibold text-[var(--theme-text-secondary)]">{detail.confidence ?? "Partial"}</p>
           </div>
-          <div className="rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
-            <p className="text-[#6E7681]">Status</p>
-            <p className="font-semibold text-amber-200">{detail.status ?? "Watchlist"}</p>
+          <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+            <p className="text-[var(--theme-accent)]">Status</p>
+            <p className="font-semibold text-[var(--theme-warning)]">{detail.status ?? "Watchlist"}</p>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Related Stocks / 受惠股</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">相關個股 Related Stocks</p>
           <div className="grid gap-2 md:grid-cols-2">
             {related.slice(0, 8).map((stock) => (
               <button
                 key={`${detail.theme}-${stock.ticker}`}
                 type="button"
                 onClick={() => onTickerSelect(stock.ticker)}
-                className="rounded-xl border border-[#2B313C] bg-[#111318] p-3 text-left"
+                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3 text-left"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{stock.ticker}</p>
-                    <p className="truncate text-xs text-[#9BA7B4]">{stock.company_name ?? stock.role ?? "Theme exposure"}</p>
-                    <p className="mt-1 text-[11px] text-[#6E7681]">{stock.role ?? "related stock"}</p>
+                    <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{stock.ticker}</p>
+                    <p className="truncate text-xs text-[var(--theme-muted)]">{stock.company_name ?? stock.role ?? "Theme exposure"}</p>
+                    <p className="mt-1 text-[11px] text-[var(--theme-accent)]">{stock.role ?? "related stock"}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-sm font-semibold text-[#C9D1D9]">{typeof stock.price === "number" ? `$${stock.price.toFixed(2)}` : "--"}</p>
-                    <p className={finiteScore(stock.change_percent) === null ? "font-mono text-[11px] text-[#6E7681]" : Number(stock.change_percent) >= 0 ? "font-mono text-[11px] text-emerald-300" : "font-mono text-[11px] text-rose-300"}>
+                    <p className="font-mono text-sm font-semibold text-[var(--theme-text-secondary)]">{typeof stock.price === "number" ? `$${stock.price.toFixed(2)}` : "--"}</p>
+                    <p className={finiteScore(stock.change_percent) === null ? "font-mono text-[11px] text-[var(--theme-accent)]" : Number(stock.change_percent) >= 0 ? "font-mono text-[11px] text-[var(--theme-bullish)]" : "font-mono text-[11px] text-[var(--theme-bearish)]"}>
                       {pct(stock.change_percent)}
                     </p>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">Alpha {formatOptionalScore(stock.alpha_score)}</span>
-                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">SM {formatOptionalScore(stock.smart_money)}</span>
-                  <span className="rounded-lg bg-[#0A0C10] px-2 py-1 text-[#9BA7B4]">Bubble {formatOptionalScore(stock.bubble_risk)}</span>
+                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">Alpha {formatOptionalScore(stock.alpha_score)}</span>
+                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">SM {formatOptionalScore(stock.smart_money)}</span>
+                  <span className="rounded-lg bg-[var(--theme-bg)] px-2 py-1 text-[var(--theme-muted)]">Bubble {formatOptionalScore(stock.bubble_risk)}</span>
                 </div>
               </button>
             ))}
@@ -379,35 +379,35 @@ function ThemeDetailPanel({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Top Alpha Stocks</p>
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Top Alpha Stocks</p>
             <div className="flex flex-wrap gap-2">
               {alpha.slice(0, 6).map((stock) => (
-                <button key={`alpha-${stock.ticker}`} type="button" onClick={() => onTickerSelect(stock.ticker)} className="rounded-lg border border-[#2B313C] bg-[#0A0C10] px-2.5 py-1.5 font-mono text-xs font-semibold text-[#C9D1D9]">
+                <button key={`alpha-${stock.ticker}`} type="button" onClick={() => onTickerSelect(stock.ticker)} className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-1.5 font-mono text-xs font-semibold text-[var(--theme-text-secondary)]">
                   {stock.ticker} {formatOptionalScore(stock.alpha_score)}
                 </button>
               ))}
             </div>
           </div>
-          <div className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#9BA7B4]">Supply Chain Map</p>
+          <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Supply Chain Map</p>
             <div className="space-y-2">
               {chainRoles.map(([role, stocks]) => (
                 <div key={role} className="flex items-start justify-between gap-3 text-xs">
-                  <span className="capitalize text-[#9BA7B4]">{role.replaceAll("_", " ")}</span>
-                  <span className="max-w-[70%] text-right font-mono text-[#C9D1D9]">{stocks.slice(0, 4).map((stock) => stock.ticker).join(" · ")}</span>
+                  <span className="capitalize text-[var(--theme-muted)]">{role.replaceAll("_", " ")}</span>
+                  <span className="max-w-[70%] text-right font-mono text-[var(--theme-text-secondary)]">{stocks.slice(0, 4).map((stock) => stock.ticker).join(" 繚 ")}</span>
                 </div>
               ))}
-              {chainRoles.length === 0 && <p className="text-sm text-[#9BA7B4]">Supply chain map calibrating...</p>}
+              {chainRoles.length === 0 && <p className="text-sm text-[var(--theme-muted)]">Supply chain map calibrating...</p>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
-              <p className="text-[11px] text-[#6E7681]">Capital Flow</p>
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+              <p className="text-[11px] text-[var(--theme-accent)]">Capital Flow</p>
               <p className={`font-mono text-lg font-semibold ${scoreTone(detail.capital_flow ?? undefined)}`}>{formatOptionalScore(detail.capital_flow)}</p>
             </div>
-            <div className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
-              <p className="text-[11px] text-[#6E7681]">Bubble Risk</p>
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+              <p className="text-[11px] text-[var(--theme-accent)]">Bubble Risk</p>
               <p className={`font-mono text-lg font-semibold ${scoreTone(finiteScore(detail.bubble_risk) === null ? null : 100 - Number(detail.bubble_risk))}`}>{formatOptionalScore(detail.bubble_risk)}</p>
             </div>
           </div>
@@ -520,18 +520,18 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
   }, [supplyChain]);
 
   return (
-    <main className="miji-page p-5 text-[#E6EDF3]">
+    <main className="miji-page bg-[var(--theme-bg)] p-5 text-[var(--theme-text)]">
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-200">Theme Intelligence / Market Themes</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#E6EDF3]">Universal Capital Flow Command</h1>
-          {selectedTheme && <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-amber-200">Focus: {selectedTheme}</p>}
-          <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[#9BA7B4]">
+          <p className="terminal-micro-label">AI 銝駁??銝剖? Theme Command Center</p>
+          <h1 className="terminal-page-title mt-1 text-[var(--theme-text)]">AI Theme Command Center</h1>
+          {selectedTheme && <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Focus: {selectedTheme}</p>}
+          <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--theme-text-secondary)]">
             Cross-asset theme discovery across capital flow, supply chains, macro regime, narrative acceleration and institutional positioning.
           </p>
         </div>
         {loading && (
-          <div className="flex items-center gap-2 text-sm font-medium text-[#9BA7B4]">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--theme-muted)]">
             <Loader2 className="animate-spin" size={16} /> {warmupMessages[Math.min(bootIndex, warmupMessages.length - 1)]}
           </div>
         )}
@@ -541,9 +541,9 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
 
       {!loading && error && !top && (
         <div className={`${cardClass} mb-4`}>
-          <p className="font-semibold text-amber-200">Theme engine calibrating...</p>
-          <p className="mt-2 text-sm text-[#9BA7B4]">{error}</p>
-          <p className="mt-2 text-sm text-[#9BA7B4]">Awaiting institutional data flow from the production quant engine.</p>
+          <p className="font-semibold text-[var(--theme-warning)]">Theme engine calibrating...</p>
+          <p className="mt-2 text-sm text-[var(--theme-muted)]">{error}</p>
+          <p className="mt-2 text-sm text-[var(--theme-muted)]">Awaiting institutional data flow from the production quant engine.</p>
         </div>
       )}
 
@@ -557,24 +557,24 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
       <section className={`${cardClass} mb-4`}>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Narrative Acceleration / Cross-Theme Ranking</p>
-            <p className="mt-1 text-sm text-[#9BA7B4]">{narrative?.summary ?? "Ranking leadership, participation, acceleration and institutional alignment across themes."}</p>
+            <p className="terminal-panel-title text-[var(--theme-text)]">??? Narrative Acceleration</p>
+            <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{narrative?.summary ?? "Ranking leadership, participation, acceleration and institutional alignment across themes."}</p>
           </div>
-          <Activity className="text-amber-200" size={19} />
+          <Activity className="text-[var(--theme-warning)]" size={19} />
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {narrativeItems.slice(0, 4).map((item) => (
-            <div key={item.narrative_id} className="rounded-xl border border-[#2B313C] bg-[#111318] p-3">
+            <div key={item.narrative_id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.narrative_name}</p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">{item.narrative_state.replaceAll("_", " ")}</p>
+                  <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{item.narrative_name}</p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">{item.narrative_state.replaceAll("_", " ")}</p>
                 </div>
                 <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}`}>
                   {formatOptionalScore(firstFiniteScore(item.score, item.leadership, item.momentum, item.participation, item.acceleration))}
                 </p>
               </div>
-              <p className="mt-2 text-xs leading-relaxed text-[#9BA7B4]">{item.capital_flow_semantics ?? item.explanation}</p>
+              <p className="mt-2 text-xs leading-relaxed text-[var(--theme-muted)]">{item.capital_flow_semantics ?? item.explanation}</p>
             </div>
           ))}
           {loading && narrativeItems.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-28" />)}
@@ -588,10 +588,10 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
         <section className={cardClass}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Top Themes / Market Leadership</p>
-              <p className="mt-1 text-sm text-[#9BA7B4]">{top?.summary ?? "Scoring universal themes across market structure and capital flow."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">隞??銝駁? Today&apos;s Leading Themes</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{top?.summary ?? "Scoring universal themes across market structure and capital flow."}</p>
             </div>
-            <TrendingUp className="text-amber-200" size={20} />
+            <TrendingUp className="text-[var(--theme-warning)]" size={20} />
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {topThemes.slice(0, 8).map((theme) => (
@@ -606,25 +606,25 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
 
         <section className={cardClass}>
           <div className="mb-4 flex items-center gap-3">
-            <ArrowUpRight className="text-emerald-300" size={20} />
+            <ArrowUpRight className="text-[var(--theme-bullish)]" size={20} />
             <div>
-              <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Emerging Themes / Early Rotation</p>
-              <p className="mt-1 text-sm text-[#9BA7B4]">{emerging?.summary ?? "Detecting early capital-flow acceleration."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">?啗?銝駁? Emerging Themes</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{emerging?.summary ?? "Detecting early capital-flow acceleration."}</p>
             </div>
           </div>
           <div className="space-y-3">
             {emergingThemes.slice(0, 7).map((theme) => (
-              <div key={theme.theme} className="rounded-2xl border border-[#2B313C] bg-[#111318] p-4">
+              <div key={theme.theme} className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#E6EDF3]">{theme.theme}</p>
-                    <p className="mt-1 text-xs text-[#9BA7B4]">{theme.category}</p>
+                    <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{theme.theme}</p>
+                    <p className="mt-1 text-xs text-[var(--theme-muted)]">{theme.category}</p>
                   </div>
                   <p className={`font-mono text-lg font-semibold ${scoreTone(firstFiniteScore(theme.score, theme.acceleration, theme.leadership, theme.momentum, theme.participation))}`}>
                     {formatOptionalScore(firstFiniteScore(theme.score, theme.acceleration, theme.leadership, theme.momentum, theme.participation))}
                   </p>
                 </div>
-                <p className="mt-3 text-xs leading-relaxed text-[#9BA7B4]">{theme.explainability?.[0] ?? "Acceleration detected across theme proxies."}</p>
+                <p className="mt-3 text-xs leading-relaxed text-[var(--theme-muted)]">{theme.explainability?.[0] ?? "Acceleration detected across theme proxies."}</p>
               </div>
             ))}
             {loading && emergingThemes.length === 0 && Array.from({ length: 4 }).map((_, index) => <ShimmerBlock key={index} className="h-24" />)}
@@ -638,18 +638,18 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
       <div className="miji-card-grid mt-4 grid gap-4 xl:grid-cols-3">
         <section className={cardClass}>
           <div className="mb-4 flex items-center gap-3">
-            <Network className="text-amber-200" size={19} />
+            <Network className="text-[var(--theme-warning)]" size={19} />
             <div>
-              <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Capital Flow / Flow Intelligence</p>
-              <p className="mt-1 text-sm text-[#9BA7B4]">{flow?.summary ?? "Ranking flow by breadth, relative volume and ETF leadership."}</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">鞈?瘚? Capital Rotation Flow</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">{flow?.summary ?? "Ranking flow by breadth, relative volume and ETF leadership."}</p>
             </div>
           </div>
           <div className="space-y-3">
             {flowItems.slice(0, 6).map((item) => (
-              <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-3">
+              <div key={item.theme} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-[#E6EDF3]">{item.theme}</p>
-                  <p className="text-xs text-[#9BA7B4]">Momentum {formatOptionalScore(item.momentum)} - Breadth {formatOptionalScore(item.participation)}{finiteScore(item.participation) !== null ? "%" : ""}</p>
+                  <p className="truncate text-sm font-semibold text-[var(--theme-text)]">{item.theme}</p>
+                  <p className="text-xs text-[var(--theme-muted)]">Momentum {formatOptionalScore(item.momentum)} - Breadth {formatOptionalScore(item.participation)}{finiteScore(item.participation) !== null ? "%" : ""}</p>
                 </div>
                 <p className={`font-mono font-semibold ${scoreTone(item.flow)}`}>{formatOptionalScore(item.flow)}</p>
               </div>
@@ -661,10 +661,10 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
 
         <section className={cardClass}>
           <div className="mb-4 flex items-center gap-3">
-            <Blocks className="text-amber-200" size={19} />
+            <Blocks className="text-[var(--theme-warning)]" size={19} />
             <div>
-              <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Supply Chain Leaders / Exposure Map</p>
-              <p className="mt-1 text-sm text-[#9BA7B4]">Upstream, equipment, infrastructure and downstream exposure.</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">銝駁??啣 Theme -&gt; Stock Drilldown</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Upstream, equipment, infrastructure and downstream exposure.</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -673,13 +673,13 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
                 key={`${leader.theme}-${leader.ticker}`}
                 type="button"
                 onClick={() => onTickerSelect(leader.ticker)}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-3 text-left"
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-3 text-left"
               >
                 <div className="min-w-0">
-                  <p className="font-mono text-sm font-semibold text-[#E6EDF3]">{leader.ticker}</p>
-                  <p className="truncate text-xs text-[#9BA7B4]">{leader.theme} - {leader.role ?? "leader"}</p>
+                  <p className="font-mono text-sm font-semibold text-[var(--theme-text)]">{leader.ticker}</p>
+                  <p className="truncate text-xs text-[var(--theme-muted)]">{leader.theme} - {leader.role ?? "leader"}</p>
                 </div>
-                <p className={typeof leader.change_percent !== "number" ? "font-mono text-sm font-semibold text-[#6E7681]" : leader.change_percent >= 0 ? "font-mono text-sm font-semibold text-emerald-300" : "font-mono text-sm font-semibold text-rose-300"}>
+                <p className={typeof leader.change_percent !== "number" ? "font-mono text-sm font-semibold text-[var(--theme-accent)]" : leader.change_percent >= 0 ? "font-mono text-sm font-semibold text-[var(--theme-bullish)]" : "font-mono text-sm font-semibold text-[var(--theme-bearish)]"}>
                   {typeof leader.change_percent === "number" ? pct(leader.change_percent) : "--"}
                 </p>
               </button>
@@ -693,19 +693,19 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
 
         <section className={cardClass}>
           <div className="mb-4 flex items-center gap-3">
-            <ArrowDownRight className="text-rose-300" size={19} />
+            <ArrowDownRight className="text-[var(--theme-bearish)]" size={19} />
             <div>
-              <p className="text-lg font-semibold tracking-wide text-[#E6EDF3]">Crowding Monitor / Risk Watch</p>
-              <p className="mt-1 text-sm text-[#9BA7B4]">Overheated and undervalued theme divergence.</p>
+              <p className="terminal-panel-title text-[var(--theme-text)]">?葫?勗? Forecast Heatmap</p>
+              <p className="mt-1 text-sm text-[var(--theme-text-secondary)]">Overheated and undervalued theme divergence.</p>
             </div>
           </div>
           <div className="space-y-4">
             <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-rose-300">Overheated Themes</p>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-bearish)]">Overheated Themes</p>
               {overheatedThemes.slice(0, 4).map((theme) => (
-                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
-                  <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-rose-300">{formatOptionalScore(theme.score)}</span>
+                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+                  <span className="truncate text-sm text-[var(--theme-text-secondary)]">{theme.theme}</span>
+                  <span className="font-mono text-sm font-semibold text-[var(--theme-bearish)]">{formatOptionalScore(theme.score)}</span>
                 </div>
               ))}
               {loading && overheatedThemes.length === 0 && <ShimmerBlock className="h-20" />}
@@ -714,11 +714,11 @@ function ThemeIntelligenceDashboard({ onTickerSelect }: { onTickerSelect: (ticke
               )}
             </div>
             <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Undervalued Themes</p>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-bullish)]">Undervalued Themes</p>
               {undervaluedThemes.slice(0, 4).map((theme) => (
-                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[#2B313C] bg-[#111318] px-3 py-2">
-                  <span className="truncate text-sm text-[#C9D1D9]">{theme.theme}</span>
-                  <span className="font-mono text-sm font-semibold text-emerald-300">{formatOptionalScore(theme.score)}</span>
+                <div key={theme.theme} className="mb-2 flex items-center justify-between rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 py-2">
+                  <span className="truncate text-sm text-[var(--theme-text-secondary)]">{theme.theme}</span>
+                  <span className="font-mono text-sm font-semibold text-[var(--theme-bullish)]">{formatOptionalScore(theme.score)}</span>
                 </div>
               ))}
               {loading && undervaluedThemes.length === 0 && <ShimmerBlock className="h-20" />}
