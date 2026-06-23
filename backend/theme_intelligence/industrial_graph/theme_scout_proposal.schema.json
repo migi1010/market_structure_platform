@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "theme-scout-proposal-v1",
+  "title": "Theme Scout Proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "mode",
+    "provider",
+    "graph_build_version",
+    "evidence_bundle_checksum",
+    "review",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": { "const": "theme-scout-proposal-v1" },
+    "mode": { "enum": ["production", "dry_run"] },
+    "graph_build_version": { "type": "string", "minLength": 1 },
+    "evidence_bundle_checksum": { "type": "string", "minLength": 1 },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "model", "prompt_version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "prompt_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed", "reviewed_by", "reviewed_at", "reason"],
+      "properties": {
+        "reviewed": { "type": "boolean" },
+        "reviewed_by": { "type": "string" },
+        "reviewed_at": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "description",
+          "status",
+          "evidence_ids",
+          "signal_clusters",
+          "paths",
+          "influence_map",
+          "bottleneck_evidence_ids",
+          "generated_summary"
+        ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "status": { "const": "DISCOVERED" },
+          "evidence_ids": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
+          "signal_clusters": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/signalCluster" }
+          },
+          "paths": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/path" }
+          },
+          "influence_map": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/influence" }
+          },
+          "bottleneck_evidence_ids": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
+          },
+          "generated_summary": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "signalCluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cluster_key", "label", "evidence_ids"],
+      "properties": {
+        "cluster_key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "pathStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "state": { "type": "string" },
+        "target_type": { "type": "string" },
+        "target_label": { "type": "string" },
+        "action": { "type": "string" },
+        "cluster_key": { "type": "string" }
+      }
+    },
+    "path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path_type", "label", "evidence_ids", "steps"],
+      "properties": {
+        "path_type": {
+          "enum": [
+            "SIGNAL_CLUSTER",
+            "THEME_EVOLUTION",
+            "POTENTIAL_BOTTLENECK",
+            "RESEARCH_HANDOFF"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pathStep" }
+        }
+      }
+    },
+    "influence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_type",
+        "target_label",
+        "evidence_ids",
+        "cluster_keys",
+        "hypothesis_state"
+      ],
+      "properties": {
+        "target_type": { "type": "string", "minLength": 1 },
+        "target_label": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "cluster_keys": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "hypothesis_state": { "const": "hypothesis" }
+      }
+    }
+  }
+}

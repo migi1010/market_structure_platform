@@ -9,6 +9,12 @@ from typing import List
 from dotenv import load_dotenv
 
 load_dotenv()
+BACKEND_ROOT = Path(__file__).resolve().parent
+
+
+def _backend_path(name: str, default: str) -> Path:
+    configured = Path(os.getenv(name, default)).expanduser()
+    return configured.resolve() if configured.is_absolute() else (BACKEND_ROOT / configured).resolve()
 
 
 def _env_list(name: str, default: str) -> List[str]:
@@ -53,8 +59,8 @@ class Settings:
     rate_limit_requests: int = int(os.getenv("RATE_LIMIT_REQUESTS", "120"))
     rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
     request_timeout_seconds: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "90"))
-    cache_dir: Path = Path(os.getenv("CACHE_DIR", ".cache"))
-    sqlite_cache_path: Path = Path(os.getenv("SQLITE_CACHE_PATH", ".cache/market_cache.sqlite3"))
+    cache_dir: Path = _backend_path("CACHE_DIR", ".cache")
+    sqlite_cache_path: Path = _backend_path("SQLITE_CACHE_PATH", ".cache/market_cache.sqlite3")
     quote_ttl_seconds: int = int(os.getenv("QUOTE_TTL_SECONDS", "300"))
     history_ttl_seconds: int = int(os.getenv("HISTORY_TTL_SECONDS", "3600"))
     statement_ttl_seconds: int = int(os.getenv("STATEMENT_TTL_SECONDS", "21600"))
@@ -73,7 +79,7 @@ class Settings:
     miji_enable_lean: bool = _env_bool("MIJI_ENABLE_LEAN", False)
     miji_enable_background_jobs: bool = _env_bool("MIJI_ENABLE_BACKGROUND_JOBS", False)
     miji_enable_feature_store: bool = _env_bool("MIJI_ENABLE_FEATURE_STORE", False)
-    miji_feature_store_dir: Path = Path(os.getenv("MIJI_FEATURE_STORE_DIR", ".cache/research_store"))
+    miji_feature_store_dir: Path = _backend_path("MIJI_FEATURE_STORE_DIR", ".cache/research_store")
     alpha_regime_circuit_cooldown_seconds: int = int(os.getenv("ALPHA_REGIME_CIRCUIT_COOLDOWN_SECONDS", "120"))
     provider_timeout_seconds: float = float(os.getenv("PROVIDER_TIMEOUT_SECONDS", "8"))
     provider_retry_count: int = int(os.getenv("PROVIDER_RETRY_COUNT", "2"))
@@ -82,6 +88,11 @@ class Settings:
     fmp_api_key: str = os.getenv("FMP_API_KEY", "")
     finnhub_api_key: str = os.getenv("FINNHUB_API_KEY", "")
     alpha_vantage_api_key: str = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    theme_scout_llm_provider: str = os.getenv("THEME_SCOUT_LLM_PROVIDER", "openai")
+    theme_scout_llm_model: str = os.getenv("THEME_SCOUT_LLM_MODEL", "")
     firebase_server_key: str = os.getenv("FIREBASE_SERVER_KEY", "")
     firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "")
 

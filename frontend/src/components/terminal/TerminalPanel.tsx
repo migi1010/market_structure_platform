@@ -21,13 +21,13 @@ export default function TerminalPanel({
 }: TerminalPanelProps) {
   const Component = as ?? "section";
   return (
-    <Component className={`terminal-panel p-4 ${className}`}>
+    <Component className={`terminal-panel px-4 py-3 ${className}`}>
       {(eyebrow || title || description || actions) && (
-        <div className="mb-3 flex min-w-0 items-start justify-between gap-4">
+        <div className="mb-3 flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             {eyebrow && <div className="terminal-micro-label">{eyebrow}</div>}
             {title && <h2 className="terminal-panel-title mt-1 text-[var(--theme-text)]">{title}</h2>}
-            {description && <p className="mt-1 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{description}</p>}
+            {description && <p className="mt-1 text-sm leading-relaxed text-[var(--theme-muted)]">{description}</p>}
           </div>
           {actions && <div className="shrink-0">{actions}</div>}
         </div>

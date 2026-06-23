@@ -5,11 +5,12 @@ import { BarChart3, CandlestickChart, Layers } from "lucide-react";
 
 interface TradingViewChartProps {
   ticker: string;
+  compact?: boolean;
 }
 
 const intervals = ["5", "15", "60", "D", "W"] as const;
 
-export default function TradingViewChart({ ticker }: TradingViewChartProps) {
+export default function TradingViewChart({ ticker, compact = false }: TradingViewChartProps) {
   const [interval, setInterval] = useState<(typeof intervals)[number]>("D");
   const symbol = ticker.trim().toUpperCase() || "SPY";
   const src = useMemo(() => {
@@ -31,12 +32,12 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
   }, [interval, symbol]);
 
   return (
-    <section className="miji-card miji-chart-card miji-tradingview min-h-[680px] min-w-0 overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+    <section className={`miji-chart-card miji-tradingview min-w-0 overflow-hidden border-y border-[var(--theme-divider)] bg-[var(--theme-bg)] ${compact ? "miji-tradingview-compact" : "min-h-[760px]"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--theme-divider)] px-2 py-2">
         <div className="flex items-center gap-3">
           <CandlestickChart className="text-[var(--theme-warning)]" size={20} />
           <div>
-            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--theme-text)]">{symbol} Real-Time Chart</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--theme-text)]">{symbol} Real-Time Chart</h2>
             <p className="text-xs text-[var(--theme-muted)]">Volume, SMA, RSI, MACD, SMC liquidity map</p>
           </div>
         </div>
@@ -45,8 +46,8 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
             <button
               key={item}
               onClick={() => setInterval(item)}
-              className={`h-8 rounded-lg border px-3 font-mono text-xs font-bold transition ${
-                interval === item ? "border-[var(--theme-border-strong)] bg-[var(--theme-panel-hover)] text-[var(--theme-highlight)]" : "border-[var(--theme-border)] bg-[var(--theme-panel-inset)] text-[var(--theme-muted)] hover:border-[var(--theme-border-strong)]"
+              className={`h-7 rounded-[4px] border px-2.5 font-mono text-xs font-semibold transition ${
+                interval === item ? "border-[var(--theme-hover-edge)] bg-[rgba(255,255,255,0.045)] text-[var(--theme-highlight)]" : "border-transparent text-[var(--theme-muted)] hover:border-[var(--theme-divider)] hover:text-[var(--theme-text)]"
               }`}
             >
               {item}
@@ -54,19 +55,19 @@ export default function TradingViewChart({ ticker }: TradingViewChartProps) {
           ))}
         </div>
       </div>
-      <div className="miji-tradingview-grid grid min-w-0 gap-px bg-[var(--theme-border)] lg:grid-cols-[1fr_260px]">
-        <div className="miji-tradingview-frame h-[620px] min-w-0 bg-[var(--theme-panel-inset)] p-2">
-          <iframe title={`${symbol} TradingView`} src={src} className="h-full w-full rounded-xl border-0" allowFullScreen />
+      <div className="miji-tradingview-grid grid min-w-0 gap-px bg-[var(--theme-divider)] lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div className={`${compact ? "h-[420px]" : "h-[700px]"} miji-tradingview-frame min-w-0 bg-[var(--theme-bg)]`}>
+          <iframe title={`${symbol} TradingView`} src={src} className="h-full w-full border-0" allowFullScreen />
         </div>
-        <aside className="miji-info-panel min-w-0 bg-[var(--theme-panel-inset)] p-4">
+        <aside className="miji-info-panel min-w-0 bg-[var(--theme-bg)] p-3">
           <div className="mb-4 flex items-center gap-2 text-[var(--theme-warning)]">
             <Layers size={16} />
-            <span className="text-xs font-black uppercase tracking-[0.18em]">Smart Money Overlay</span>
+            <span className="text-xs font-semibold uppercase tracking-wide">Smart Money Overlay</span>
           </div>
           {["Liquidity Zones", "Fair Value Gap", "Order Block", "Volume Imbalance", "Session VWAP"].map((label, index) => (
-            <div key={label} className="mb-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
+            <div key={label} className="border-b border-[var(--theme-divider)] py-3 last:border-b-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[var(--theme-text-secondary)]">{label}</span>
+                <span className="text-xs font-semibold text-[var(--theme-text-secondary)]">{label}</span>
                 <BarChart3 size={14} className={index % 2 === 0 ? "text-[var(--theme-bullish)]" : "text-[var(--theme-warning)]"} />
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-[var(--theme-bg)]">

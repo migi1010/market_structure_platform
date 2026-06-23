@@ -20,14 +20,14 @@ export default function BubbleGauge({ score }: BubbleGaugeProps) {
   const isSafe = normalized <= 40;
   const label = isHigh ? "High Bubble Risk" : isSafe ? "Fundamental Safety Zone" : "Neutral Observation";
   const colorClass = isHigh
-    ? "text-[var(--theme-bearish)] border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)]"
+    ? "text-[var(--theme-bearish)] border-[var(--theme-bearish)]"
     : isSafe
-      ? "text-[var(--theme-bullish)] border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)]"
-      : "text-[var(--theme-warning)] border-[var(--theme-warning)] bg-[var(--theme-panel-inset)]";
+      ? "text-[var(--theme-bullish)] border-[var(--theme-bullish)]"
+      : "text-[var(--theme-warning)] border-[var(--theme-warning)]";
   const stroke = isHigh ? "var(--theme-bearish)" : isSafe ? "var(--theme-bullish)" : "var(--theme-warning)";
 
   return (
-    <div className="miji-card terminal-panel p-5">
+    <div className="terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
           <p className="terminal-micro-label">Weighted Bubble Index</p>
@@ -60,7 +60,7 @@ export default function BubbleGauge({ score }: BubbleGaugeProps) {
           </div>
         </div>
 
-        <div className={`mt-4 rounded-2xl border px-4 py-2 text-sm font-semibold tracking-wide ${colorClass}`}>
+        <div className={`mt-4 border-y px-4 py-2 text-sm font-semibold tracking-wide ${colorClass}`}>
           {label}
         </div>
       </div>

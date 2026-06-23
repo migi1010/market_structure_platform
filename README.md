@@ -1,384 +1,210 @@
-# Market Structure Platform
+﻿# MIJI Research OS
 
-> 🚀 Production-Ready Stock Analysis System with AI-Powered Market Regime Detection
->
-> 生產級股票分析系統 - 集市場結構檢測、技術指標分析、智能評分於一體
+## AI-Assisted Industrial Intelligence Platform
 
-## 📊 System Overview
+A full-stack AI-assisted industrial intelligence platform that integrates theme discovery, industrial dependency mapping, dynamic ranking, evidence lineage, and company-level research workflows into a unified decision-support system.
 
-Market Structure Platform is a comprehensive stock analysis system that combines:
+## Why This Project Matters
 
-- **Market Regime Detection**: HMM-based classification (Bull/Bear/High Volatility)
-- **Multi-Source Data**: Real-time data from yfinance, AKShare with automatic failover
-- **Advanced Analytics**: 9+ technical indicators (RSI, MACD, SMA, Volatility, etc.)
-- **AI Integration**: Pluggable AI models for market insights
-- **Multi-Channel Notifications**: Discord, Telegram, Email, WeChat, Feishu, Slack
-- **GitHub Actions Automation**: Daily scheduled analysis with manual trigger support
-- **Production-Grade**: Type hints, exception handling, comprehensive logging
+MIJI Research OS is designed as a research and decision-support prototype for complex industrial domains. Although the current demo uses financial-market and industrial-theme data, the core engineering value is not stock picking. The system demonstrates how heterogeneous data can be organized into themes, bottlenecks, dependency paths, entity roles, evidence lineage, dynamic rankings, and research workflows.
 
-## ✨ Key Features
+This architecture is relevant to industrial decision environments where teams need to understand what is changing, why it matters, which dependencies are affected, and what evidence supports each conclusion.
 
-### 🎯 Core Analysis
-- **Market Regime Detection**: 3-state Hidden Markov Model trained on SPY data
-- **Alpha Scoring**: 0-100 composite score based on technical indicators
-- **Risk Detection**: Identifies overbought/oversold conditions and volatility spikes
-- **Catalyst Recognition**: Detects potential catalysts and trend changes
+## Smart Manufacturing Relevance
 
-### 📡 Data & Integration
-- **Real-Time Data**: Live stock prices and technical indicators
-- **Multi-Source**: yfinance (US), AKShare (CN), with fallback providers
-- **Caching**: Intelligent caching for performance optimization
-- **API Resilience**: Automatic provider failover and retry logic
+The same architecture can generalize to smart manufacturing scenarios such as:
 
-### 🔔 Communication
-- **6 Notification Channels**: Discord, Telegram, Email, WeChat, Feishu, Slack
-- **Smart Broadcasting**: Multi-channel dispatch with fallback
-- **Rich Formatting**: Channel-specific formatting (embeds, markdown, HTML, cards)
-- **Status Tracking**: Monitor delivery status across channels
+- Process bottleneck analysis
+- Equipment constraint tracking
+- Material and supplier dependency mapping
+- Yield-loss root-cause investigation
+- Production risk monitoring
+- Cross-functional decision support
+- Manufacturing knowledge management
 
-### 🤖 Automation
-- **GitHub Actions**: Scheduled daily execution (workdays 18:00 Beijing time)
-- **Trading Day Validation**: Automatic skip on holidays/weekends
-- **Manual Trigger**: Run analysis on-demand via GitHub Actions
-- **Artifact Upload**: Store analysis results for historical tracking
+For a manufacturing organization, the workflow can be reframed as:
 
-### 🐳 Deployment
-- **Docker Support**: Containerized deployment with compose configuration
-- **Easy Setup**: Automated initialization script
-- **Environment Config**: Comprehensive `.env` template
-- **Health Checks**: Built-in monitoring and validation
-
-## 🚀 Quick Start
-
-### 1. Setup Environment
-```bash
-# Initialize platform
-python init.py
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your API keys and stock list
+```text
+Factory signals
+-> issue / opportunity discovery
+-> process-theme analysis
+-> equipment / material / supplier dependency map
+-> affected tool / line / supplier research
 ```
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
+## System Workflow
+
+The current demo workflow is:
+
+```text
+Rotation -> Scout -> Theme -> Supply Chain -> Stock Research
 ```
 
-### 3. Run Analysis
-```bash
-# Analyze specific stocks
-python market_structure/analysis_scheduler.py \
-    --stocks "AAPL,600519,TSLA" \
-    --mode daily \
-    --notify
+For industrial decision support, the same workflow maps to:
 
-# Or use environment variable
-export STOCK_LIST="AAPL,600519"
-python market_structure/analysis_scheduler.py
+```text
+Signal Detection
+-> Theme Discovery
+-> Industrial Analysis
+-> Dependency Mapping
+-> Company / Entity Research
 ```
 
-### 4. Deploy to GitHub Actions
-```bash
-# Push to GitHub
-git add .
-git commit -m "Deploy market analysis platform"
-git push origin main
+Each workspace has a distinct responsibility:
 
-# Add Secrets in GitHub Settings > Secrets and variables > Actions
-# Run workflow manually to test
+| Workspace | Research Question | Industrial Analogy |
+| --- | --- | --- |
+| Rotation | Where are signals moving? | Factory / market signal detection |
+| Scout | What deserves research next? | Issue or opportunity discovery |
+| Theme | Why does this theme matter? | Process-theme analysis |
+| Supply Chain | How does this industry work? | Equipment, material, supplier dependency mapping |
+| Stock Research | Which company or entity benefits and why? | Affected tool, line, vendor, or supplier research |
+
+## Core Modules
+
+### 1. Dynamic Theme Registry
+
+A projection-only registry that consolidates themes from graph, Scout, and research sources. The registry answers: what themes exist? It does not replace source-of-truth systems.
+
+### 2. Dynamic Theme Ranking
+
+A deterministic ranking layer that identifies which industrial themes matter now. Ranking augments the registry and supports workspace ordering without creating buy/sell recommendations.
+
+### 3. Theme Scout
+
+An LLM-ready proposal provider with strict validation, evidence manifests, and a human-review boundary. Scout candidates are research candidates only. They do not create graph nodes, graph edges, companies, recommendations, or downstream analytical records without validation.
+
+### 4. Supply Chain Intelligence
+
+Graph-backed bottleneck, controller, beneficiary, and dependency-path analysis. The workspace is designed to answer where the industrial constraint is and which entities are connected through persisted evidence-backed relationships.
+
+### 5. Stock / Company Research Workspace
+
+A company-level research memo showing theme exposure, supply-chain role, evidence chain, research completeness, related entities, and decision-support context. It is positioned as entity research, not as a quote dashboard.
+
+### 6. Evidence Lineage
+
+Every research output is traceable to source evidence and persisted relationships. Unknown information remains explicit rather than being treated as favorable or complete.
+
+### 7. Full-Stack Research OS
+
+The platform combines a FastAPI backend, deterministic projection engines, SQLite persistence, a Next.js / React / TypeScript frontend, and automated validation across backend tests, frontend type checks, production builds, and browser workflows.
+
+## Architecture Overview
+
+MIJI Research OS uses a projection-first architecture:
+
+```text
+Persisted Evidence + Industrial Graph
+        |
+        v
+Deterministic Projection Engines
+        |
+        v
+Theme Registry / Ranking / Scout / Supply Chain / Stock Research
+        |
+        v
+Research OS Workspaces
 ```
 
-## 📋 Configuration
+Key architecture principles:
 
-### Minimal Setup (Required)
-```env
-# Stock list to analyze (comma-separated)
-STOCK_LIST=AAPL,600519,TSLA
+- Source-of-truth boundaries are explicit.
+- Read models are projection layers, not hidden mutation systems.
+- Evidence lineage is preserved across research outputs.
+- Ranking and scoring are deterministic and reproducible.
+- Frontend workspaces have separated responsibilities.
+- Missing evidence remains unknown rather than being fabricated.
 
-# AI API Key (pick one)
-ANSPIRE_API_KEYS=your_key_here
-# OR
-OPENAI_API_KEY=sk-...
-```
+## Tech Stack
 
-### Recommended Setup
-```env
-# Add notification channel
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+### Backend
 
-# Configure data source
-DATA_PROVIDER_PRIORITY=yfinance,akshare
+- Python
+- FastAPI
+- SQLite
+- Deterministic projection engines
+- NetworkX for graph preparation/export
+- pytest
 
-# System settings
-LOG_LEVEL=INFO
-TZ=Asia/Shanghai
-```
+### Frontend
 
-See [`.env.example`](.env.example) for 50+ configuration options.
+- Next.js
+- React
+- TypeScript
+- CSS modules / global design system
+- Browser workflow validation
 
-## 🏗️ Architecture
+### Architecture
 
-### Component Structure
-```
-market_structure_platform/
-├── market_structure/
-│   ├── engine.py              # Market regime detector (HMM)
-│   └── analysis_scheduler.py  # Analysis orchestrator
-├── data_provider/
-│   └── base.py                # Multi-source data fetching
-├── notification/
-│   └── manager.py             # 6-channel notification system
-├── alpha_engine/              # Alpha scoring engine
-├── bubble_detection/          # Bubble detection module
-├── deep_value/                # Value analysis module
-├── theme_rotation/            # Theme-based analysis
-├── smart_money/               # Smart money flow analysis
-├── core/
-│   └── config.py              # Core configuration
-└── dashboard/
-    └── app.py                 # Web dashboard
-```
+- Projection-first read models
+- Source-of-truth boundaries
+- Evidence lineage
+- Deterministic ranking
+- Frontend workspace responsibility separation
 
-### Data Flow
-```
-User/Schedule Request
-    ↓
-[AnalysisScheduler]
-    ├─ Fetch Stock Data (DataProviderManager)
-    ├─ Calculate Indicators
-    ├─ Detect Market Regime (MarketRegimeDetector)
-    ├─ Generate Alpha Score
-    ├─ Identify Risks/Catalysts
-    └─ Notify (NotificationManager)
-        ├─ Discord
-        ├─ Telegram
-        ├─ Email
-        ├─ WeChat
-        ├─ Feishu
-        └─ Slack
-```
+## Testing and Validation
 
-## 📊 Analysis Example
+Latest local validation:
 
-### Input
-```python
-scheduler = AnalysisScheduler()
-result = scheduler.run_analysis(['AAPL', '600519'])
-```
+- Backend pytest: 442 passed
+- Frontend `npm test`: passed
+- Frontend `npx tsc --noEmit`: passed
+- Frontend `npm run build`: passed
 
-### Output
-```json
-{
-  "summary": "2/2 stocks analyzed successfully",
-  "timestamp": "2024-01-15T18:00:00+08:00",
-  "market_regime": "Bull",
-  "results": {
-    "AAPL": {
-      "status": "success",
-      "score": 78,
-      "indicators": {
-        "RSI": 65,
-        "MACD": 0.85,
-        "SMA_Trend": "bullish"
-      },
-      "regime": "Bull",
-      "risks": ["Overbought"],
-      "catalysts": ["Earnings"]
-    }
-  }
-}
-```
+The system has been validated locally with automated backend tests, frontend tests, TypeScript checks, production build checks, and browser workflow validation.
 
-## 🔧 Advanced Usage
+This is a prototype and local research system, not a production-certified manufacturing deployment.
 
-### Custom Analysis
-```python
-from market_structure.analysis_scheduler import AnalysisScheduler
+## Demo Workflow
 
-scheduler = AnalysisScheduler()
+Suggested GitHub or interview demo path:
 
-# Run with custom settings
-result = scheduler.run_analysis(
-    symbols=['AAPL', '600519'],
-    alert_type='detailed',
-    notify=True,
-    save_results=True
-)
-```
+1. Open the Research OS and start at Rotation.
+2. Show how high-level signals are ranked and organized.
+3. Move to Scout to show research candidate intake and validation boundaries.
+4. Open Theme to explain why a theme matters and what evidence supports it.
+5. Open Supply Chain to show bottleneck-centered dependency mapping.
+6. Open Stock Research to show company/entity exposure, role, evidence chain, and research completeness.
+7. Emphasize that all major outputs are projections from persisted evidence and deterministic engines.
 
-### Programmatic Notifications
-```python
-from notification.manager import NotificationManager
+Manufacturing framing for the same demo:
 
-notifier = NotificationManager()
-notifier.broadcast(
-    title="Market Alert",
-    message="SPY enters high volatility regime",
-    alert_level="warning"
-)
-```
+1. Detect signal changes from factory or operational data.
+2. Identify a process issue, constraint, or opportunity worth research.
+3. Map the issue to process, material, equipment, supplier, and constraint dependencies.
+4. Trace which entity, tool, line, or vendor is affected.
+5. Use evidence lineage to support cross-functional decisions.
 
-### Market Regime Detection
-```python
-from market_structure.engine import MarketRegimeDetector
+## Interview Talking Points
 
-detector = MarketRegimeDetector()
-detector.fit()
-regime = detector.predict_regime()  # 0:Bull, 1:Bear, 2:HighVol
-```
+### How I would explain this project in a TSMC interview
 
-## 🐳 Docker Deployment
+Chinese version:
 
-### Run with Docker
-```bash
-docker build -t market-analyzer .
+> 這個專案雖然目前使用金融與產業主題資料作為示範，但我真正想呈現的是一套智慧決策平台的工程能力。它可以把不同來源的資料整理成主題、瓶頸、關聯路徑與公司角色，並透過前後端系統讓使用者追蹤研究流程。這種架構可以對應到智慧製造中的製程瓶頸分析、設備異常追蹤、供應鏈風險、良率改善決策與跨部門決策支援。
 
-docker run -e STOCK_LIST="AAPL,600519" \
-           -e DISCORD_WEBHOOK_URL="your_webhook" \
-           -v $(pwd)/results:/app/results \
-           market-analyzer
-```
+English version:
 
-### Docker Compose (Recommended)
-```bash
-# Start services
-docker-compose up -d
+> Although the current demo uses market and industrial-theme data, the core system is an AI-assisted industrial intelligence platform. It integrates heterogeneous data into themes, bottlenecks, dependency paths, entity roles, evidence lineage, and research workflows. The same architecture can be applied to smart manufacturing problems such as process bottleneck analysis, equipment constraint tracking, supplier dependency mapping, yield-loss investigation, and operational decision support.
 
-# View logs
-docker-compose logs -f market-analyzer
+### Resume Bullet Examples
 
-# Stop services
-docker-compose down
-```
+- Built a full-stack AI-assisted industrial intelligence platform using FastAPI, Next.js, SQLite, and TypeScript, integrating dynamic theme ranking, supply-chain dependency mapping, evidence lineage, and company-level research workflows.
+- Designed a Research OS workflow from signal detection to theme discovery, industrial dependency analysis, and entity-level research, enabling structured analysis of bottlenecks, controllers, beneficiaries, and supporting evidence.
+- Implemented deterministic projection engines for theme registry, theme ranking, supply-chain intelligence, and stock/company research, with 400+ backend tests and frontend type/build validation.
+- Applied AI-assisted development workflow to rapidly prototype, test, and validate complex research modules while maintaining strict source-of-truth boundaries and reproducible validation.
 
-## 📚 Documentation
+## Future Extensions
 
-| Document | Purpose |
-|----------|---------|
-| [INTEGRATION_GUIDE.py](INTEGRATION_GUIDE.py) | Step-by-step deployment guide |
-| [INTEGRATION_COMPLETE.md](INTEGRATION_COMPLETE.md) | Complete system documentation |
-| [README_ZH_TW.md](README_ZH_TW.md) | Traditional Chinese guide |
-| [MARKET_DETECTOR_DOCS.md](MARKET_DETECTOR_DOCS.md) | Market regime detection details |
-| [USAGE_EXAMPLES.py](USAGE_EXAMPLES.py) | Real-world usage examples |
-| [QUICK_REFERENCE.py](QUICK_REFERENCE.py) | API quick reference |
+Potential manufacturing-oriented extensions:
 
-## 🔐 Security
+- Connect machine, process, recipe, metrology, and yield data sources.
+- Replace demo market signals with factory event streams or MES/SPC indicators.
+- Extend the industrial graph with material, equipment, chamber, recipe, and process-step entities.
+- Add reviewed evidence pipelines for engineering reports, logs, quality events, and supplier records.
+- Build role-specific workspaces for process engineers, equipment engineers, manufacturing data engineers, and operations managers.
 
-### Best Practices
-- Store API keys in `.env` (never commit)
-- Use GitHub Secrets for Actions
-- Enable webhook URL validation
-- Use environment variable substitution
-- Run with minimal privileges (non-root in Docker)
+## Disclaimer
 
-### Credential Management
-```bash
-# Generate API keys in .env
-# For GitHub Actions, add Secrets in:
-# Settings > Secrets and variables > Actions
-
-# Never share:
-- .env files
-- API keys
-- Webhook URLs
-```
-
-## 🚨 Troubleshooting
-
-### Issue: Import errors
-```bash
-pip install --upgrade -r requirements.txt
-```
-
-### Issue: GitHub Actions fails
-- Check all Secrets are configured
-- Verify `STOCK_LIST` format
-- Review workflow logs
-
-### Issue: Notifications not sent
-```bash
-python -c "from notification.manager import NotificationManager; print(NotificationManager().get_status())"
-```
-
-### Issue: Data not available
-```bash
-python -c "from data_provider.base import DataProviderManager; DataProviderManager().fetch_stock_data('AAPL')"
-```
-
-## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| Analysis Time (per stock) | 2-5 seconds |
-| Memory Usage (10 stocks) | 100-200 MB |
-| API Calls (per stock) | 3-5 |
-| Notification Latency | <1 second |
-
-## 🎓 Integration with daily_stock_analysis
-
-This platform fully integrates the three core features from ZhuLinsen/daily_stock_analysis:
-
-1. **Data Acquisition** ✅
-   - Multi-source provider (yfinance, AKShare)
-   - Automatic fallback system
-   - Intelligent caching
-
-2. **GitHub Actions Automation** ✅
-   - Daily scheduled execution
-   - Trading day validation
-   - Manual trigger support
-
-3. **Multi-Channel Notifications** ✅
-   - 6 notification channels
-   - Rich formatting per channel
-   - Broadcast with fallback
-
-## 📈 Feature Roadmap
-
-- [ ] Real-time WebSocket updates
-- [ ] Machine learning alpha generation
-- [ ] Portfolio-level analysis
-- [ ] Custom indicator builder
-- [ ] Historical analysis tracking
-- [ ] Advanced backtesting engine
-
-## 🤝 Contributing
-
-Contributions are welcome! Areas:
-- Additional notification channels
-- Custom data providers
-- Machine learning models
-- Dashboard enhancements
-- Documentation improvements
-
-## 📜 License
-
-MIT License - See LICENSE file for details
-
-## 💬 Support
-
-- 📖 Check documentation files
-- 🐛 Review logs/ directory
-- 💡 See INTEGRATION_GUIDE.py for setup help
-- 🎓 Review USAGE_EXAMPLES.py for code samples
-
----
-
-## 🎯 Next Steps
-
-1. **Setup**: Run `python init.py`
-2. **Configure**: Edit `.env` with your settings
-3. **Test**: Run analysis locally
-4. **Deploy**: Push to GitHub and enable Actions
-5. **Monitor**: Track results and optimize
-
-**System Status**: ✅ Production Ready  
-**Version**: 2.0 (with daily_stock_analysis integration)  
-**Last Updated**: 2024
-
----
-
-Made with ❤️ for traders and analysts worldwide
-
-希望這個平台能幫助你找到更好的投資機會！
+This project is a research and decision-support system prototype. It does not provide investment advice, buy/sell recommendations, target prices, or automated trading actions.

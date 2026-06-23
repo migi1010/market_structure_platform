@@ -4,26 +4,32 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { Command as CommandIcon, Loader2, Plus, Search } from "lucide-react";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { classifyEntityQuery, entityCategoryLabel, entityFromSearchResult } from "@/lib/entities";
+import { searchResultIdentity, uniqueSearchResults } from "@/lib/searchResultIdentity";
 import { enabledTerminalModules, getTerminalModule } from "@/modules/terminalModules";
-import { classifySearchIntent, searchStocks } from "@/services/stockApi";
-import type { OmniboxIntent, OmniboxTargetTab, SearchResult, WorkspaceAction } from "@/types/stock";
+import { classifySearchIntent, fetchThemeRegistry, resolveExactSearchResult, searchStocks } from "@/services/stockApi";
+import type { OmniboxIntent, OmniboxTargetTab, SearchResult, ThemeRegistryEntry, WorkspaceAction } from "@/types/stock";
+import { BilingualLabel, HeatStrip, SectorIcon, SparklineMini, StatusDot, ThemeIcon, TickerLogo } from "./terminal";
 
 interface GlobalStockSearchProps {
   onSelect: (symbol: string) => void;
+  onPreviewResult?: (result: SearchResult) => void;
+  onPreviewEnd?: () => void;
   onSelectResult?: (result: SearchResult) => void;
+  onDrilldownResult?: (result: SearchResult) => void;
   onAddToWatchlist?: (symbol: string) => void;
   placeholder?: string;
 }
 
 const GROUP_ORDER = ["Stocks", "Themes", "Sectors", "Commands"] as const;
-const EMPTY_SUGGESTIONS = ["NVDA", "AI Infrastructure", "Semiconductors", "Alpha Momentum", "Portfolio Watchlist"];
+const FALLBACK_SUGGESTIONS = ["NVDA", "Semiconductors", "Alpha Momentum", "Portfolio Watchlist"];
 
 function getResultGroup(item: SearchResult): (typeof GROUP_ORDER)[number] {
   if (item.group && GROUP_ORDER.includes(item.group)) return item.group;
   const type = item.type?.toLowerCase();
-  if (type === "theme") return "Themes";
-  if (type === "sector") return "Sectors";
-  if (type === "command") return "Commands";
+  if (type === "theme" || type === "supply chain" || type === "supply_chain") return "Themes";
+  if (type === "sector" || type === "industry") return "Sectors";
+  if (type === "command" || type === "risk" || type === "risk overlay" || type === "risk_overlay") return "Commands";
   return "Stocks";
 }
 
@@ -35,12 +41,49 @@ function getResultDescription(item: SearchResult): string {
   return item.description ?? item.name ?? item.type ?? "Open workspace";
 }
 
-function getTargetLabel(item: SearchResult): string {
-  return getTerminalModule(item.target_tab)?.title ?? "Stock Analysis";
+function getCategoryLabel(item: SearchResult): string {
+  const category = entityCategoryLabel(entityFromSearchResult(item).type);
+  return `${category.zh} ${category.en}`;
 }
 
-function getIntentLabel(intent: OmniboxIntent, item?: SearchResult): string {
+function getTargetLabel(item: SearchResult): string {
+  return getTerminalModule(item.target_tab)?.labelEn ?? "Stock";
+}
+
+function resultMovement(item: SearchResult): number | null {
+  const candidates = [
+    (item as { change_percent?: unknown }).change_percent,
+    (item as { score?: unknown }).score,
+    (item as { confidence?: unknown }).confidence,
+  ];
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function getGroupLabel(group: (typeof GROUP_ORDER)[number]) {
+  if (group === "Stocks") return { zh: "股票", en: "Stocks" };
+  if (group === "Themes") return { zh: "主題", en: "Themes" };
+  if (group === "Sectors") return { zh: "板塊", en: "Sectors" };
+  return { zh: "指令", en: "Commands" };
+}
+
+function ResultAnchor({ item }: { item: SearchResult }) {
+  const group = getResultGroup(item);
+  if (group === "Themes") return <ThemeIcon theme={getResultTitle(item)} />;
+  if (group === "Sectors") return <SectorIcon sector={getResultTitle(item)} />;
+  return <TickerLogo ticker={item.ticker ?? item.symbol} name={getResultTitle(item)} />;
+}
+
+function getIntentLabel(intent: OmniboxIntent, query: string, item?: SearchResult): string {
   const group = item ? getResultGroup(item) : null;
+  const entityType = classifyEntityQuery(query);
+  if (!item && entityType === "supply_chain") return "SUPPLY CHAIN SEARCH";
+  if (!item && entityType === "risk_overlay") return "RISK OVERLAY SEARCH";
+  if (!item && entityType === "industry") return "INDUSTRY SEARCH";
+  if (!item && entityType === "etf") return "ETF SEARCH";
   if (group === "Themes" || intent === "theme") return "THEME SEARCH";
   if (group === "Sectors" || intent === "sector") return "SECTOR SEARCH";
   if (group === "Commands" || intent === "command") return "COMMAND";
@@ -48,7 +91,12 @@ function getIntentLabel(intent: OmniboxIntent, item?: SearchResult): string {
 }
 
 function getActionSummary(item: SearchResult | undefined, fallbackQuery: string): string {
-  if (!item) return fallbackQuery.trim() ? `Search MIJI Terminal for ${fallbackQuery.trim()}` : "Start with a ticker, theme, sector, or command";
+  if (!item) {
+    const query = fallbackQuery.trim();
+    if (!query) return "Start with a ticker, theme, sector, supply chain, ETF, or risk overlay";
+    const category = entityCategoryLabel(classifyEntityQuery(query));
+    return `Open ${category.en}: ${query}`;
+  }
   const group = getResultGroup(item);
   const title = getResultTitle(item);
   if (group === "Stocks") return `Open Stock Analysis for ${item.ticker ?? item.symbol}`;
@@ -135,13 +183,16 @@ function commandAction(title: string, targetTab: OmniboxTargetTab): WorkspaceAct
     return { actionType: "open_portfolio", target_tab: targetTab, focusTarget: "portfolio-watchlist", openMode: "replace", contextPayload: { portfolioView: "watchlist", label: title } };
   }
   if (targetTab === "market-intel") {
-    return { actionType: "open_sector", target_tab: "theme-intelligence", focusTarget: "theme-rotation", openMode: "replace", contextPayload: { themeView: "rotation", label: title } };
+    return { actionType: "open_sector", target_tab: "market-intel", focusTarget: "theme-rotation", openMode: "replace", contextPayload: { themeView: "rotation", label: title } };
   }
   if (targetTab === "theme-intelligence") {
     const normalized = title.toLowerCase();
     const themeView = normalized.includes("forecast") ? "forecast" : normalized.includes("rotation") ? "rotation" : normalized.includes("supply") ? "supply-chain" : "command";
     const focusTarget = themeView === "forecast" ? "theme-forecast" : themeView === "rotation" ? "theme-rotation" : themeView === "supply-chain" ? "theme-supply-chain" : "theme-workspace";
     return { actionType: "open_module", target_tab: targetTab, focusTarget, openMode: "replace", contextPayload: { themeView, label: title } };
+  }
+  if (targetTab === "theme-risk") {
+    return { actionType: "open_theme", target_tab: "theme-intelligence", focusTarget: "theme-detail", openMode: "replace", contextPayload: { themeView: "command", label: `${title} Overlay` } };
   }
   return { actionType: "open_module", target_tab: targetTab, focusTarget: targetTab, openMode: "replace", contextPayload: { label: title } };
 }
@@ -168,12 +219,13 @@ function commandResult(title: string, description: string, targetTab: OmniboxTar
   };
 }
 
-export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWatchlist, placeholder = "Search ticker, theme, sector, ETF..." }: GlobalStockSearchProps) {
+export default function GlobalStockSearch({ onSelect, onPreviewResult, onPreviewEnd, onSelectResult, onDrilldownResult, onAddToWatchlist, placeholder = "Search stock, theme, sector, industry, supply chain, ETF, risk..." }: GlobalStockSearchProps) {
   const { recentTickers, recentThemes } = useWorkspace();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [registryThemes, setRegistryThemes] = useState<ThemeRegistryEntry[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [portalReady, setPortalReady] = useState(false);
   const [overlayPosition, setOverlayPosition] = useState<OverlayPosition>({ top: 88, left: 16, width: 720, maxHeight: 544 });
@@ -183,24 +235,26 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
 
   const quickResults = useMemo<SearchResult[]>(() => {
     const moduleCommands = enabledTerminalModules
-      .filter((module) => module.workspaceType !== "stock")
+      .filter((module) => module.workspaceType !== "stock" && module.id !== "theme-risk")
       .map((module) => commandResult(`Open ${module.title}`, module.description, module.target_tab));
     const defaultStockAction = recentTickers.some((ticker) => ticker.toUpperCase() === "NVDA") ? [] : [stockRecentResult("NVDA")];
-    return [
+    const candidates = [
       ...recentTickers.slice(0, 5).map(stockRecentResult),
       ...recentThemes.slice(0, 4).map(themeRecentResult),
       ...defaultStockAction,
       ...moduleCommands,
-      commandResult("Open Theme Forecast", "Forecast tab inside Theme Research", "theme-intelligence"),
-      commandResult("Open Capital Rotation", "Rotation tab inside Theme Research", "theme-intelligence"),
-      commandResult("Open Supply Chain", "Supply-chain tab inside Theme Research", "theme-intelligence"),
+      commandResult("Open Theme Forecast", "Forecast module inside Theme Research", "theme-forecast"),
+      commandResult("Open Capital Rotation", "Rotation module inside Theme Research", "market-intel"),
+      commandResult("Open Supply Chain", "Supply-chain module inside Theme Research", "theme-supply-chain"),
     ];
+    return uniqueSearchResults(candidates);
   }, [recentThemes, recentTickers]);
 
-  const visibleResults = query.trim() ? results : quickResults;
+  const visibleResults = useMemo(() => uniqueSearchResults(query.trim() ? results : quickResults), [query, quickResults, results]);
   const selectedResult = visibleResults?.[activeIndex];
-  const searchIntent = query.trim() ? classifySearchIntent(query) : "command";
-  const intentLabel = getIntentLabel(searchIntent, selectedResult);
+  const searchIntent = query.trim() ? classifySearchIntent(query, registryThemes) : "command";
+  const intentLabel = getIntentLabel(searchIntent, query, selectedResult);
+  const emptyResultCategory = entityCategoryLabel(classifyEntityQuery(query));
   const actionSummary = getActionSummary(selectedResult, query);
   const groupedResults = visibleResults.reduce<Array<{ group: (typeof GROUP_ORDER)[number]; items: SearchResult[] }>>((acc, item) => {
     const group = getResultGroup(item);
@@ -245,6 +299,14 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    fetchThemeRegistry(controller.signal)
+      .then((payload) => setRegistryThemes(payload.themes))
+      .catch(() => setRegistryThemes([]));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       if (!query.trim()) {
@@ -254,7 +316,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         return;
       }
       setLoading(true);
-      const next = await searchStocks(query);
+      const next = await searchStocks(query, registryThemes);
       if (!cancelled) {
         setResults(next);
         setActiveIndex(0);
@@ -265,7 +327,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, registryThemes]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -302,7 +364,9 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     setQuery("");
     setOpen(false);
     inputRef.current?.blur();
-    if (onSelectResult) {
+    if (onDrilldownResult) {
+      onDrilldownResult(normalizedItem);
+    } else if (onSelectResult) {
       onSelectResult(normalizedItem);
     } else {
       onSelect(normalized);
@@ -313,14 +377,26 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
     const normalized = symbol.trim().toUpperCase();
     if (!normalized) return;
     const existing = results.find((item) => item.symbol.trim().toUpperCase() === normalized);
-    commitResult(existing ?? { symbol: normalized, name: normalized, exchange: "US", type: "Equity" });
+    const entityType = classifyEntityQuery(normalized);
+    const type = entityType === "stock" ? "Equity" : entityType === "supply_chain" ? "Supply Chain" : entityType === "risk_overlay" ? "Risk Overlay" : entityType[0].toUpperCase() + entityType.slice(1);
+    const group = entityType === "theme" || entityType === "supply_chain" ? "Themes" : entityType === "sector" || entityType === "industry" ? "Sectors" : entityType === "risk_overlay" ? "Commands" : "Stocks";
+    commitResult(existing ?? { symbol: normalized, name: normalized, label: normalized, exchange: type === "Equity" ? "US" : type, type, group });
+  };
+
+  const previewResult = (item: SearchResult) => {
+    const normalized = item.symbol.trim().toUpperCase();
+    if (!normalized) return;
+    setActiveIndex(Math.max(0, visibleResults.indexOf(item)));
+    onSelectResult?.({ ...item, symbol: normalized });
   };
 
   const commitFromCurrentInput = () => {
     const normalized = query.trim().toUpperCase();
+    const exactRegistryResult = resolveExactSearchResult(query, registryThemes);
     const exact = visibleResults.find((item) => item.symbol.trim().toUpperCase() === normalized || item.ticker?.trim().toUpperCase() === normalized);
     const selected = visibleResults?.[activeIndex];
-    if (exact) commitResult(exact);
+    if (exactRegistryResult) commitResult(exactRegistryResult);
+    else if (exact) commitResult(exact);
     else if (selected) commitResult(selected);
     else commit(normalized);
   };
@@ -334,7 +410,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
       <button
         type="button"
         aria-label="Close command palette"
-        className="pointer-events-auto absolute inset-0 z-0 cursor-default bg-[var(--theme-bg)]/78"
+        className="pointer-events-auto absolute inset-0 z-0 cursor-default bg-[rgba(0,0,0,0.28)]"
         onMouseDown={(event) => {
           event.preventDefault();
           setOpen(false);
@@ -345,14 +421,14 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
         }}
       />
       <div
-        className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-xl border border-[var(--theme-border-strong)] bg-[var(--theme-panel)]"
+        className="miji-command-palette pointer-events-auto fixed z-[10000] overflow-hidden rounded-[6px] border border-[rgba(255,255,255,0.035)] bg-[var(--theme-bg)]"
         style={{ top: overlayPosition.top, left: overlayPosition.left, width: overlayPosition.width, maxHeight: overlayPosition.maxHeight, zIndex: 10000 }}
       >
-        <div className="border-b border-[var(--theme-border-strong)] bg-[var(--theme-panel-inset)] px-3 py-3">
+        <div className="border-b border-[var(--theme-divider)] px-3 py-2">
           <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <CommandIcon size={14} className="text-[var(--theme-warning)]" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">Terminal Command Palette</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-text-secondary)]">搜尋 Search</span>
           </div>
           <div className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent)]">
             <span>Enter</span>
@@ -361,20 +437,20 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
             <span>Close</span>
           </div>
           </div>
-          <div className="mt-3 rounded-xl border border-[var(--theme-border-strong)] bg-[var(--theme-bg-secondary)] px-3 py-3">
+          <div className="mt-2 border-t border-[var(--theme-divider)] pt-2">
             <div className="mb-1 flex items-center justify-between gap-3">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">{intentLabel}</span>
               {loading && <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]"><Loader2 size={12} className="animate-spin" /> Searching</span>}
             </div>
-            <div className="flex min-w-0 items-center gap-1 font-mono text-xl font-semibold uppercase tracking-wide text-[var(--theme-text)]">
+            <div className="flex min-w-0 items-center gap-1 font-mono text-lg font-semibold uppercase text-[var(--theme-text)]">
               <span className={query.trim() ? "truncate" : "truncate text-[var(--theme-accent)]"}>{query.trim() || "TYPE COMMAND OR SYMBOL"}</span>
               <span className="h-6 w-2 animate-pulse bg-[var(--theme-warning)]/80" aria-hidden="true" />
             </div>
-            <p className="mt-2 truncate text-xs font-medium text-[var(--theme-muted)]">{actionSummary}</p>
+            <p className="mt-1 truncate text-xs font-medium text-[var(--theme-muted)]">{actionSummary}</p>
           </div>
         </div>
 
-        <div className="overflow-y-auto overscroll-contain p-2" style={{ maxHeight: Math.max(80, overlayPosition.maxHeight - 126) }}>
+        <div className="overflow-y-auto overscroll-contain p-1.5" style={{ maxHeight: Math.max(80, overlayPosition.maxHeight - 116) }}>
           {(visibleResults?.length ?? 0) === 0 ? (
             <div className="space-y-2">
               <button
@@ -382,14 +458,14 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                   event.preventDefault();
                   commit(query);
                 }}
-                className="w-full rounded-lg border border-[var(--theme-border-strong)] bg-[var(--theme-bg-secondary)] px-3 py-3 text-left font-mono text-sm font-semibold text-[var(--theme-text)] transition hover:border-[var(--theme-highlight)] hover:bg-[var(--theme-panel-hover)]"
+                className="w-full border-b border-[var(--theme-divider)] px-3 py-2.5 text-left font-mono text-sm font-semibold text-[var(--theme-text)] transition hover:bg-[rgba(255,255,255,0.035)]"
               >
-                Open {query || "ticker"} Analysis
+                Open {query || "ticker"} · {emptyResultCategory.en}
               </button>
-              <div className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+              <div className="border-t border-[var(--theme-divider)] px-3 py-2">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Try</p>
                 <div className="flex flex-wrap gap-2">
-                  {EMPTY_SUGGESTIONS.map((suggestion) => (
+                  {[...registryThemes.slice(0, 1).map((theme) => theme.theme_name), ...FALLBACK_SUGGESTIONS].map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
@@ -399,7 +475,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                         setOpen(true);
                         inputRef.current?.focus();
                       }}
-                      className="rounded border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-2.5 py-1.5 text-xs font-semibold text-[var(--theme-text-secondary)] transition hover:border-[var(--theme-highlight)] hover:text-[var(--theme-highlight)]"
+                      className="rounded-[4px] px-2 py-1 text-xs font-semibold text-[var(--theme-text-secondary)] transition hover:bg-[rgba(255,255,255,0.035)] hover:text-[var(--theme-accent-strong)]"
                     >
                       {suggestion}
                     </button>
@@ -412,8 +488,10 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
               {!query.trim() && <div className="px-3 pb-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Recent and Quick Actions</div>}
               {groupedResults.map(({ group, items }) => (
                 <section key={group} className="pb-2">
-                  <div className="sticky top-0 z-10 bg-[var(--theme-panel)] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{group}</div>
-                  <div className="space-y-1">
+                  <div className="sticky top-0 z-10 bg-[var(--theme-bg)] px-3 py-1">
+                    <BilingualLabel {...getGroupLabel(group)} inline />
+                  </div>
+                  <div>
                     {items.map((item) => {
                       const index = visibleResults.indexOf(item);
                       const active = activeIndex === index;
@@ -421,32 +499,38 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                       const description = getResultDescription(item);
                       const target = getTargetLabel(item);
                       const symbolLabel = item.ticker ?? item.symbol;
+                      const movement = resultMovement(item);
                       return (
                         <div
-                          key={`${item.symbol}-${item.exchange}-${item.target_tab ?? item.type}`}
-                          className={`group rounded-lg border px-3 py-2.5 transition ${
+                          key={searchResultIdentity(item)}
+                          className={`group rounded-[4px] border px-2 py-1 transition ${
                             active
-                              ? "border-[var(--theme-highlight)] bg-[var(--theme-panel-hover)]"
-                              : "border-transparent hover:border-[var(--theme-border)] hover:bg-[var(--theme-bg-secondary)]"
+                              ? "border-[var(--theme-hover-edge)] bg-[rgba(255,255,255,0.035)]"
+                              : "border-transparent hover:border-[var(--theme-divider)] hover:bg-[rgba(255,255,255,0.022)]"
                           }`}
+                          onMouseEnter={() => onPreviewResult?.(item)}
+                          onMouseLeave={onPreviewEnd}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <button
-                              onPointerDown={(event) => {
-                                event.preventDefault();
-                                commitResult(item);
-                              }}
+                              onClick={() => previewResult(item)}
+                              onDoubleClick={() => commitResult(item)}
                               className="min-w-0 flex-1 text-left"
                             >
                               <div className="flex min-w-0 items-center gap-2">
-                                <span className="min-w-[4.25rem] shrink-0 font-mono text-sm font-semibold text-[var(--theme-text)]">{symbolLabel}</span>
+                                <ResultAnchor item={item} />
+                                <span className="min-w-[4rem] shrink-0 font-mono text-sm font-semibold text-[var(--theme-text)]">{symbolLabel}</span>
                                 <span className="truncate text-sm font-semibold text-[var(--theme-text-secondary)]">{title}</span>
-                                <span className="shrink-0 rounded border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{item.type}</span>
-                                <span className="hidden shrink-0 rounded border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent-soft)] sm:inline">{item.exchange}</span>
+                                <StatusDot state={item.quote_status ?? item.type} label={getCategoryLabel(item)} />
+                                <span className="hidden shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-accent-soft)] sm:inline">{item.exchange}</span>
                               </div>
-                              <div className="mt-1 flex min-w-0 items-center justify-between gap-3 text-xs">
+                              <div className="mt-0.5 flex min-w-0 items-center justify-between gap-3 text-xs">
                                 <span className="truncate text-[var(--theme-muted)]">{description}</span>
-                                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]/80">{active ? "Enter to open" : target}</span>
+                                <span className="flex shrink-0 items-center gap-2">
+                                  <SparklineMini values={[movement, movement === null ? null : movement + 8, movement === null ? null : movement - 3, movement]} />
+                                  <HeatStrip value={movement === null ? null : Math.min(100, Math.max(0, 50 + movement * 4))} />
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]/80">{active ? "Open" : target}</span>
+                                </span>
                               </div>
                             </button>
                             {onAddToWatchlist && canAddToWatchlist(item) && (
@@ -457,7 +541,7 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
                                   event.stopPropagation();
                                   onAddToWatchlist(item.ticker ?? item.symbol);
                                 }}
-                                className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-warning)] opacity-80 transition hover:bg-[var(--theme-panel-hover)] group-hover:opacity-100"
+                                className="inline-flex shrink-0 items-center gap-1 rounded-[4px] px-2 py-1 text-[10px] font-semibold text-[var(--theme-warning)] opacity-75 transition hover:bg-[rgba(255,255,255,0.045)] group-hover:opacity-100"
                               >
                                 <Plus size={12} />
                                 Add
@@ -479,13 +563,13 @@ export default function GlobalStockSearch({ onSelect, onSelectResult, onAddToWat
   ) : null;
 
   return (
-    <div ref={containerRef} className="miji-global-search relative w-full max-w-[360px]">
+    <div ref={containerRef} className="miji-global-search relative w-full max-w-[380px]">
       <form
         onSubmit={(event) => {
           event.preventDefault();
           commitFromCurrentInput();
         }}
-        className="flex h-10 items-center gap-2 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] px-3 text-[var(--theme-text)] transition focus-within:border-[var(--theme-border-strong)] focus-within:bg-[var(--theme-panel)]"
+        className="flex h-9 items-center gap-2 rounded-[6px] border border-[var(--theme-divider)] bg-transparent px-3 text-[var(--theme-text)] transition focus-within:border-[var(--theme-border-strong)] focus-within:bg-[rgba(255,255,255,0.025)]"
       >
         <Search size={16} className="text-[var(--theme-muted)]" />
         <input

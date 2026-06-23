@@ -6,9 +6,11 @@ import pickle
 import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -71,18 +73,29 @@ class SQLiteCache:
             conn.commit()
 
     def get(self, cache_key: str, allow_expired: bool = False) -> tuple[str, bytes] | None:
+        entry = self.get_entry(cache_key, allow_expired=allow_expired)
+        if entry is None:
+            return None
+        content_type, payload, _, _ = entry
+        return content_type, payload
+
+    def get_entry(
+        self,
+        cache_key: str,
+        allow_expired: bool = False,
+    ) -> tuple[str, bytes, int, int] | None:
         now = int(time.time())
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT content_type, payload, expires_at FROM kv_cache WHERE cache_key = ?",
+                "SELECT content_type, payload, expires_at, updated_at FROM kv_cache WHERE cache_key = ?",
                 (cache_key,),
             ).fetchone()
             if row is None:
                 return None
-            content_type, payload, expires_at = row
+            content_type, payload, expires_at, updated_at = row
             if int(expires_at) < now and not allow_expired:
                 return None
-            return str(content_type), bytes(payload)
+            return str(content_type), bytes(payload), int(expires_at), int(updated_at)
 
     def set(self, cache_key: str, content_type: str, payload: bytes, ttl_seconds: int) -> None:
         now = int(time.time())
@@ -185,6 +198,27 @@ def _get_cached(cache_key: str, allow_expired: bool = False) -> Any | None:
     return None
 
 
+def _get_cached_entry(cache_key: str, allow_expired: bool = False) -> dict[str, Any] | None:
+    item = _cache().get_entry(cache_key, allow_expired=allow_expired)
+    if item is None:
+        return None
+    content_type, payload, expires_at, updated_at = item
+    if content_type == "json":
+        value = json.loads(payload.decode("utf-8"))
+    elif content_type == "pickle":
+        value = pickle.loads(payload)
+    else:
+        return None
+    now = int(time.time())
+    return {
+        "value": value,
+        "expires_at": expires_at,
+        "updated_at": updated_at,
+        "cache_age_seconds": max(0, now - updated_at),
+        "is_expired": expires_at < now,
+    }
+
+
 def _set_cached(cache_key: str, value: Any, ttl_seconds: int, content_type: str = "json") -> None:
     if content_type == "json":
         payload = json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")
@@ -195,6 +229,10 @@ def _set_cached(cache_key: str, value: Any, ttl_seconds: int, content_type: str 
 
 def get_cached_value(cache_key: str, allow_expired: bool = False) -> Any | None:
     return _get_cached(cache_key, allow_expired=allow_expired)
+
+
+def get_cached_entry(cache_key: str, allow_expired: bool = False) -> dict[str, Any] | None:
+    return _get_cached_entry(cache_key, allow_expired=allow_expired)
 
 
 def set_cached_value(cache_key: str, value: Any, ttl_seconds: int, content_type: str = "json") -> None:
@@ -208,43 +246,125 @@ def _quote_has_price(quote: Dict[str, Any] | None) -> bool:
     return price is not None and price > 0
 
 
+def _iso_timestamp(epoch_seconds: int) -> str:
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def is_market_open_context() -> bool | None:
+    try:
+        market_time = datetime.now(ZoneInfo("America/New_York"))
+        return (
+            market_time.weekday() < 5
+            and (market_time.hour, market_time.minute) >= (9, 30)
+            and (market_time.hour, market_time.minute) < (16, 0)
+        )
+    except Exception:
+        return None
+
+
+def quote_ttl_seconds(is_market_open_context: bool | None = None) -> int:
+    return 600 if is_market_open_context is False else 60
+
+
+def _quote_with_freshness(
+    quote: Dict[str, Any],
+    *,
+    status: str,
+    source: str,
+    updated_at: int,
+    expires_at: int,
+) -> Dict[str, Any]:
+    result = dict(quote)
+    now = int(time.time())
+    result["quoteStatus"] = status
+    result["quote_status"] = status
+    result["quoteSource"] = source
+    result["source"] = source
+    result["fetched_at"] = _iso_timestamp(updated_at)
+    result["updated_at"] = _iso_timestamp(updated_at)
+    result["expires_at"] = _iso_timestamp(expires_at)
+    result["cache_age_seconds"] = max(0, now - updated_at)
+    result["is_stale"] = status != "live"
+    return result
+
+
+def _cached_quote(
+    entry: dict[str, Any] | None,
+    *,
+    status: str,
+    source: str,
+) -> Dict[str, Any] | None:
+    if entry is None or not _quote_has_price(entry.get("value")):
+        return None
+    return _quote_with_freshness(
+        entry["value"],
+        status=status,
+        source=source,
+        updated_at=entry["updated_at"],
+        expires_at=entry["expires_at"],
+    )
+
+
 def _statements_available(statements: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | Any) -> bool:
     if not isinstance(statements, tuple) or len(statements) != 3:
         return False
     return any(frame is not None and not getattr(frame, "empty", True) for frame in statements)
 
 
-def get_quote(symbol: str) -> Dict[str, Any]:
+def get_quote(symbol: str, force_refresh: bool = False) -> Dict[str, Any]:
     normalized = symbol.strip().upper()
     cache_key = f"quote:{CACHE_SCHEMA_VERSION}:{normalized}"
     last_good_key = f"quote_lkg:{CACHE_SCHEMA_VERSION}:{normalized}"
-    cached = _get_cached(cache_key)
-    if _quote_has_price(cached):
+    cached_entry = None if force_refresh else _get_cached_entry(cache_key)
+    cached = _cached_quote(
+        cached_entry,
+        status=str(cached_entry["value"].get("quoteStatus") or "live") if cached_entry else "live",
+        source=str(cached_entry["value"].get("source") or cached_entry["value"].get("quoteSource") or "quote_cache")
+        if cached_entry
+        else "quote_cache",
+    )
+    if cached is not None:
         logger.debug("get_quote cache hit symbol=%s", normalized)
         return cached
-    stale = _get_cached(cache_key, allow_expired=True)
-    last_good = _get_cached(last_good_key, allow_expired=True)
+    stale_entry = _get_cached_entry(cache_key, allow_expired=True)
+    last_good_entry = _get_cached_entry(last_good_key, allow_expired=True)
     with _lock_for(cache_key):
-        cached = _get_cached(cache_key)
-        if _quote_has_price(cached):
-            return cached
-        stale = _get_cached(cache_key, allow_expired=True)
-        last_good = _get_cached(last_good_key, allow_expired=True)
-        seed = stale if _quote_has_price(stale) else last_good if _quote_has_price(last_good) else None
-        quote = robust_quote_fetch(normalized, seed if isinstance(seed, dict) else None) or {}
-        if _quote_has_price(quote):
+        if not force_refresh:
+            cached_entry = _get_cached_entry(cache_key)
+            cached = _cached_quote(
+                cached_entry,
+                status=str(cached_entry["value"].get("quoteStatus") or "live") if cached_entry else "live",
+                source=str(cached_entry["value"].get("source") or cached_entry["value"].get("quoteSource") or "quote_cache")
+                if cached_entry
+                else "quote_cache",
+            )
+            if cached is not None:
+                return cached
+        stale_entry = _get_cached_entry(cache_key, allow_expired=True)
+        last_good_entry = _get_cached_entry(last_good_key, allow_expired=True)
+        quote = robust_quote_fetch(normalized, None) or {}
+        if _quote_has_price(quote) and str(quote.get("quoteStatus") or "").lower() == "live":
             logger.info("get_quote live fetch succeeded symbol=%s source=%s",
                         normalized, quote.get("quoteSource") or quote.get("quoteStatus"))
-            _set_cached(cache_key, quote, get_settings().quote_ttl_seconds, "json")
-            _set_cached(last_good_key, quote, max(get_settings().quote_ttl_seconds * 288, 86400), "json")
-            return quote
-        if _quote_has_price(stale):
+            ttl_seconds = quote_ttl_seconds(is_market_open_context())
+            source = str(quote.get("quoteSource") or "provider")
+            _set_cached(cache_key, quote, ttl_seconds, "json")
+            _set_cached(last_good_key, quote, max(ttl_seconds * 288, 86400), "json")
+            now = int(time.time())
+            return _quote_with_freshness(
+                quote,
+                status="live",
+                source=source,
+                updated_at=now,
+                expires_at=now + ttl_seconds,
+            )
+        stale = _cached_quote(stale_entry, status="stale", source="stale_cache")
+        if stale is not None:
             logger.warning("get_quote serving stale cache symbol=%s", normalized)
-            stale["_quote_source"] = "stale_cache"
             return stale
-        if _quote_has_price(last_good):
+        last_good = _cached_quote(last_good_entry, status="fallback", source="last_known_good")
+        if last_good is not None:
             logger.warning("get_quote serving last-known-good symbol=%s", normalized)
-            last_good["_quote_source"] = "last_known_good"
             return last_good
         logger.warning("get_quote all providers failed symbol=%s status=%s",
                        normalized, quote.get("quoteStatus"))

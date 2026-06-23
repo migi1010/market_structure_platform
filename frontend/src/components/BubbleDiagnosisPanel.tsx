@@ -5,6 +5,7 @@ import type { BubbleAnalysisData } from "@/types/bubble";
 import { institutionalTooltips } from "../../i18n/labels";
 import BubbleGauge from "./BubbleGauge";
 import InstitutionalTooltip from "./InstitutionalTooltip";
+import { ConfidenceMeter, HeatStrip, StatusDot } from "./terminal";
 
 interface BubbleDiagnosisPanelProps {
   data?: BubbleAnalysisData;
@@ -31,11 +32,18 @@ function MetricRow({ label, value, accent }: { label: string; value: string; acc
 
 function IntelligenceMetric({ label, value, tone = "text-[var(--theme-text)]" }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
-      <p className={`mt-2 font-mono text-lg font-bold ${tone}`}>{value}</p>
+    <div className="border-b border-[var(--theme-divider)] py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
+      <p className={`mt-1 font-mono text-lg font-semibold ${tone}`}>{value}</p>
     </div>
   );
+}
+
+function riskState(score: number): "accumulation" | "neutral" | "overheating" | "distribution" {
+  if (score >= 75) return "overheating";
+  if (score >= 55) return "distribution";
+  if (score <= 35) return "accumulation";
+  return "neutral";
 }
 
 export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps) {
@@ -73,7 +81,7 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
     <div className="miji-bubble-grid grid gap-5 xl:grid-cols-[1.2fr_1fr]" style={{ gridTemplateColumns: "minmax(0, 1.2fr) minmax(340px, 1fr)" }}>
       <div className="space-y-5">
         <BubbleGauge score={data?.bubble_index ?? 0} />
-        <section className="miji-card terminal-panel p-5">
+        <section className="terminal-panel p-5">
           <div className="mb-5 flex items-center gap-2 text-[var(--theme-warning)]">
             <ShieldAlert size={18} />
             <div>
@@ -81,10 +89,15 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
                 泡沫智慧 Bubble Intelligence
                 <InstitutionalTooltip label="Bubble Risk" description={institutionalTooltips.bubbleRisk} />
               </h3>
-              <p className="mt-1 text-xs text-[var(--theme-muted)]">Valuation, cash conversion, dilution, distribution, and retail speculation risk.</p>
+              <p className="mt-1 text-xs text-[var(--theme-muted)]">Heat, cash, dilution, distribution.</p>
             </div>
           </div>
-          <div className="miji-card-metrics grid gap-3 md:grid-cols-2">
+          <div className="mb-4 flex flex-wrap items-center gap-4 border-y border-[var(--theme-border)] py-3">
+            <StatusDot state={riskState(bubbleRisk)} label={riskState(bubbleRisk)} />
+            <ConfidenceMeter value={100 - bubbleRisk} label="Safety" />
+            <HeatStrip value={bubbleRisk} />
+          </div>
+          <div className="grid gap-x-5 gap-y-1 md:grid-cols-2">
             <IntelligenceMetric label="Bubble Risk" value={bubbleRisk.toFixed(0)} tone={bubbleRisk >= 70 ? "text-[var(--theme-bearish)]" : bubbleRisk <= 30 ? "text-[var(--theme-bullish)]" : "text-[var(--theme-warning)]"} />
             <IntelligenceMetric label="Valuation Heat" value={valuationHeat.toFixed(1)} tone="text-[var(--theme-highlight)]" />
             <IntelligenceMetric label="Revenue Divergence" value={`${(revenueDivergence * 100).toFixed(1)}%`} tone={revenueDivergence > 0.18 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-bullish)]"} />
@@ -93,10 +106,10 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
             <IntelligenceMetric label="Distribution Signal" value={distributionSignal.toFixed(0)} tone={distributionSignal > 45 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"} />
             <IntelligenceMetric label="Retail Speculation" value={retailSpeculation.toFixed(0)} tone={retailSpeculation > 70 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"} />
           </div>
-          <p className="mt-4 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{data?.ai_summary ?? "Bubble intelligence will populate after live fundamentals are loaded."}</p>
+          <p className="mt-4 line-clamp-2 text-sm leading-6 text-[var(--theme-text-secondary)]">{data?.ai_summary ?? "Bubble intelligence will populate after live fundamentals are loaded."}</p>
         </section>
 
-        <section className="miji-card terminal-panel p-5">
+        <section className="terminal-panel p-5">
           <div className="mb-5 flex items-center gap-2 text-[var(--theme-warning)]">
             <DollarSign size={18} />
             <h3 className="text-sm font-bold uppercase tracking-wide text-[var(--theme-text)]">Revenue and Profitability</h3>
@@ -104,8 +117,8 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
           <MetricRow label="Revenue" value={money(revenue)} accent="text-[var(--theme-warning)]" />
           <MetricRow label="Net Income" value={money(netIncome)} accent={netIncome >= 0 ? "text-[var(--theme-bullish)]" : "text-[var(--theme-bearish)]"} />
           <MetricRow label="Gross Margin" value={`${(grossMargin * 100).toFixed(1)}%`} />
-          <div className="miji-card-metrics mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+          <div className="mt-5 grid grid-cols-2 gap-5 border-t border-[var(--theme-divider)] pt-4">
+            <div>
               <div className="flex items-center gap-2 text-[var(--theme-warning)]">
                 {revenue >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
                 <span className="text-xs font-bold">Revenue Quality</span>
@@ -114,7 +127,7 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
                 <div className="h-full rounded-full bg-[var(--theme-bullish)]" style={{ width: `${Math.max(10, revenueQuality)}%` }} />
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
+            <div>
               <span className="text-xs font-bold text-[var(--theme-bullish)]">Margin Health</span>
               <p className="mt-2 text-lg font-bold text-[var(--theme-text)]">{grossMargin >= 0.4 ? "Premium" : grossMargin >= 0.2 ? "Stable" : "Thin"}</p>
             </div>
@@ -123,30 +136,30 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
       </div>
 
       <div className="space-y-5">
-        <section className="miji-card terminal-panel p-5">
+        <section className="terminal-panel p-5">
           <div className="mb-5 flex items-center gap-2 text-[var(--theme-bullish)]">
             <Banknote size={18} />
             <h3 className="text-sm font-bold uppercase tracking-wide text-[var(--theme-text)]">Cash Flow Health</h3>
           </div>
-          <p className="mb-5 text-sm leading-relaxed text-[var(--theme-text-secondary)]">Cash conversion matters more than narrative. This section focuses on operating inflow and residual cash after investment needs.</p>
-          <div className={`miji-card-grid grid gap-4 ${hasCashFlowTrend ? "xl:grid-cols-3 md:grid-cols-2" : "md:grid-cols-2"}`}>
-            <article className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-5">
+          <p className="mb-5 text-sm text-[var(--theme-text-secondary)]">Operating cash and residual cash after investment.</p>
+          <div className={`grid gap-5 border-t border-[var(--theme-divider)] pt-4 ${hasCashFlowTrend ? "xl:grid-cols-3 md:grid-cols-2" : "md:grid-cols-2"}`}>
+            <article>
               <p className="text-sm font-bold tracking-wide text-[var(--theme-text)]">Operating Cash Flow</p>
               <p className={`mt-3 text-xl font-bold ${operatingCashFlow >= 0 ? "text-[var(--theme-bullish)]" : "text-[var(--theme-bearish)]"}`}>{money(operatingCashFlow)}</p>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{operatingCashFlowDescription}</p>
+              <p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--theme-text-secondary)]">{operatingCashFlowDescription}</p>
             </article>
-            <article className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-5">
+            <article>
               <p className="text-sm font-bold tracking-wide text-[var(--theme-text)]">Free Cash Flow</p>
               <p className={`mt-3 text-xl font-bold ${cashHealthClass}`}>{money(freeCashFlow)}</p>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--theme-text-secondary)]">{freeCashFlowDescription}</p>
+              <p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--theme-text-secondary)]">{freeCashFlowDescription}</p>
             </article>
             {hasCashFlowTrend && (
-              <article className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-5">
+              <article>
                 <p className="text-sm font-bold tracking-wide text-[var(--theme-text)]">Cash Flow Trend</p>
                 <p className={`mt-3 text-xl font-bold ${cashFlowTrend === "Improving" ? "text-[var(--theme-bullish)]" : cashFlowTrend === "Weakening" ? "text-[var(--theme-bearish)]" : "text-[var(--theme-warning)]"}`}>
                   {cashFlowTrend}
                 </p>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--theme-text-secondary)]">
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--theme-text-secondary)]">
                   {cashFlowTrend === "Improving"
                     ? "Both operating and free cash flow are supporting the current capital structure."
                     : cashFlowTrend === "Stable"
@@ -158,7 +171,7 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
           </div>
         </section>
 
-        <section className="miji-card terminal-panel p-5">
+        <section className="terminal-panel p-5">
           <div className="mb-5 flex items-center gap-2 text-[var(--theme-warning)]">
             <Building2 size={18} />
             <h3 className="text-sm font-bold uppercase tracking-wide text-[var(--theme-text)]">Balance Sheet Defense</h3>
@@ -166,7 +179,7 @@ export default function BubbleDiagnosisPanel({ data }: BubbleDiagnosisPanelProps
           <MetricRow label="Total Assets" value={money(totalAssets)} />
           <MetricRow label="Total Liabilities" value={money(totalLiabilities)} accent="text-[var(--theme-warning)]" />
           <MetricRow label="Debt Ratio" value={`${(debtRatio * 100).toFixed(1)}%`} accent={debtRatio > 0.7 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-bullish)]"} />
-          <div className={`mt-5 rounded-xl border p-4 ${debtRatio > 0.7 ? "border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)]" : "border-[var(--theme-border)] bg-[var(--theme-panel-inset)]"}`}>
+          <div className={`mt-5 border-t pt-4 ${debtRatio > 0.7 ? "border-[var(--theme-bearish)]" : "border-[var(--theme-divider)]"}`}>
             <div className="flex items-center gap-2">
               <ShieldAlert size={18} className={debtRatio > 0.7 ? "text-[var(--theme-bearish)]" : "text-[var(--theme-warning)]"} />
               <span className={debtRatio > 0.7 ? "font-bold text-[var(--theme-bearish)]" : "font-bold text-[var(--theme-warning)]"}>{debtRisk}</span>

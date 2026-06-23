@@ -4,6 +4,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from "react
 import { motion } from "framer-motion";
 import {
   Activity,
+  BarChart3,
   Bell,
   Bookmark,
   BrainCircuit,
@@ -12,38 +13,42 @@ import {
   LineChart,
   Loader2,
   Menu,
-  Newspaper,
+  Network,
   PanelsTopLeft,
   Radar,
   RefreshCw,
   ScanSearch,
   Search,
   Settings2,
+  ShieldAlert,
   Star,
   Trash2,
   Waves,
   X,
 } from "lucide-react";
 import { sanitizeCompanyName } from "@/lib/sanitize";
-import { uiText } from "@/lib/i18n";
+import { createDockState, createDrilldownAction, inferDrilldownTargetFromSearch, type DrilldownDockState, type DrilldownTarget } from "@/lib/drilldown";
+import { useHydratedTime } from "@/lib/hydration";
 import { WorkspaceProvider, useWorkspace } from "@/context/WorkspaceContext";
-import { enabledTerminalModules, getEnabledTerminalModule, getTerminalModule, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
+import { enabledTerminalModules, getEnabledTerminalModule, getTerminalModule, primaryTerminalModules, type TerminalIconKey, type TerminalModuleId } from "@/modules/terminalModules";
 
-import { fetchStockAnalysis, warmupQuantEngine } from "@/services/stockApi";
-import type { SearchResult, StockAnalysis, WorkspaceAction } from "@/types/stock";
+import { fetchStockAnalysis, fetchThemeIntelligence, normalizeThemeIntelligenceId, resolveCanonicalThemeIdentity, traceThemeIdentity, warmupQuantEngine } from "@/services/stockApi";
+import type { SearchResult, StockAnalysis, ThemeAggregateResponse, WorkspaceAction } from "@/types/stock";
 import AppErrorBoundary from "./AppErrorBoundary";
 import GlobalStockSearch from "./GlobalStockSearch";
 import LoadingScreen from "./LoadingScreen";
 import MarketTickerMarquee from "./MarketTickerMarquee";
-import { TerminalRail, TerminalRailButton } from "./terminal";
+import { ChangeCell, ContextDock, DrilldownTrigger, HeatStrip, MarketCell, MarketRow, MarketTable, NumericCell, StatusDot, TerminalRail, TerminalRailButton, TickerCell, TickerLogo } from "./terminal";
 
 const AlphaQuantPage = React.lazy(() => import("./AlphaQuantPage"));
 const StockAnalysisWorkspace = React.lazy(() => import("./StockAnalysisWorkspace"));
 const ThemeResearchPage = React.lazy(() => import("./ThemeResearchPage"));
+const ThemeScoutPage = React.lazy(() => import("./ThemeScoutPage"));
 
 type ActiveTab = TerminalModuleId;
 const WATCHLIST_KEY = "watchlist";
 const WATCHLIST_SCHEMA_VERSION = "stock_v6";
+const WATCHLIST_ROW_COLUMNS = "minmax(150px,1.3fr) 88px 82px 68px 44px minmax(110px,0.8fr) 36px";
 
 function moduleIcon(iconKey: TerminalIconKey, size: number): React.ReactNode {
   if (iconKey === "activity") return <Activity size={size} />;
@@ -51,27 +56,28 @@ function moduleIcon(iconKey: TerminalIconKey, size: number): React.ReactNode {
   if (iconKey === "bookmark") return <Bookmark size={size} />;
   if (iconKey === "brain-circuit") return <BrainCircuit size={size} />;
   if (iconKey === "briefcase") return <Briefcase size={size} />;
+  if (iconKey === "bar-chart-3") return <BarChart3 size={size} />;
   if (iconKey === "layout-dashboard") return <LayoutDashboard size={size} />;
   if (iconKey === "line-chart") return <LineChart size={size} />;
-  if (iconKey === "newspaper") return <Newspaper size={size} />;
+  if (iconKey === "network") return <Network size={size} />;
   if (iconKey === "panels-top-left") return <PanelsTopLeft size={size} />;
   if (iconKey === "refresh-cw") return <RefreshCw size={size} />;
   if (iconKey === "scan-search") return <ScanSearch size={size} />;
   if (iconKey === "search") return <Search size={size} />;
   if (iconKey === "settings-2") return <Settings2 size={size} />;
+  if (iconKey === "shield-alert") return <ShieldAlert size={size} />;
   if (iconKey === "star") return <Star size={size} />;
   if (iconKey === "waves") return <Waves size={size} />;
   return <Radar size={size} />;
 }
 
-const navItems = enabledTerminalModules;
-const mobileMenuItems: Array<{ id: ActiveTab | "settings"; label: string; icon: React.ReactNode }> = [
-  ...enabledTerminalModules.map((module) => ({
+const navItems = primaryTerminalModules;
+const mobileMenuItems: Array<{ id: ActiveTab; label: string; icon: React.ReactNode }> = [
+  ...primaryTerminalModules.map((module) => ({
     id: module.id,
     label: module.title,
     icon: moduleIcon(module.iconKey, 17),
   })),
-  { id: "settings", label: uiText.navigation.settings, icon: <Settings2 size={17} /> },
 ];
 
 function normalizeSymbol(symbol: string): string {
@@ -84,6 +90,17 @@ function normalizeThemeName(result: SearchResult): string {
 
 function normalizeSectorName(result: SearchResult): string {
   return (result.sector ?? result.label ?? result.name ?? result.symbol).trim();
+}
+
+function isThemeResearchModule(id: TerminalModuleId): boolean {
+  return ["theme-intelligence", "theme-forecast", "market-intel", "theme-stocks", "theme-supply-chain", "theme-risk"].includes(id);
+}
+
+function themeSubjectFromTarget(target: DrilldownTarget): string | null {
+  if (target.kind === "theme") return target.subject ?? target.name ?? target.label ?? null;
+  if (target.kind === "supply" || target.kind === "supply_chain") return target.name ?? target.subject ?? null;
+  if (target.kind === "risk") return target.subject ?? target.name ?? null;
+  return null;
 }
 
 function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
@@ -103,7 +120,7 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
     const sector = normalizeSectorName(result);
     return {
       actionType: "open_sector",
-      target_tab: "theme-intelligence",
+      target_tab: "market-intel",
       focusTarget: "theme-rotation",
       openMode: "replace",
       contextPayload: { sector, themeView: "rotation", label: `Open ${sector} Rotation` },
@@ -113,7 +130,7 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
   if (targetModule?.id === "theme-forecast") {
     return {
       actionType: "open_module",
-      target_tab: "theme-intelligence",
+      target_tab: "theme-forecast",
       focusTarget: "theme-forecast",
       openMode: "replace",
       contextPayload: { themeView: "forecast", label: result.label ?? targetModule.title },
@@ -122,7 +139,7 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
   if (targetModule?.id === "market-intel") {
     return {
       actionType: "open_module",
-      target_tab: "theme-intelligence",
+      target_tab: "market-intel",
       focusTarget: "theme-rotation",
       openMode: "replace",
       contextPayload: { themeView: "rotation", label: result.label ?? targetModule.title },
@@ -140,9 +157,9 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
       };
     }
     return {
-      actionType: enabledModule.id === "alpha-quant" ? "open_alpha" : enabledModule.id === "portfolio" ? "open_portfolio" : "open_module",
+      actionType: enabledModule.id === "alpha-quant" ? "open_alpha" : enabledModule.id === "portfolio" ? "open_portfolio" : enabledModule.workspaceType === "sector" ? "open_sector" : "open_module",
       target_tab: enabledModule.id,
-      focusTarget: enabledModule.id,
+      focusTarget: isThemeResearchModule(enabledModule.id) ? enabledModule.id : enabledModule.id,
       openMode: "replace",
       contextPayload: { label: result.label ?? enabledModule.title },
     };
@@ -155,6 +172,100 @@ function workspaceActionFromResult(result: SearchResult): WorkspaceAction {
     openMode: "replace",
     contextPayload: { ticker, label: `Open ${ticker} Analysis` },
   };
+}
+
+function DockContent({
+  dock,
+  onDrilldown,
+  themeIntelligence,
+  themeIntelligenceLoading,
+}: {
+  dock: DrilldownDockState;
+  onDrilldown: (target: DrilldownTarget) => void;
+  themeIntelligence?: ThemeAggregateResponse | null;
+  themeIntelligenceLoading?: boolean;
+}) {
+  const value = typeof dock.value === "number" && Number.isFinite(dock.value) ? dock.value.toFixed(0) : "--";
+  const intelligence = dock.intelligence;
+  const score = themeIntelligence?.score;
+  const catalysts = themeIntelligence?.catalysts.top_catalysts ?? [];
+  const bottleneck = themeIntelligence?.bottlenecks.primary_bottleneck;
+  const beneficiaries = themeIntelligence?.beneficiaries.top_beneficiaries ?? [];
+  const controllers = themeIntelligence?.beneficiaries.controllers ?? [];
+  const portfolios = themeIntelligence?.portfolio_context.portfolios ?? [];
+  const supplyLayers = themeIntelligence?.supply_chain.layers ?? [];
+  const risks = themeIntelligence?.supply_chain.risks ?? [];
+  const discovery = themeIntelligence?.discovery;
+  return (
+    <div className="context-intelligence">
+      <div className="context-intelligence-summary">
+        <div className="flex items-center justify-between gap-3">
+          <span className="terminal-micro-label">Signal</span>
+          <span className="font-mono text-xl font-semibold text-[var(--theme-text)]">{value}</span>
+        </div>
+        <HeatStrip value={dock.value} className="mt-3 w-full" />
+        {intelligence?.summary && <p className="mt-3 text-xs leading-5 text-[var(--theme-text-secondary)]">{intelligence.summary}</p>}
+      </div>
+      {intelligence && (
+        <>
+          <div className="context-intelligence-grid">
+            <div><span>Flow</span><strong>{typeof intelligence.flow === "number" ? intelligence.flow.toFixed(0) : "--"}</strong></div>
+            <div><span>Risk</span><strong>{typeof intelligence.risk === "number" ? intelligence.risk.toFixed(0) : "--"}</strong></div>
+          </div>
+          <DockTags label="Exposure" values={intelligence.exposure} />
+          <DockTags label="Beneficiaries" values={intelligence.beneficiaries} />
+          <DockTags label="Related Themes" values={intelligence.relatedThemes} />
+        </>
+      )}
+      {(themeIntelligenceLoading || themeIntelligence) && (
+        <div className="context-intelligence-section">
+          <p className="terminal-micro-label mb-2">Theme Intelligence</p>
+          {themeIntelligenceLoading && !themeIntelligence ? (
+            <p className="text-xs leading-5 text-[var(--theme-muted)]">Loading aggregate intelligence...</p>
+          ) : (
+            <>
+              <div className="context-intelligence-grid">
+                <div><span>AI Score</span><strong>{typeof score?.ai_potential_score === "number" ? score.ai_potential_score.toFixed(0) : "--"}</strong></div>
+                <div><span>Lifecycle</span><strong>{themeIntelligence?.lifecycle.lifecycle_stage ?? "--"}</strong></div>
+              </div>
+              <DockTags label="Catalysts" values={catalysts.map((item) => item.name ?? item.catalyst_name ?? "").filter(Boolean)} />
+              <DockTags label="Bottleneck" values={bottleneck ? [bottleneck.name ?? bottleneck.bottleneck_name ?? bottleneck.type ?? bottleneck.bottleneck_type ?? "Stored bottleneck"] : []} />
+              <DockTags label="Discovery Detail" values={[
+                typeof discovery?.brief?.why_now === "string" ? discovery.brief.why_now : "",
+                ...(discovery?.brief?.signals ?? []),
+              ].filter(Boolean)} />
+              <DockTags label="Controllers" values={controllers.map((item) => item.ticker).filter(Boolean)} />
+              <DockTags label="Beneficiaries" values={beneficiaries.map((item) => item.ticker).filter(Boolean)} />
+              <DockTags label="Supply Chain" values={supplyLayers.map((item) => `${item.layer_name}: ${item.entities.map((entity) => entity.ticker).join(", ")}`).filter(Boolean)} />
+              <DockTags label="Portfolio Context" values={portfolios.map((item) => item.portfolio_name).filter(Boolean)} />
+              <DockTags label="Risk Summary" values={risks.map((item) => `${item.risk_type}: ${typeof item.value === "number" ? item.value.toFixed(0) : "--"}`)} />
+            </>
+          )}
+        </div>
+      )}
+      <div>
+        <p className="terminal-micro-label mb-2">Drilldown</p>
+        <DrilldownTrigger label="Stock workspace" meta="Chart" onClick={() => onDrilldown({ kind: "stock", symbol: dock.entity.type === "stock" ? dock.entity.id : dock.subject || dock.target.symbol || "NVDA" })} />
+        <DrilldownTrigger label="Theme overlap" meta="Themes" onClick={() => onDrilldown({ kind: "theme", name: dock.subject || dock.title })} />
+        <DrilldownTrigger label="Supply exposure" meta="Dependency" onClick={() => onDrilldown({ kind: "supply", name: dock.subject || dock.title })} />
+        <DrilldownTrigger label="Risk overlay" meta="Risk" onClick={() => onDrilldown({ kind: "risk", name: "Bubble Risk", subject: dock.subject || dock.title })} />
+      </div>
+      {!intelligence?.summary && <p className="text-xs leading-5 text-[var(--theme-muted)]">
+        Context layer for {dock.title}. Deeper entity intelligence uses the current workspace payload and opens without a full page refresh.
+      </p>}
+    </div>
+  );
+}
+
+function DockTags({ label, values }: { label: string; values?: string[] }) {
+  if (!values?.length) return null;
+  const uniqueValues = Array.from(new Set(values.filter(Boolean)));
+  return (
+    <div className="context-intelligence-section">
+      <p className="terminal-micro-label mb-2">{label}</p>
+      <div className="context-intelligence-tags">{uniqueValues.slice(0, 6).map((value) => <span key={value}>{value}</span>)}</div>
+    </div>
+  );
 }
 
 function readWatchlist(): string[] {
@@ -235,20 +346,34 @@ function PortfolioHome({
       <div className="miji-page-header mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Portfolio Command Center</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-wide text-[var(--theme-text)]">Institutional Watchlist</h1>
-          <p className="mt-2 text-sm text-[var(--theme-muted)]">Editable hedge fund watchlist with live price, bubble risk, and HMM trend state.</p>
+          <h1 className="mt-1 text-[28px] font-semibold leading-tight text-[var(--theme-text)]">持倉觀察 Watchlist</h1>
+          <p className="mt-2 text-sm text-[var(--theme-muted)]">Price, move, bubble, trend.</p>
           <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-warning)]">Focus: {selectedPortfolioView}</p>
         </div>
         {loading && <div className="flex items-center gap-2 text-sm font-medium text-[var(--theme-muted)]"><Loader2 className="animate-spin" size={16} /> Refreshing portfolio tape</div>}
       </div>
 
       {watchlist.length === 0 ? (
-        <div className="miji-card rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel)] p-10 text-center shadow-sm">
+        <div className="terminal-panel p-8 text-center">
           <p className="text-lg font-semibold text-[var(--theme-text)]">No symbols in watchlist</p>
           <p className="mt-2 text-sm text-[var(--theme-muted)]">Use the global search bar and Add to Watchlist to build your portfolio.</p>
         </div>
       ) : (
-        <div className="miji-card-grid grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MarketTable
+          columns={WATCHLIST_ROW_COLUMNS}
+          className="terminal-panel p-2"
+          header={
+            <>
+              <MarketCell>股票</MarketCell>
+              <NumericCell>Price</NumericCell>
+              <NumericCell>Daily</NumericCell>
+              <NumericCell>Bubble</NumericCell>
+              <MarketCell>Heat</MarketCell>
+              <MarketCell>Trend</MarketCell>
+              <MarketCell>{null}</MarketCell>
+            </>
+          }
+        >
           {watchlist.map((ticker) => {
             const stock = snapshots?.[ticker];
             const bubble = stock?.bubble_analysis_data?.bubble_index ?? 0;
@@ -256,56 +381,38 @@ function PortfolioHome({
             const price = typeof stock?.price === "number" && stock.price > 0 ? stock.price : null;
             const trend = stock?.hmm_prediction?.available === false ? "Calibrating" : stock?.hmm_prediction?.predicted_trend ?? "Loading";
             return (
-              <motion.div
+              <MarketRow
                 key={ticker}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.18 }}
-                className="miji-card rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-panel)] p-5 shadow-sm"
+                columns={WATCHLIST_ROW_COLUMNS}
               >
-                <div className="mb-5 flex items-start justify-between gap-3">
+                <TickerCell>
                   <button onClick={() => onTickerSelect(ticker)} className="min-w-0 text-left">
-                    <span className="font-mono text-3xl font-semibold tracking-wide text-[var(--theme-text)]">{ticker}</span>
-                    <p className="mt-1 truncate text-sm text-[var(--theme-muted)]">{sanitizeCompanyName(stock?.company_name) || "Loading market data"}</p>
+                    <span className="flex items-center gap-2"><TickerLogo ticker={ticker} /><span className="truncate">{ticker}</span></span>
+                    <span className="mt-0.5 block truncate text-[11px] font-normal text-[var(--theme-muted)]">{sanitizeCompanyName(stock?.company_name) || "Loading market data"}</span>
                   </button>
+                </TickerCell>
+                <NumericCell className="text-sm font-semibold text-[var(--theme-text)]">{price !== null ? `$${price.toFixed(2)}` : "--"}</NumericCell>
+                <ChangeCell value={change} className="text-sm font-semibold">
+                  {change !== null ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "--"}
+                </ChangeCell>
+                <NumericCell className={bubble >= 70 ? "text-sm font-semibold text-[var(--theme-bearish)]" : bubble <= 40 ? "text-sm font-semibold text-[var(--theme-bullish)]" : "text-sm font-semibold text-[var(--theme-warning)]"}>
+                  {bubble.toFixed(0)}
+                </NumericCell>
+                <MarketCell><HeatStrip value={bubble} /></MarketCell>
+                <MarketCell><StatusDot state={trend} label={trend} /></MarketCell>
+                <MarketCell className="text-right">
                   <button
                     onClick={() => onRemove(ticker)}
-                    className="rounded-lg border border-[var(--theme-border)] p-2 text-[var(--theme-muted)] transition hover:border-[var(--theme-bearish)] hover:text-[var(--theme-bearish)]"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-[var(--theme-muted)] transition hover:bg-[rgba(242,54,69,0.08)] hover:text-[var(--theme-bearish)]"
                     aria-label={`Remove ${ticker}`}
                   >
                     <Trash2 size={15} />
                   </button>
-                </div>
-                <button onClick={() => onTickerSelect(ticker)} className="w-full text-left">
-                  <div className="miji-card-metrics grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Price</p>
-                      <p className="mt-1 font-mono text-lg font-semibold text-[var(--theme-text)]">{price !== null ? `$${price.toFixed(2)}` : "--"}</p>
-                    </div>
-                    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Daily</p>
-                      <p className={change === null ? "mt-1 font-mono text-lg font-semibold text-[var(--theme-muted)]" : change >= 0 ? "mt-1 font-mono text-lg font-semibold text-[var(--theme-bullish)]" : "mt-1 font-mono text-lg font-semibold text-[var(--theme-bearish)]"}>
-                        {change !== null ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "--"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Bubble</p>
-                      <p className={bubble >= 70 ? "mt-1 font-mono text-lg font-semibold text-[var(--theme-bearish)]" : bubble <= 40 ? "mt-1 font-mono text-lg font-semibold text-[var(--theme-bullish)]" : "mt-1 font-mono text-lg font-semibold text-[var(--theme-warning)]"}>
-                        {bubble.toFixed(0)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">AI Trend</p>
-                      <p className={trend === "Bearish" ? "mt-1 text-sm font-semibold text-[var(--theme-bearish)]" : trend === "Bullish" ? "mt-1 text-sm font-semibold text-[var(--theme-bullish)]" : "mt-1 text-sm font-semibold text-[var(--theme-text-secondary)]"}>
-                        {trend}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </motion.div>
+                </MarketCell>
+              </MarketRow>
             );
           })}
-        </div>
+        </MarketTable>
       )}
     </main>
   );
@@ -321,13 +428,25 @@ function DashboardApp() {
     selectedAlphaView,
     selectedPortfolioView,
     lastWorkspaceAction,
+    scrollPositions,
     setActiveModule,
+    setWorkspaceScrollPosition,
     dispatchWorkspaceAction,
   } = useWorkspace();
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [watchlistReady, setWatchlistReady] = useState(false);
-  const [timestamp, setTimestamp] = useState("");
+  const timestamp = useHydratedTime({ locale: "en-US" });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [contextDock, setContextDock] = useState<DrilldownDockState | null>(null);
+  const [contextDockExpanded, setContextDockExpanded] = useState(false);
+  const [contextThemeIntelligence, setContextThemeIntelligence] = useState<ThemeAggregateResponse | null>(null);
+  const [contextThemeIntelligenceLoading, setContextThemeIntelligenceLoading] = useState(false);
+  const [previewDock, setPreviewDock] = useState<DrilldownDockState | null>(null);
+  const contextThemeAbortRef = useRef<AbortController | null>(null);
+  const contextThemeRequestRef = useRef("");
+  const previousActiveTabRef = useRef(activeTab);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionsRef = useRef(scrollPositions);
   const touchStartXRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -341,7 +460,6 @@ function DashboardApp() {
   }, [watchlist, watchlistReady]);
 
   useEffect(() => {
-    setTimestamp(new Date().toLocaleString("en-US", { hour12: false }));
     void warmupQuantEngine();
   }, []);
 
@@ -383,6 +501,14 @@ function DashboardApp() {
         focusElement("theme-supply-chain");
         return;
       }
+      if (action.focusTarget === "theme-stocks") {
+        focusElement("theme-stocks");
+        return;
+      }
+      if (action.focusTarget === "theme-risk") {
+        focusElement("theme-risk");
+        return;
+      }
       if (action.focusTarget === "alpha-momentum" || action.focusTarget === "alpha-workspace") {
         focusElement(action.focusTarget === "alpha-momentum" ? "alpha-momentum" : "alpha-quant");
         return;
@@ -398,28 +524,169 @@ function DashboardApp() {
     setMobileMenuOpen(false);
   }, [dispatchWorkspaceAction]);
 
+  const abortContextThemeFetch = useCallback(() => {
+    contextThemeAbortRef.current?.abort();
+    contextThemeAbortRef.current = null;
+    contextThemeRequestRef.current = "";
+    setContextThemeIntelligence(null);
+    setContextThemeIntelligenceLoading(false);
+  }, []);
+
+  const openContextDock = useCallback((target: DrilldownTarget) => {
+    setContextDock(createDockState(target));
+    setContextDockExpanded(false);
+    setPreviewDock(null);
+  }, []);
+
+  useEffect(() => {
+    const dockTheme = contextDock ? themeSubjectFromTarget(contextDock.target) : null;
+    const themeSubject = dockTheme ?? (isThemeResearchModule(activeTab) ? selectedTheme : null);
+    if (!themeSubject) {
+      abortContextThemeFetch();
+      return undefined;
+    }
+    const normalized = normalizeThemeIntelligenceId(themeSubject);
+    if (
+      contextThemeRequestRef.current === normalized
+      && contextThemeIntelligence
+      && normalizeThemeIntelligenceId(contextThemeIntelligence.theme_id) === normalized
+    ) {
+      return undefined;
+    }
+    if (
+      contextThemeRequestRef.current === normalized
+      && contextThemeAbortRef.current
+      && !contextThemeAbortRef.current.signal.aborted
+    ) {
+      return undefined;
+    }
+    contextThemeAbortRef.current?.abort();
+    contextThemeRequestRef.current = normalized;
+    setContextThemeIntelligence(null);
+    const controller = new AbortController();
+    contextThemeAbortRef.current = controller;
+    setContextThemeIntelligenceLoading(true);
+    fetchThemeIntelligence(themeSubject, { signal: controller.signal })
+      .then((payload) => {
+        if (!controller.signal.aborted && contextThemeRequestRef.current === normalized) {
+          setContextThemeIntelligence(payload);
+          setContextThemeIntelligenceLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted && !(error instanceof DOMException && error.name === "AbortError")) {
+          setContextThemeIntelligence(null);
+          setContextThemeIntelligenceLoading(false);
+        }
+      });
+    return undefined;
+  }, [abortContextThemeFetch, activeTab, contextDock, contextThemeIntelligence, selectedTheme]);
+
+  useEffect(() => () => {
+    contextThemeAbortRef.current?.abort();
+  }, []);
+
+  const previewContext = useCallback((target: DrilldownTarget) => {
+    setPreviewDock(createDockState(target));
+  }, []);
+
+  const clearPreviewContext = useCallback(() => {
+    setPreviewDock(null);
+  }, []);
+
+  const runDrilldown = useCallback((target: DrilldownTarget) => {
+    const drilldown = createDrilldownAction(target);
+    abortContextThemeFetch();
+    setContextDock(drilldown.dock ?? null);
+    setPreviewDock(null);
+    runWorkspaceAction(drilldown.action);
+  }, [abortContextThemeFetch, runWorkspaceAction]);
+
   useEffect(() => {
     if (!lastWorkspaceAction || lastWorkspaceAction.target_tab !== activeTab) return;
     focusWorkspaceAction(lastWorkspaceAction);
   }, [activeTab, focusWorkspaceAction, lastWorkspaceAction]);
 
+  useEffect(() => {
+    scrollPositionsRef.current = scrollPositions;
+  }, [scrollPositions]);
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+    window.requestAnimationFrame(() => {
+      element.scrollTop = scrollPositionsRef.current[activeTab] ?? 0;
+    });
+  }, [activeTab]);
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return undefined;
+    let frame = 0;
+    const saveScrollPosition = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        setWorkspaceScrollPosition(activeTab, element.scrollTop);
+      });
+    };
+    element.addEventListener("scroll", saveScrollPosition, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      element.removeEventListener("scroll", saveScrollPosition);
+    };
+  }, [activeTab, setWorkspaceScrollPosition]);
+
+  useEffect(() => {
+    if (previousActiveTabRef.current === activeTab) return;
+    const leavingThemeResearch = !isThemeResearchModule(activeTab);
+    previousActiveTabRef.current = activeTab;
+    if (leavingThemeResearch) abortContextThemeFetch();
+    setContextDock(null);
+    setContextDockExpanded(false);
+    setPreviewDock(null);
+  }, [abortContextThemeFetch, activeTab]);
+
+  useEffect(() => {
+    const closeDockOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      abortContextThemeFetch();
+      setContextDock(null);
+      setContextDockExpanded(false);
+      setPreviewDock(null);
+    };
+    window.addEventListener("keydown", closeDockOnEscape);
+    return () => window.removeEventListener("keydown", closeDockOnEscape);
+  }, [abortContextThemeFetch]);
+
   const openStock = useCallback((ticker: string) => {
     const symbol = normalizeSymbol(ticker);
-    runWorkspaceAction({
-      actionType: "open_stock",
-      target_tab: "stock-analysis",
-      focusTarget: "stock-workspace",
-      openMode: "replace",
-      contextPayload: { ticker: symbol, label: `Open ${symbol} Analysis` },
-    });
-  }, [runWorkspaceAction]);
+    runDrilldown({ kind: "stock", symbol });
+  }, [runDrilldown]);
 
   const openSearchResult = useCallback((result: SearchResult) => {
-    runWorkspaceAction(workspaceActionFromResult(result));
-  }, [runWorkspaceAction]);
+    previewContext(inferDrilldownTargetFromSearch(result));
+  }, [previewContext]);
 
-  const selectMobileMenu = useCallback((id: ActiveTab | "settings") => {
-    if (id !== "settings") setActiveModule(id);
+  const previewSearchResult = useCallback((result: SearchResult) => {
+    previewContext(inferDrilldownTargetFromSearch(result));
+  }, [previewContext]);
+
+  const drilldownSearchResult = useCallback((result: SearchResult) => {
+    const target = inferDrilldownTargetFromSearch(result);
+    const drilldown = createDrilldownAction(target);
+    const action = result.workspaceAction ?? drilldown.action;
+    const rawThemeName = action.contextPayload?.theme ?? result.theme ?? "";
+    if (rawThemeName) {
+      const identity = resolveCanonicalThemeIdentity(rawThemeName);
+      traceThemeIdentity("search_navigation", identity.rawName, identity.themeId, null);
+    }
+    abortContextThemeFetch();
+    setContextDock(drilldown.dock ?? null);
+    runWorkspaceAction(action);
+  }, [abortContextThemeFetch, runWorkspaceAction]);
+
+  const selectMobileMenu = useCallback((id: ActiveTab) => {
+    setActiveModule(id);
     setMobileMenuOpen(false);
   }, [setActiveModule]);
 
@@ -427,7 +694,8 @@ function DashboardApp() {
   const activeContextLabel =
     actionContextLabel
     ?? (activeTab === "stock-analysis" ? selectedTicker
-      : activeTab === "theme-intelligence" ? `${selectedTheme || selectedSector || "Theme Research"} / ${selectedThemeView}`
+        : activeTab === "theme-intelligence" ? `${selectedTheme || selectedSector || "Theme Research"} / ${selectedThemeView}`
+          : isThemeResearchModule(activeTab) ? `${selectedTheme || selectedSector || "Theme Research"} / ${selectedThemeView}`
         : activeTab === "alpha-quant" ? selectedAlphaView
           : selectedPortfolioView);
 
@@ -438,8 +706,14 @@ function DashboardApp() {
     <div className="miji-shell terminal-shell flex h-[100dvh] w-full overflow-hidden">
       <TerminalRail
         brand={
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)]">
-            <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" />
+          <div className="flex items-center gap-3 px-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-transparent">
+              <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" />
+            </div>
+            <div className="terminal-rail-label min-w-0 overflow-hidden whitespace-nowrap">
+              <p className="truncate text-sm font-semibold text-[var(--theme-text)]">MIJI</p>
+              <p className="truncate text-[10px] font-medium text-[var(--theme-muted)]">Market Intelligence</p>
+            </div>
           </div>
         }
         middle={railItems.map((item) => (
@@ -464,22 +738,20 @@ function DashboardApp() {
                 onClick={() => setActiveModule(item.id)}
               />
             ))}
-            <TerminalRailButton label="通知" secondaryLabel="Alerts" icon={<Bell size={18} />} />
-            <TerminalRailButton label="設定" secondaryLabel="Settings" icon={<Settings2 size={18} />} />
           </>
         }
       />
       <div className="terminal-main flex min-w-0 flex-1 flex-col overflow-hidden">
-      <header className="miji-header shrink-0 border-b border-[var(--theme-border)] bg-[var(--theme-bg)]">
+      <header className="miji-header shrink-0 border-b border-[var(--theme-divider)] bg-[var(--theme-bg)]">
         <MarketTickerMarquee />
-        <nav className="miji-header-nav flex min-h-16 flex-wrap items-center justify-between gap-4 overflow-x-hidden px-5 py-3">
-          <div className="miji-header-brand flex shrink-0 items-center gap-4">
+        <nav className="miji-header-nav flex min-h-12 flex-wrap items-center justify-between gap-3 overflow-x-hidden px-4 py-2">
+          <div className="miji-header-brand flex shrink-0 items-center gap-4 md:hidden">
             <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] text-[var(--theme-highlight)] md:hidden" style={{ width: 40, height: 40, display: "flex" }}>
               <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
             </div>
             <div>
-              <div className="miji-header-title text-lg font-semibold uppercase tracking-wide text-[var(--theme-text)]">MIJI TERMINAL</div>
-              <div className="miji-header-subtitle text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">Institutional AI Research Terminal</div>
+              <div className="miji-header-title text-lg font-semibold text-[var(--theme-text)]">MIJI Terminal</div>
+              <div className="miji-header-subtitle text-[10px] font-semibold text-[var(--theme-muted)]">Institutional Research Terminal</div>
             </div>
           </div>
           <div className="miji-mobile-actions hidden items-center gap-2">
@@ -491,33 +763,45 @@ function DashboardApp() {
             >
               <Menu size={20} />
             </button>
-            <button
-              type="button"
-              className="rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] p-2 text-[var(--theme-muted)]"
-              aria-label="Settings"
-            >
-              <Settings2 size={19} />
-            </button>
           </div>
-          <div className="miji-header-actions flex w-full min-w-0 items-center gap-3 md:w-auto">
-            <GlobalStockSearch onSelect={openStock} onSelectResult={openSearchResult} onAddToWatchlist={addToWatchlist} />
-            <div className="hidden min-w-0 rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 text-[11px] text-[var(--theme-muted)] md:block">
-              <span className="font-semibold uppercase tracking-wide text-[var(--theme-accent)]">工作區 Workspace</span>
-              <span className="ml-2 font-mono text-[var(--theme-text-secondary)]">{activeContextLabel}</span>
+          <div className="miji-header-actions flex w-full min-w-0 items-center gap-4 md:w-auto">
+            <GlobalStockSearch onSelect={openStock} onPreviewResult={previewSearchResult} onPreviewEnd={clearPreviewContext} onSelectResult={openSearchResult} onDrilldownResult={drilldownSearchResult} onAddToWatchlist={addToWatchlist} />
+            <div className="hidden min-w-0 items-baseline gap-2 text-[11px] text-[var(--theme-muted)] md:flex">
+              <span className="font-medium text-[var(--theme-muted)]">Workspace</span>
+              <span className="font-mono text-[var(--theme-text-secondary)]">{activeContextLabel}</span>
             </div>
-            <div className="hidden rounded-[10px] border border-[var(--theme-border)] bg-[var(--theme-panel)] px-3 py-2 font-mono text-[11px] text-[var(--theme-muted)] lg:block" suppressHydrationWarning>
-              {timestamp ? `LIVE ${timestamp}` : "LIVE"}
+            <div className="hidden font-mono text-[11px] text-[var(--theme-muted)] lg:block">
+              LIVE {timestamp}
             </div>
           </div>
         </nav>
       </header>
 
-      <div className="miji-content min-h-0 flex-1 overflow-y-auto bg-[var(--theme-bg)]">
-        {activeTab === "theme-intelligence" && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeResearchPage onTickerSelect={openStock} /></div>}
+      <div ref={contentRef} className="miji-content min-h-0 flex-1 overflow-y-auto bg-[var(--theme-bg)]">
+        {isThemeResearchModule(activeTab) && <div id="theme-intelligence" tabIndex={-1} className="outline-none ring-0"><ThemeResearchPage activeSelection={contextDock?.target ?? null} aggregateIntelligence={contextThemeIntelligence} onTickerSelect={openStock} onPreview={previewContext} onPreviewEnd={clearPreviewContext} onContext={openContextDock} onDrilldown={runDrilldown} /></div>}
+        {activeTab === "theme-scout" && <div id="theme-scout" tabIndex={-1} className="outline-none ring-0"><ThemeScoutPage onPreview={previewContext} onPreviewEnd={clearPreviewContext} onContext={openContextDock} onDrilldown={runDrilldown} /></div>}
         {activeTab === "portfolio" && <div id="portfolio"><PortfolioHome watchlist={watchlist} onTickerSelect={openStock} onRemove={removeFromWatchlist} /></div>}
-        {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} /></div>}
-        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0"><StockAnalysisWorkspace /></div>}
+        {activeTab === "alpha-quant" && <div id="alpha-quant" tabIndex={-1} className="outline-none ring-0"><AlphaQuantPage onTickerSelect={openStock} onPreview={previewContext} onPreviewEnd={clearPreviewContext} onContext={openContextDock} onDrilldown={runDrilldown} /></div>}
+        {activeTab === "stock-analysis" && <div id="stock-analysis" tabIndex={-1} className="outline-none ring-0"><StockAnalysisWorkspace activeSelection={contextDock?.target ?? null} onPreview={previewContext} onPreviewEnd={clearPreviewContext} onContext={openContextDock} onDrilldown={runDrilldown} /></div>}
       </div>
+      <ContextDock
+        open={contextDock !== null}
+        collapsed={!contextDockExpanded}
+        title={contextDock?.title ?? "Context"}
+        subtitle={contextDock?.subtitle ?? contextDock?.kind}
+        onToggle={() => setContextDockExpanded((expanded) => !expanded)}
+        onClose={() => { abortContextThemeFetch(); setContextDock(null); setContextDockExpanded(false); }}
+        className="fixed right-0 top-[86px] z-[90] hidden h-[calc(100dvh-86px)] w-[340px] lg:block"
+      >
+        {contextDock && <DockContent dock={contextDock} onDrilldown={runDrilldown} themeIntelligence={contextThemeIntelligence} themeIntelligenceLoading={contextThemeIntelligenceLoading} />}
+      </ContextDock>
+      {previewDock && !contextDock && (
+        <div className="fixed bottom-4 right-4 z-[85] hidden w-[280px] border-l-2 border-[var(--theme-warning)] bg-[var(--theme-bg)] px-3 py-2 text-xs text-[var(--theme-text-secondary)] lg:block">
+          <span className="terminal-micro-label">預覽 Preview</span>
+          <span className="mt-1 block truncate font-semibold text-[var(--theme-text)]">{previewDock.title}</span>
+          <span className="mt-0.5 block truncate text-[var(--theme-muted)]">{previewDock.subtitle ?? previewDock.kind}</span>
+        </div>
+      )}
       {mobileMenuOpen && (
         <motion.div
           className="miji-mobile-drawer fixed inset-0 z-[100] bg-[var(--theme-bg)]/55 "
@@ -527,7 +811,7 @@ function DashboardApp() {
           onClick={() => setMobileMenuOpen(false)}
         >
           <motion.aside
-            className="h-full w-[84vw] max-w-[340px] border-r border-[var(--theme-border)] bg-[var(--theme-bg)]/98 p-4 shadow-sm"
+            className="h-full w-[84vw] max-w-[340px] border-r border-[var(--theme-divider)] bg-[var(--theme-bg)] p-4"
             initial={{ x: -24, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
@@ -544,7 +828,7 @@ function DashboardApp() {
           >
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel)]">
+                <div className="h-9 w-9 overflow-hidden rounded-[6px]">
                   <img src="/miji-cat-mark.png" alt="Miji Quant" className="h-full w-full object-contain" />
                 </div>
                 <div>
@@ -555,7 +839,7 @@ function DashboardApp() {
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] p-2 text-[var(--theme-muted)]"
+                className="rounded-[6px] border border-[var(--theme-divider)] bg-transparent p-2 text-[var(--theme-muted)]"
                 aria-label="Close navigation"
               >
                 <X size={18} />
@@ -567,9 +851,9 @@ function DashboardApp() {
                   key={`${item.id}-${index}`}
                   type="button"
                   onClick={() => selectMobileMenu(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
+                  className={`flex w-full items-center gap-3 rounded-[6px] border px-4 py-3 text-left text-sm font-semibold transition ${
                     activeTab === item.id
-                      ? "border-[var(--theme-border)] bg-[var(--theme-panel-hover)] text-[var(--theme-text)]"
+                      ? "border-[var(--theme-border-strong)] bg-[var(--theme-surface-elevated)] text-[var(--theme-text)]"
                       : "border-[var(--theme-border)] bg-[var(--theme-bg-secondary)] text-[var(--theme-muted)]"
                   }`}
                 >

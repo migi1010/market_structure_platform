@@ -216,6 +216,11 @@ def _normalized_quote(symbol: str, quote: Dict[str, Any], snapshot: Dict[str, An
         "currency": quote.get("currency") or "USD",
         "status": status,
         "source": quote.get("quoteSource") or quote.get("source") or status,
+        "fetched_at": quote.get("fetched_at"),
+        "updated_at": quote.get("updated_at"),
+        "expires_at": quote.get("expires_at"),
+        "cache_age_seconds": quote.get("cache_age_seconds"),
+        "is_stale": bool(quote.get("is_stale")) or status in {"stale", "fallback", "unavailable"},
     }
 
 
@@ -458,7 +463,35 @@ def _collect_engine(future: Future, fallback_val: Any, name: str) -> Any:  # noq
         return fallback_val
 
 
-def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) -> Dict[str, Any]:
+def merge_quote_into_stock_payload(
+    payload: Dict[str, Any],
+    raw_quote: Dict[str, Any],
+) -> Dict[str, Any]:
+    ticker = str(payload.get("ticker") or raw_quote.get("symbol") or "").strip().upper()
+    snapshot = _resolve_price_snapshot(ticker, raw_quote, {})
+    normalized_quote = _normalized_quote(ticker, raw_quote, snapshot)
+    return {
+        **payload,
+        "price": normalized_quote["price"],
+        "change": normalized_quote["change"],
+        "change_percent": normalized_quote["change_percent"],
+        "market_cap": normalized_quote["market_cap"],
+        "quote_status": normalized_quote["status"],
+        "source": normalized_quote["source"],
+        "fetched_at": normalized_quote["fetched_at"],
+        "updated_at": normalized_quote["updated_at"],
+        "expires_at": normalized_quote["expires_at"],
+        "cache_age_seconds": normalized_quote["cache_age_seconds"],
+        "is_stale": normalized_quote["is_stale"],
+        "quote": normalized_quote,
+    }
+
+
+def central_stock_enrichment(
+    symbol: str,
+    include_provider_quote: bool = False,
+    quote_override: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     ticker = symbol.strip().upper()
     lightweight_mode = get_settings().miji_lightweight_mode
 
@@ -467,7 +500,7 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
     # 1-2s when yfinance is healthy. This MUST run synchronously so we have a
     # price before assembling the response. The quote is also written to the
     # SQLite LKG cache inside get_quote(), so it survives even if we time out.
-    quote = get_quote(ticker)
+    quote = quote_override if isinstance(quote_override, dict) else get_quote(ticker)
     logger.info("central_stock_enrichment quote symbol=%s price=%s status=%s",
                 ticker, quote.get("currentPrice") or quote.get("regularMarketPrice"),
                 quote.get("quoteStatus"))
@@ -547,6 +580,12 @@ def central_stock_enrichment(symbol: str, include_provider_quote: bool = False) 
         "market_cap": normalized_quote["market_cap"],
         "sector": sector,
         "quote_status": normalized_quote["status"],
+        "source": normalized_quote["source"],
+        "fetched_at": normalized_quote["fetched_at"],
+        "updated_at": normalized_quote["updated_at"],
+        "expires_at": normalized_quote["expires_at"],
+        "cache_age_seconds": normalized_quote["cache_age_seconds"],
+        "is_stale": normalized_quote["is_stale"],
         "quote": normalized_quote,
         "bubble_analysis_data": bubble_data,
         "earnings_quality": earnings,

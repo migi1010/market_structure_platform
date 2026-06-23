@@ -10,14 +10,13 @@ interface TerminalRailProps {
 
 export default function TerminalRail({ brand, top, middle, bottom, className = "" }: TerminalRailProps) {
   return (
-    <aside className={`terminal-rail hidden h-full shrink-0 flex-col items-center justify-between py-3 md:flex ${className}`}>
-      <div className="flex flex-col items-center gap-5">
+    <aside className={`terminal-rail hidden h-full shrink-0 flex-col justify-between px-2 py-3 md:flex ${className}`}>
+      <div className="flex flex-col gap-5">
         {brand}
-        {top && <nav className="flex flex-col items-center gap-3">{top}</nav>}
+        {top && <nav className="flex flex-col gap-1">{top}</nav>}
       </div>
-      {middle && <nav className="flex flex-col items-center gap-3">{middle}</nav>}
-      {bottom && <nav className="flex flex-col items-center gap-3">{bottom}</nav>}
+      {middle && <nav className="flex flex-col gap-1">{middle}</nav>}
+      {bottom && <nav className="flex flex-col gap-1">{bottom}</nav>}
     </aside>
   );
 }
-

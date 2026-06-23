@@ -17,13 +17,13 @@ export default function NewsIntelligencePanel({ news = [] }: NewsIntelligencePan
   const sentiment = sentimentScore > 0 ? "Bullish" : sentimentScore < 0 ? "Bearish" : "Neutral";
 
   return (
-    <section className="miji-card terminal-panel p-5">
+    <section className="terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
           <p className="terminal-micro-label">Live Intelligence Feed</p>
           <h3 className="terminal-panel-title text-[var(--theme-text)]">News Intelligence</h3>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] px-3 py-2">
+        <div className="flex items-center gap-2 border-l border-[var(--theme-divider)] pl-3">
           <Newspaper className="text-[var(--theme-warning)]" size={18} />
           <span className={sentiment === "Bullish" ? "text-[var(--theme-bullish)]" : sentiment === "Bearish" ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"}>
             {sentiment}
@@ -32,16 +32,16 @@ export default function NewsIntelligencePanel({ news = [] }: NewsIntelligencePan
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-5 text-sm text-[var(--theme-muted)]">No News</div>
+        <div className="border-y border-[var(--theme-divider)] py-5 text-sm text-[var(--theme-muted)]">No News</div>
       ) : (
-        <div className="space-y-3">
+        <div className="divide-y divide-[var(--theme-divider)]">
           {items.map((item, index) => (
             <a
               key={`${item?.title ?? "news"}-${index}`}
               href={item?.link ?? "#"}
               target="_blank"
               rel="noreferrer"
-              className="group block rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4 transition hover:border-[var(--theme-border-strong)] hover:bg-[var(--theme-panel-hover)]"
+              className="group block py-3 transition hover:bg-[rgba(255,255,255,0.028)]"
             >
               <div className="mb-2 flex items-start justify-between gap-3">
                 <h4 className="text-sm font-bold leading-5 text-[var(--theme-text)] group-hover:text-[var(--theme-highlight)]">{item?.title ?? "No News"}</h4>
@@ -49,7 +49,7 @@ export default function NewsIntelligencePanel({ news = [] }: NewsIntelligencePan
               </div>
               <p className="line-clamp-2 text-xs leading-5 text-[var(--theme-text-secondary)]">{item?.summary ?? ""}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                <span className="rounded border border-[var(--theme-warning)] bg-[var(--theme-panel)] px-2 py-1 text-[var(--theme-warning)]">{item?.category ?? "General"}</span>
+                <span className="text-[var(--theme-warning)]">{item?.category ?? "General"}</span>
                 <span className="text-[var(--theme-muted)]">{item?.publisher ?? "Market News"}</span>
                 <span className={item?.sentiment === "Bullish" ? "text-[var(--theme-bullish)]" : item?.sentiment === "Bearish" ? "text-[var(--theme-bearish)]" : "text-[var(--theme-text-secondary)]"}>
                   {item?.sentiment ?? "Neutral"}

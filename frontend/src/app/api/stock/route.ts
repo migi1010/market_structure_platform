@@ -7,13 +7,14 @@ const RENDER_API_URL = "https://market-structure-platform.onrender.com";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const ticker = searchParams.get("ticker")?.trim().toUpperCase();
+  const forceRefresh = searchParams.get("force_refresh") === "true";
 
   if (!ticker) {
     return NextResponse.json({ error: "ticker is required" }, { status: 400 });
   }
 
   try {
-    const upstream = await fetch(`${RENDER_API_URL}/stock/${encodeURIComponent(ticker)}`, {
+    const upstream = await fetch(`${RENDER_API_URL}/stock/${encodeURIComponent(ticker)}${forceRefresh ? "?force_refresh=true" : ""}`, {
       cache: "no-store",
     });
     const body = await upstream.text();

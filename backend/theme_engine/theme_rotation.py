@@ -72,7 +72,15 @@ def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
         row["residual_strength_score"] = compute_residual_strength(theme_name, raw_scores)
 
         # Capital rotation signal
-        row["capital_rotation_score"] = compute_capital_rotation(theme_name, all_metrics)
+        rotation = compute_capital_rotation(theme_name, all_metrics)
+        if isinstance(rotation, dict):
+            row.update(rotation)
+            row["capital_rotation_score"] = safe_float(
+                rotation.get("capital_rotation_score"),
+                50.0,
+            )
+        else:
+            row["capital_rotation_score"] = safe_float(rotation, 50.0)
 
         # Horizon-differentiated scores
         h_metrics = {
@@ -90,7 +98,6 @@ def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
         horizons = compute_horizon_scores(
             theme_name=theme_name,
             metrics=h_metrics,
-            macro_state={},
             raw_scores=raw_scores,
         )
         row["forecast_score_1w"] = horizons["1w"]
@@ -114,11 +121,18 @@ def _theme_snapshot(_: int) -> List[Dict[str, Any]]:
             score_1w=row["forecast_score_1w"],
             score_1m=row["forecast_score_1m"],
             score_3m=row["forecast_score_3m"],
-            residual=row["residual_strength_score"],
+            residual_alpha=row["residual_strength_score"],
+            peer_relative_strength=safe_float(row.get("peer_relative_strength")),
+            peer_momentum_rank=int(safe_float(row.get("peer_momentum_rank"), 1.0)),
             capital_rotation=row["capital_rotation_score"],
+            rotation_velocity=safe_float(row.get("rotation_velocity")),
+            rotation_direction=int(safe_float(row.get("rotation_direction"))),
             crowding=row["crowding_penalty"],
+            crowding_components=row.get("crowding_components") if isinstance(row.get("crowding_components"), dict) else None,
             macro_alignment=safe_float(row.get("macro_alignment") or row.get("theme_strength_score") or 50.0),
             forecast_confidence=row["forecast_confidence"],
+            confidence_label=str(row.get("confidence_label") or "Medium"),
+            peer_group=str(row.get("peer_group") or "peers"),
         )
         existing = row.get("explainability") or []
         if isinstance(existing, list):

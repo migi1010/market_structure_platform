@@ -3,6 +3,10 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/build/
+node_modules/
+.next/
+dist/
+build/
 
 # Python caching & environments
 __pycache__/
@@ -19,7 +23,16 @@ env/
 
 # Runtime / agent caches
 .cache/
-backend/.cache/*.sqlite3
+backend/.cache/
+.tmp/
+reports/
+test-results/
 
-# Data backups (optional, but prevents massive files)
-# reports/*.json
+# Local databases and logs
+*.sqlite3
+*.log
+# Superpowers
+.superpowers/
+
+# TypeScript
+*.tsbuildinfo

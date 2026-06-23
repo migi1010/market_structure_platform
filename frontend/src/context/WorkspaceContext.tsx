@@ -12,7 +12,7 @@ const DEFAULT_SECTOR = "Technology";
 const DEFAULT_THEME_VIEW = "command";
 const DEFAULT_ALPHA_VIEW = "top-alpha";
 const DEFAULT_PORTFOLIO_VIEW = "watchlist";
-const DEFAULT_MODULE: TerminalModuleId = "theme-intelligence";
+const DEFAULT_MODULE: TerminalModuleId = "market-intel";
 const MAX_RECENTS = 8;
 
 interface WorkspaceEnvelope {
@@ -24,6 +24,8 @@ interface WorkspaceState {
   selectedTicker: string;
   selectedTheme: string;
   selectedSector: string;
+  selectedSupplyChainNode: string;
+  selectedScoutCandidate: string;
   selectedThemeView: string;
   selectedAlphaView: string;
   selectedPortfolioView: string;
@@ -31,16 +33,22 @@ interface WorkspaceState {
   lastWorkspaceAction: WorkspaceAction | null;
   recentTickers: string[];
   recentThemes: string[];
+  scrollPositions: Record<string, number>;
+  activeFilters: Record<string, string[]>;
 }
 
 interface WorkspaceContextValue extends WorkspaceState {
   setSelectedTicker: (ticker: string) => void;
   setSelectedTheme: (theme: string) => void;
   setSelectedSector: (sector: string) => void;
+  setSelectedSupplyChainNode: (nodeKey: string) => void;
+  setSelectedScoutCandidate: (candidateKey: string) => void;
   setSelectedThemeView: (view: string) => void;
   setSelectedAlphaView: (view: string) => void;
   setSelectedPortfolioView: (view: string) => void;
   setActiveModule: (module: TerminalModuleId) => void;
+  setWorkspaceScrollPosition: (workspace: TerminalModuleId, position: number) => void;
+  setWorkspaceActiveFilters: (workspace: TerminalModuleId, filters: string[]) => void;
   dispatchWorkspaceAction: (action: WorkspaceAction) => void;
 }
 
@@ -68,6 +76,17 @@ function validModule(value: unknown): TerminalModuleId {
   return typeof value === "string" && getEnabledTerminalModule(value) ? (value as TerminalModuleId) : DEFAULT_MODULE;
 }
 
+function themeViewForModule(module: TerminalModuleId): string | null {
+  if (module === "theme-intelligence") return "command";
+  if (module === "theme-scout") return "scout";
+  if (module === "theme-forecast") return "forecast";
+  if (module === "market-intel") return "rotation";
+  if (module === "theme-stocks") return "stocks";
+  if (module === "theme-supply-chain") return "supply-chain";
+  if (module === "theme-risk") return "risk";
+  return null;
+}
+
 function validStringList(value: unknown, normalizer: (item: string) => string): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -77,11 +96,33 @@ function validStringList(value: unknown, normalizer: (item: string) => string): 
     .slice(0, MAX_RECENTS);
 }
 
+function validNumberRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.entries(value).reduce<Record<string, number>>((acc, [key, item]) => {
+    const parsed = Number(item);
+    const normalizedKey = normalizeWorkspaceLabel(key);
+    if (normalizedKey && Number.isFinite(parsed) && parsed >= 0) acc[normalizedKey] = parsed;
+    return acc;
+  }, {});
+}
+
+function validStringArrayRecord(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.entries(value).reduce<Record<string, string[]>>((acc, [key, item]) => {
+    const normalizedKey = normalizeWorkspaceLabel(key);
+    const filters = validStringList(item, normalizeWorkspaceLabel);
+    if (normalizedKey && filters.length > 0) acc[normalizedKey] = filters;
+    return acc;
+  }, {});
+}
+
 function readWorkspaceState(): WorkspaceState {
   const fallbackState = {
     selectedTicker: DEFAULT_TICKER,
     selectedTheme: DEFAULT_THEME,
     selectedSector: DEFAULT_SECTOR,
+    selectedSupplyChainNode: "",
+    selectedScoutCandidate: "",
     selectedThemeView: DEFAULT_THEME_VIEW,
     selectedAlphaView: DEFAULT_ALPHA_VIEW,
     selectedPortfolioView: DEFAULT_PORTFOLIO_VIEW,
@@ -89,6 +130,8 @@ function readWorkspaceState(): WorkspaceState {
     lastWorkspaceAction: null,
     recentTickers: [DEFAULT_TICKER],
     recentThemes: [],
+    scrollPositions: {},
+    activeFilters: {},
   };
   if (typeof window === "undefined") {
     return fallbackState;
@@ -110,6 +153,8 @@ function readWorkspaceState(): WorkspaceState {
       selectedTicker,
       selectedTheme,
       selectedSector: normalizeWorkspaceLabel(data.selectedSector ?? DEFAULT_SECTOR) || DEFAULT_SECTOR,
+      selectedSupplyChainNode: normalizeWorkspaceLabel(data.selectedSupplyChainNode ?? ""),
+      selectedScoutCandidate: normalizeWorkspaceLabel(data.selectedScoutCandidate ?? ""),
       selectedThemeView: normalizeWorkspaceLabel(data.selectedThemeView ?? DEFAULT_THEME_VIEW) || DEFAULT_THEME_VIEW,
       selectedAlphaView: normalizeWorkspaceLabel(data.selectedAlphaView ?? DEFAULT_ALPHA_VIEW) || DEFAULT_ALPHA_VIEW,
       selectedPortfolioView: normalizeWorkspaceLabel(data.selectedPortfolioView ?? DEFAULT_PORTFOLIO_VIEW) || DEFAULT_PORTFOLIO_VIEW,
@@ -117,6 +162,8 @@ function readWorkspaceState(): WorkspaceState {
       lastWorkspaceAction: data.lastWorkspaceAction ?? null,
       recentTickers: uniqueRecent(selectedTicker, validStringList(data.recentTickers, normalizeTicker)),
       recentThemes: selectedTheme ? uniqueRecent(selectedTheme, validStringList(data.recentThemes, normalizeTheme)) : validStringList(data.recentThemes, normalizeTheme),
+      scrollPositions: validNumberRecord(data.scrollPositions),
+      activeFilters: validStringArrayRecord(data.activeFilters),
     };
   } catch {
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
@@ -143,6 +190,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     selectedTicker: DEFAULT_TICKER,
     selectedTheme: DEFAULT_THEME,
     selectedSector: DEFAULT_SECTOR,
+    selectedSupplyChainNode: "",
+    selectedScoutCandidate: "",
     selectedThemeView: DEFAULT_THEME_VIEW,
     selectedAlphaView: DEFAULT_ALPHA_VIEW,
     selectedPortfolioView: DEFAULT_PORTFOLIO_VIEW,
@@ -150,6 +199,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     lastWorkspaceAction: null,
     recentTickers: [DEFAULT_TICKER],
     recentThemes: [],
+    scrollPositions: {},
+    activeFilters: {},
   });
 
   useEffect(() => {
@@ -191,6 +242,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setSelectedSupplyChainNode = useCallback((nodeKey: string) => {
+    const normalized = normalizeWorkspaceLabel(nodeKey);
+    if (!normalized) return;
+    setState((current) => ({
+      ...current,
+      selectedSupplyChainNode: normalized,
+    }));
+  }, []);
+
+  const setSelectedScoutCandidate = useCallback((candidateKey: string) => {
+    const normalized = normalizeWorkspaceLabel(candidateKey);
+    if (!normalized) return;
+    setState((current) => ({
+      ...current,
+      selectedScoutCandidate: normalized,
+    }));
+  }, []);
+
   const setSelectedThemeView = useCallback((view: string) => {
     const normalized = normalizeWorkspaceLabel(view);
     if (!normalized) return;
@@ -223,25 +292,53 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setState((current) => ({
       ...current,
       activeModule: module,
+      selectedThemeView: themeViewForModule(module) ?? current.selectedThemeView,
+    }));
+  }, []);
+
+  const setWorkspaceScrollPosition = useCallback((workspace: TerminalModuleId, position: number) => {
+    if (!getEnabledTerminalModule(workspace) || !Number.isFinite(position) || position < 0) return;
+    setState((current) => ({
+      ...current,
+      scrollPositions: {
+        ...current.scrollPositions,
+        [workspace]: position,
+      },
+    }));
+  }, []);
+
+  const setWorkspaceActiveFilters = useCallback((workspace: TerminalModuleId, filters: string[]) => {
+    if (!getEnabledTerminalModule(workspace)) return;
+    const normalized = validStringList(filters, normalizeWorkspaceLabel);
+    setState((current) => ({
+      ...current,
+      activeFilters: {
+        ...current.activeFilters,
+        [workspace]: normalized,
+      },
     }));
   }, []);
 
   const dispatchWorkspaceAction = useCallback((action: WorkspaceAction) => {
-    const resolvedTarget = getEnabledTerminalModule(action.target_tab)?.id ?? (action.target_tab === "theme-forecast" || action.target_tab === "market-intel" ? "theme-intelligence" : null);
+    const resolvedTarget = getEnabledTerminalModule(action.target_tab)?.id ?? null;
     if (!resolvedTarget) return;
     setState((current) => {
       const payload = action.contextPayload ?? {};
       const ticker = payload.ticker ? normalizeTicker(payload.ticker) : "";
       const theme = payload.theme ? normalizeTheme(payload.theme) : "";
-      const themeView = payload.themeView ? normalizeWorkspaceLabel(payload.themeView) : "";
+      const themeView = payload.themeView ? normalizeWorkspaceLabel(payload.themeView) : themeViewForModule(resolvedTarget) ?? "";
       const sector = payload.sector ? normalizeWorkspaceLabel(payload.sector) : "";
       const alphaView = payload.alphaView ? normalizeWorkspaceLabel(payload.alphaView) : "";
       const portfolioView = payload.portfolioView ? normalizeWorkspaceLabel(payload.portfolioView) : "";
+      const supplyChainNode = payload.supplyChainNode ? normalizeWorkspaceLabel(payload.supplyChainNode) : "";
+      const scoutCandidate = payload.scoutCandidate ? normalizeWorkspaceLabel(payload.scoutCandidate) : "";
       return {
         ...current,
         activeModule: resolvedTarget,
         selectedTicker: ticker || current.selectedTicker,
         selectedTheme: theme || current.selectedTheme,
+        selectedSupplyChainNode: supplyChainNode || current.selectedSupplyChainNode,
+        selectedScoutCandidate: scoutCandidate || current.selectedScoutCandidate,
         selectedThemeView: themeView || current.selectedThemeView,
         selectedSector: sector || current.selectedSector,
         selectedAlphaView: alphaView || current.selectedAlphaView,
@@ -258,12 +355,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSelectedTicker,
     setSelectedTheme,
     setSelectedSector,
+    setSelectedSupplyChainNode,
+    setSelectedScoutCandidate,
     setSelectedThemeView,
     setSelectedAlphaView,
     setSelectedPortfolioView,
     setActiveModule,
+    setWorkspaceScrollPosition,
+    setWorkspaceActiveFilters,
     dispatchWorkspaceAction,
-  }), [dispatchWorkspaceAction, setActiveModule, setSelectedAlphaView, setSelectedPortfolioView, setSelectedSector, setSelectedTheme, setSelectedThemeView, setSelectedTicker, state]);
+  }), [dispatchWorkspaceAction, setActiveModule, setSelectedAlphaView, setSelectedPortfolioView, setSelectedScoutCandidate, setSelectedSector, setSelectedSupplyChainNode, setSelectedTheme, setSelectedThemeView, setSelectedTicker, setWorkspaceActiveFilters, setWorkspaceScrollPosition, state]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

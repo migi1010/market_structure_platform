@@ -17,9 +17,10 @@ from backtesting import run_top_alpha_backtest
 from logging_config import configure_logging
 from middleware import RateLimitMiddleware, RequestLoggingMiddleware, TimeoutMiddleware
 from quant_engine.data_pipeline import CACHE_SCHEMA_VERSION, debug_provider, get_cached_value, get_history, get_quote, initialize_cache, safe_float, set_cached_value
+from quant_engine.data_pipeline.market_data import is_market_open_context, quote_ttl_seconds
 from quant_engine.lean_integration import LeanSignalExporter
 from quant_engine.sector_rotation_engine import analyze_sector_rotation
-from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload
+from quant_engine.stock_service import central_stock_enrichment, fallback_stock_payload, merge_quote_into_stock_payload
 from quant_engine.theme_forecast import forecast_status, forecast_theme_leadership
 from quant_engine.validation import validate_theme_forecasts
 from settings import get_settings
@@ -35,12 +36,69 @@ from theme_engine import (
     get_theme_supply_chain,
     get_top_themes,
 )
+from theme_intelligence import (
+    get_theme_beneficiaries,
+    get_theme_beneficiary_detail,
+    get_theme_bottleneck_detail,
+    get_theme_bottlenecks,
+    get_theme_catalyst_detail,
+    get_theme_catalysts,
+    get_theme_discovery,
+    get_theme_intelligence,
+    get_theme_intelligence_detail,
+    get_theme_graph,
+    get_theme_graph_detail,
+    get_theme_overlap,
+    get_theme_lifecycle,
+    get_theme_lifecycle_detail,
+    get_theme_portfolio_detail,
+    get_theme_portfolios,
+    get_theme_score_detail,
+    get_theme_scores,
+    get_top_theme_intelligence,
+)
+from theme_intelligence.seeds.seed_loader import load_theme_seed_data
+from theme_intelligence.seeds import SEED_VERSION
+from theme_intelligence.storage.theme_repository import ThemeRepository
+from theme_intelligence.decision_intelligence_engine import DecisionIntelligenceEngine
+from theme_intelligence.decision_intelligence_exports import (
+    export_decision_intelligence,
+    export_decision_intelligence_detail,
+)
+from theme_intelligence.industrial_graph.theme_scout_exports import (
+    export_theme_candidate,
+    export_theme_scout_snapshot,
+)
+from theme_intelligence.industrial_graph.theme_scout_repository import ThemeScoutRepository
+from theme_intelligence.research_pipeline.research_pipeline_engine import ResearchPipelineEngine
+from theme_intelligence.research_pipeline.research_pipeline_exports import (
+    export_pipeline_case_detail,
+    export_pipeline_cases,
+)
+from theme_intelligence.research_pipeline.research_pipeline_models import (
+    PipelineValidationError,
+)
+from theme_intelligence.stock_research.stock_research_exports import (
+    export_stock_research,
+)
+from theme_intelligence.theme_registry.theme_registry_exports import export_theme_registry
+from theme_intelligence.theme_ranking.theme_ranking_exports import export_theme_ranking
 
 configure_logging()
 logger = logging.getLogger("miji.api")
 settings = get_settings()
 BACKGROUND_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 CACHE_MISS_WAIT_SECONDS = 12.0
+# Seed-loader state: updated by lifespan startup and admin reload endpoint.
+_SEED_STATE: dict[str, Any] = {
+    "loaded": False,
+    "loading": False,
+    "loaded_at": None,
+    "error": None,
+    "result": None,
+    "source": "seed:curated",
+    "version": SEED_VERSION,
+}
 LIFECYCLE_STATES = {"cold_start", "warming", "partial_live", "live", "degraded", "recovery"}
 UNCACHEABLE_LIFECYCLES = {"cold_start", "warming", "partial_live", "degraded"}
 SP500_UNIVERSE = ["AAPL", "MSFT", "NVDA", "AMZN", "META", "AVGO", "LLY", "JPM", "XOM", "UNH"]
@@ -61,10 +119,55 @@ _HEAVY_CIRCUITS: dict[str, dict[str, Any]] = {
 }
 
 
+def _run_seed_loader(recompute: bool = True) -> None:
+    """Idempotent seed load executed in background thread.
+
+    Uses INSERT OR IGNORE / ON CONFLICT DO UPDATE — completely non-destructive
+    on repeated startup.  Seeds are curated reference data, not live news.
+    This runs every cold start so that ephemeral SQLite environments (Render
+    free tier) always have seeded rows available.
+    """
+    _SEED_STATE["loading"] = True
+    _SEED_STATE["error"] = None
+    try:
+        result = load_theme_seed_data(recompute=recompute)
+        import time as _time  # noqa: PLC0415
+        _SEED_STATE.update({
+            "loaded": True,
+            "loading": False,
+            "loaded_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+            "result": result,
+            "error": None,
+        })
+        logger.info(
+            "theme seed load complete themes=%d catalysts=%d bottlenecks=%d "
+            "beneficiaries=%d beneficiary_scores=%d cache_invalidated=%d "
+            "phase12_status=%s graph_snapshot=%s controller_snapshot=%s "
+            "opportunity_snapshot=%s packet_family=%s",
+            result.get("themes_loaded", 0),
+            result.get("catalysts", 0),
+            result.get("bottlenecks", 0),
+            result.get("beneficiaries", 0),
+            result.get("beneficiary_scores", 0),
+            result.get("cache_keys_invalidated", 0),
+            result.get("phase12_status", "disabled"),
+            result.get("graph_snapshot_id"),
+            result.get("controller_snapshot_id"),
+            result.get("opportunity_snapshot_id"),
+            result.get("packet_family_version"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        _SEED_STATE["loading"] = False
+        _SEED_STATE["error"] = str(exc)
+        logger.error("theme seed load failed error=%s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_cache()
     logger.info("cache initialized at %s", settings.sqlite_cache_path)
+    _run_seed_loader()
+    logger.info("theme seed loader completed before application readiness")
     yield
 
 app = FastAPI(
@@ -181,7 +284,7 @@ def _sector_rotation_rows(payload: Any) -> list[dict]:
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
-        for key in ("sectors", "items", "data", "results", "rows"):
+        for key in ("sector_ranking", "sectors", "items", "data", "results", "rows"):
             value = payload.get(key)
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
@@ -207,7 +310,7 @@ def _stock_lifecycle(result: dict) -> str:
     if not _finite_positive(result.get("price")):
         return "warming"
     quote = result.get("quote")
-    quote_live = isinstance(quote, dict) and _finite_positive(quote.get("price")) and str(quote.get("status") or "").lower() not in {"unavailable", "fallback"}
+    quote_live = isinstance(quote, dict) and _finite_positive(quote.get("price")) and str(quote.get("status") or "").lower() not in {"unavailable", "fallback", "stale"}
     bubble = result.get("bubble_analysis_data")
     earnings = result.get("earnings_quality")
     smart = result.get("smart_money")
@@ -325,6 +428,29 @@ def _schedule_cache_refresh(cache_key: str, ttl_seconds: int, task: Callable[[],
     BACKGROUND_EXECUTOR.submit(refresh)
 
 
+def _downgrade_stale_stock_payload(cache_key: str, payload: Any) -> Any:
+    if ":stock:" not in cache_key.lower() or not isinstance(payload, dict):
+        return payload
+    quote = payload.get("quote")
+    stale_quote = (
+        {
+            **quote,
+            "status": "stale",
+            "source": "stale_endpoint_cache",
+            "is_stale": True,
+        }
+        if isinstance(quote, dict)
+        else quote
+    )
+    return {
+        **payload,
+        "quote_status": "stale",
+        "source": "stale_endpoint_cache",
+        "is_stale": True,
+        "quote": stale_quote,
+    }
+
+
 def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], Any], fallback: Callable[[], Any]) -> Any:
     cached = get_cached_value(cache_key)
     if cached is not None:
@@ -339,7 +465,7 @@ def _fast_cached_response(cache_key: str, ttl_seconds: int, task: Callable[[], A
         if _cacheable_endpoint_result(cache_key, stale):
             logger.info("endpoint stale cache hit key=%s", cache_key)
             _schedule_cache_refresh(cache_key, ttl_seconds, task)
-            return _with_lifecycle(cache_key, stale, "recovery")
+            return _with_lifecycle(cache_key, _downgrade_stale_stock_payload(cache_key, stale), "recovery")
         logger.warning("ignoring invalid stale endpoint cache key=%s", cache_key)
     future = BACKGROUND_EXECUTOR.submit(task)
 
@@ -432,9 +558,9 @@ def _quote_aware_stock_fallback(symbol: str) -> dict:
     change_pct = _sf(raw_quote.get("regularMarketChangePercent"))
     prev_close = _sf(raw_quote.get("previousClose") or raw_quote.get("regularMarketPreviousClose"))
     market_cap = _sf(raw_quote.get("marketCap"))
-    quote_source = str(raw_quote.get("quoteSource") or raw_quote.get("_quote_source") or "last_known_good").lower()
+    quote_source = str(raw_quote.get("source") or raw_quote.get("quoteSource") or raw_quote.get("_quote_source") or "last_known_good").lower()
     quote_status = str(raw_quote.get("quoteStatus") or "partial_live").lower()
-    if quote_status in {"unavailable", "fallback", ""}:
+    if quote_status in {"unavailable", ""} and price is not None:
         quote_status = "partial_live"
 
     from quant_engine.stock_service import COMMON_METADATA, _fallback_bubble, _fallback_earnings, _fallback_smart_money  # noqa: PLC0415
@@ -452,6 +578,11 @@ def _quote_aware_stock_fallback(symbol: str) -> dict:
         "currency": raw_quote.get("currency") or "USD",
         "status": quote_status,
         "source": quote_source,
+        "fetched_at": raw_quote.get("fetched_at"),
+        "updated_at": raw_quote.get("updated_at"),
+        "expires_at": raw_quote.get("expires_at"),
+        "cache_age_seconds": raw_quote.get("cache_age_seconds"),
+        "is_stale": bool(raw_quote.get("is_stale")) or quote_status in {"stale", "fallback", "unavailable"},
     }
     logger.info("_quote_aware_stock_fallback partial_live symbol=%s price=%.4f source=%s",
                 ticker, price, quote_source)
@@ -464,6 +595,12 @@ def _quote_aware_stock_fallback(symbol: str) -> dict:
         "market_cap": market_cap,
         "sector": metadata["sector"],
         "quote_status": quote_status,
+        "source": quote_source,
+        "fetched_at": normalized_quote["fetched_at"],
+        "updated_at": normalized_quote["updated_at"],
+        "expires_at": normalized_quote["expires_at"],
+        "cache_age_seconds": normalized_quote["cache_age_seconds"],
+        "is_stale": normalized_quote["is_stale"],
         "quote": normalized_quote,
         "bubble_analysis_data": _fallback_bubble(ticker, raw_quote, price)["bubble_analysis_data"],
         "earnings_quality": _fallback_earnings(),
@@ -487,16 +624,54 @@ def _quote_aware_stock_fallback(symbol: str) -> dict:
     }
 
 
-def _fallback_sector_rotation() -> list[dict]:
+def _refresh_stock_quote(symbol: str, cached_payload: dict | None = None) -> dict:
+    ticker = symbol.strip().upper()
+    raw_quote = get_quote(ticker, force_refresh=True)
+    if isinstance(cached_payload, dict):
+        return merge_quote_into_stock_payload(cached_payload, raw_quote)
+    return central_stock_enrichment(ticker, quote_override=raw_quote)
+
+
+def _force_refresh_stock_response(symbol: str) -> dict:
+    ticker = symbol.strip().upper()
+    cache_key = _schema_cache_key("stock", ticker)
+    cached_payload = get_cached_value(cache_key, allow_expired=True)
+    result = _refresh_stock_quote(ticker, cached_payload if isinstance(cached_payload, dict) else None)
+    cache_result = _with_lifecycle(cache_key, result)
+    if str(result.get("quote_status") or "").lower() == "live" and _cacheable_endpoint_result(cache_key, cache_result):
+        set_cached_value(
+            cache_key,
+            cache_result,
+            quote_ttl_seconds(is_market_open_context()),
+            "json",
+        )
+    return cache_result
+
+
+def _fallback_sector_rotation() -> dict:
     logger.info("sector_rotation_fallback_used=true")
     return analyze_sector_rotation()
 
 
-def _sector_rotation_response() -> Any:
+def _sector_rotation_snapshot_response() -> dict:
     started = time.perf_counter()
-    live = analyze_sector_rotation()
+    snapshot = analyze_sector_rotation()
     logger.info("sector_rotation_compute_ms=%.2f", (time.perf_counter() - started) * 1000.0)
-    return live
+    return snapshot
+
+
+def _rotation_cache_status(payload: Any, status: str, source: str) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    return {
+        **payload,
+        "status": status,
+        "source": source,
+        "data_quality": {
+            **(payload.get("data_quality") if isinstance(payload.get("data_quality"), dict) else {}),
+            "underlying_status": payload.get("status"),
+        },
+    }
 
 
 def _fallback_theme_top() -> dict:
@@ -921,9 +1096,12 @@ async def unhandled_exception_handler(_, exc: Exception):
 
 
 @app.get("/stock/{ticker}")
-def get_stock(ticker: str) -> dict:
+def get_stock(ticker: str, force_refresh: bool = Query(False)) -> dict:
     symbol = ticker.strip().upper()
-    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), settings.quote_ttl_seconds, lambda: central_stock_enrichment(symbol), lambda: _quote_aware_stock_fallback(symbol)))
+    if force_refresh:
+        return _guard(lambda: _force_refresh_stock_response(symbol))
+    ttl_seconds = quote_ttl_seconds(is_market_open_context())
+    return _guard(lambda: _fast_cached_response(_schema_cache_key("stock", symbol), ttl_seconds, lambda: central_stock_enrichment(symbol), lambda: _quote_aware_stock_fallback(symbol)))
 
 
 @app.get("/debug/provider/{ticker}")
@@ -1060,16 +1238,16 @@ def get_overview() -> dict:
 
 @app.get("/sector/rotation")
 def get_sector_rotation() -> Any:
-    def task() -> Any:
-        cache_key = _schema_cache_key("sector_rotation_ultra_v2")
-        cached = get_cached_value(cache_key)
-        if cached is not None and _cacheable_endpoint_result(cache_key, cached):
-            logger.info("sector_rotation_cache_hit=true")
-            return cached
-        if cached is not None:
-            logger.warning("ignoring invalid sector rotation cache key=%s", cache_key)
+    cache_key = _schema_cache_key("sector_rotation_snapshot_v1")
+    cached = get_cached_value(cache_key)
+    if cached is not None and _cacheable_endpoint_result(cache_key, cached):
+        logger.info("sector_rotation_cache_hit=true")
+        return _rotation_cache_status(cached, "cached", "persisted_cache")
+    if cached is not None:
+        logger.warning("ignoring invalid sector rotation cache key=%s", cache_key)
+    try:
         started = time.perf_counter()
-        result = _sector_rotation_response()
+        result = _sector_rotation_snapshot_response()
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         if _cacheable_endpoint_result(cache_key, result):
             set_cached_value(cache_key, result, settings.sector_rotation_ttl_seconds, "json")
@@ -1077,8 +1255,12 @@ def get_sector_rotation() -> Any:
             logger.warning("skipping sector rotation cache write for low-quality result")
         logger.info("sector_rotation_compute_ms=%.2f", elapsed_ms)
         return result
-
-    return _guard(task)
+    except Exception:
+        stale = get_cached_value(cache_key, allow_expired=True)
+        if stale is not None and _sector_rotation_has_signal(stale):
+            logger.warning("serving stale sector rotation snapshot")
+            return _rotation_cache_status(stale, "stale", "persisted_cache")
+        raise
 
 
 @app.get("/theme/top")
@@ -1110,6 +1292,288 @@ def get_theme_supply_chain_endpoint(theme: str | None = None) -> dict:
 @app.get("/theme/narrative")
 def get_theme_narrative_endpoint() -> dict:
     return _guard(lambda: _fast_cached_response(_schema_cache_key("theme_v4", "narrative"), settings.theme_ttl_seconds, analyze_all_narratives, lambda: {"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "narratives": [], "summary": "Narrative engine calibrating.", "fallback": True}))
+
+
+@app.get("/api/theme/intelligence")
+def get_theme_intelligence_endpoint() -> dict:
+    return _guard(get_theme_intelligence)
+
+
+@app.get("/api/theme/intelligence/top")
+def get_top_theme_intelligence_endpoint() -> dict:
+    return _guard(lambda: get_top_theme_intelligence(20))
+
+
+@app.get("/api/theme/scout")
+def get_theme_scout_endpoint() -> dict:
+    repository = ThemeScoutRepository(ThemeRepository(settings.sqlite_cache_path))
+    return export_theme_scout_snapshot(repository)
+
+
+@app.get("/api/theme/scout/{candidate_key:path}")
+def get_theme_scout_candidate_endpoint(candidate_key: str) -> dict:
+    repository = ThemeScoutRepository(ThemeRepository(settings.sqlite_cache_path))
+    candidate = export_theme_candidate(repository, candidate_key)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Theme candidate not found")
+    return candidate
+
+
+@app.get("/api/theme/registry")
+def get_theme_registry_endpoint() -> dict:
+    return _guard(lambda: export_theme_registry(ThemeRepository(settings.sqlite_cache_path)))
+
+
+@app.get("/api/theme/ranking")
+def get_theme_ranking_endpoint() -> dict:
+    return _guard(lambda: export_theme_ranking(ThemeRepository(settings.sqlite_cache_path)))
+
+
+def _research_pipeline_engine() -> ResearchPipelineEngine:
+    return ResearchPipelineEngine(ThemeRepository(settings.sqlite_cache_path))
+
+
+def _decision_intelligence_engine() -> DecisionIntelligenceEngine:
+    return DecisionIntelligenceEngine(ThemeRepository(settings.sqlite_cache_path))
+
+
+@app.get("/api/research/pipeline")
+def get_research_pipeline_endpoint() -> dict:
+    return _guard(lambda: export_pipeline_cases(_research_pipeline_engine()))
+
+
+@app.get("/api/research/pipeline/{case_id}")
+def get_research_pipeline_case_endpoint(case_id: str) -> dict:
+    try:
+        return export_pipeline_case_detail(_research_pipeline_engine(), case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/research/pipeline")
+def create_research_pipeline_case_endpoint(payload: dict) -> dict:
+    try:
+        engine = _research_pipeline_engine()
+        case = engine.create_case(
+            source_type=str(payload.get("source_type", "")),
+            source_id=str(payload.get("source_id", "")),
+            theme_id=str(payload.get("theme_id", "")),
+            title=str(payload.get("title", "")),
+        )
+        return export_pipeline_case_detail(engine, case.case_id)
+    except PipelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/research/pipeline/{case_id}/transition")
+def transition_research_pipeline_case_endpoint(case_id: str, payload: dict) -> dict:
+    try:
+        engine = _research_pipeline_engine()
+        engine.transition_case(
+            case_id,
+            str(payload.get("new_status", "")),
+            reason=str(payload.get("reason", "")),
+        )
+        return export_pipeline_case_detail(engine, case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PipelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/research/pipeline/{case_id}/links")
+def link_research_pipeline_artifact_endpoint(case_id: str, payload: dict) -> dict:
+    try:
+        engine = _research_pipeline_engine()
+        engine.link_artifact(
+            case_id,
+            str(payload.get("linked_type", "")),
+            str(payload.get("linked_id", "")),
+        )
+        return export_pipeline_case_detail(engine, case_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PipelineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/decision-intelligence")
+def get_decision_intelligence_endpoint() -> dict:
+    return _guard(lambda: export_decision_intelligence(_decision_intelligence_engine()))
+
+
+@app.get("/api/decision-intelligence/{packet_id:path}")
+def get_decision_intelligence_detail_endpoint(packet_id: str) -> dict:
+    try:
+        return export_decision_intelligence_detail(_decision_intelligence_engine(), packet_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/stock-research/{ticker}")
+def get_stock_research_endpoint(ticker: str) -> dict:
+    return _guard(lambda: export_stock_research(ticker, ThemeRepository(settings.sqlite_cache_path)))
+
+
+@app.get("/api/theme/intelligence/{theme_id}")
+def get_theme_intelligence_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_intelligence_detail(theme_id))
+
+
+@app.get("/api/theme/graph")
+def get_theme_graph_endpoint() -> dict:
+    return _guard(get_theme_graph)
+
+
+@app.get("/api/theme/graph/{theme_id}")
+def get_theme_graph_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_graph_detail(theme_id))
+
+
+@app.get("/api/theme/overlap/{theme_id}")
+def get_theme_overlap_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_overlap(theme_id))
+
+
+@app.post("/api/theme/seed/reload")
+@app.post("/api/theme/admin/seed/reload")
+def reload_theme_seeds() -> dict:
+    """Manually reload curated seed data, recompute discovery scores, and
+    invalidate affected cache keys.  Safe to call repeatedly.
+
+    Runs in the background; poll GET /api/theme/seed/status to check progress.
+    Returns immediately with status=queued.
+    """
+    if _SEED_STATE.get("loading"):
+        return {"status": "already_loading", "message": "Seed loader is already running."}
+    BACKGROUND_EXECUTOR.submit(_run_seed_loader)
+    return {
+        "status": "queued",
+        "message": "Seed loader queued in background.  Poll /api/theme/seed/status for result.",
+        "source": "seed:curated",
+        "version": SEED_VERSION,
+    }
+
+
+@app.get("/api/theme/seed/status")
+@app.get("/api/theme/admin/seed/status")
+def get_seed_status() -> dict:
+    """Return seed loader health: loaded flag, timestamp, per-theme coverage,
+    and last error if any.  Useful for cold-start validation on Render or local.
+    """
+    repo = ThemeRepository()
+    repo.initialize()
+
+    # Derive live coverage from the database directly.
+    try:
+        discovery_rows = repo.get_discovery_scores(limit=100)
+        catalysts = repo.get_catalysts()
+        beneficiaries = repo.get_beneficiary_scores()
+        bottlenecks = repo.get_bottlenecks()
+        theme_names = sorted({str(row.get("name", "")) for row in discovery_rows if row.get("name")})
+        catalyst_themes = sorted({getattr(r, "theme_name", "") for r in catalysts if getattr(r, "theme_name", "")})
+        beneficiary_themes = sorted({getattr(r, "theme_name", "") for r in beneficiaries if getattr(r, "theme_name", "")})
+        bottleneck_themes = sorted({getattr(r, "theme_name", "") for r in bottlenecks if getattr(r, "theme_name", "")})
+        coverage_detail: dict[str, Any] = {
+            "discovery_themes": theme_names,
+            "catalyst_themes": catalyst_themes,
+            "beneficiary_themes": beneficiary_themes,
+            "bottleneck_themes": bottleneck_themes,
+            "discovery_count": len(discovery_rows),
+            "catalyst_count": len(catalysts),
+            "beneficiary_count": len(beneficiaries),
+            "bottleneck_count": len(bottlenecks),
+        }
+    except Exception as exc:  # noqa: BLE001
+        coverage_detail = {"error": str(exc)}
+
+    return {
+        "seeded_themes": len(theme_names) if "theme_names" in locals() else 0,
+        "seed_version": _SEED_STATE.get("version", SEED_VERSION),
+        "last_loaded": _SEED_STATE.get("loaded_at"),
+        "coverage": {
+            "catalysts": len(catalysts) if "catalysts" in locals() else 0,
+            "bottlenecks": len(bottlenecks) if "bottlenecks" in locals() else 0,
+            "beneficiaries": len(beneficiaries) if "beneficiaries" in locals() else 0,
+            "detail": coverage_detail,
+        },
+        "loaded": _SEED_STATE.get("loaded", False),
+        "loading": _SEED_STATE.get("loading", False),
+        "loaded_at": _SEED_STATE.get("loaded_at"),
+        "error": _SEED_STATE.get("error"),
+        "source": _SEED_STATE.get("source", "seed:curated"),
+        "version": _SEED_STATE.get("version", SEED_VERSION),
+        "last_result": _SEED_STATE.get("result"),
+    }
+
+
+@app.get("/api/theme/discovery")
+def get_theme_discovery_endpoint(refresh: bool = Query(False)) -> dict:
+    return _guard(lambda: get_theme_discovery(refresh=True) if refresh else get_theme_discovery())
+
+
+@app.get("/api/theme/lifecycle")
+def get_theme_lifecycle_endpoint() -> dict:
+    return _guard(get_theme_lifecycle)
+
+
+@app.get("/api/theme/lifecycle/{theme_id}")
+def get_theme_lifecycle_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_lifecycle_detail(theme_id))
+
+
+@app.get("/api/theme/catalysts")
+def get_theme_catalysts_endpoint() -> dict:
+    return _guard(get_theme_catalysts)
+
+
+@app.get("/api/theme/catalysts/{theme_id}")
+def get_theme_catalysts_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_catalyst_detail(theme_id))
+
+
+@app.get("/api/theme/bottlenecks")
+def get_theme_bottlenecks_endpoint() -> dict:
+    return _guard(get_theme_bottlenecks)
+
+
+@app.get("/api/theme/bottlenecks/{theme_id}")
+def get_theme_bottlenecks_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_bottleneck_detail(theme_id))
+
+
+@app.get("/api/theme/beneficiaries")
+def get_theme_beneficiaries_endpoint() -> dict:
+    return _guard(get_theme_beneficiaries)
+
+
+@app.get("/api/theme/beneficiaries/{theme_id}")
+def get_theme_beneficiaries_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_beneficiary_detail(theme_id))
+
+
+@app.get("/api/theme/scores")
+def get_theme_scores_endpoint() -> dict:
+    return _guard(get_theme_scores)
+
+
+@app.get("/api/theme/scores/{theme_id}")
+def get_theme_scores_detail_endpoint(theme_id: str) -> dict:
+    return _guard(lambda: get_theme_score_detail(theme_id))
+
+
+@app.get("/api/theme/portfolio")
+def get_theme_portfolio_endpoint() -> dict:
+    return _guard(get_theme_portfolios)
+
+
+@app.get("/api/theme/portfolio/{portfolio_type}")
+def get_theme_portfolio_detail_endpoint(portfolio_type: str) -> dict:
+    return _guard(lambda: get_theme_portfolio_detail(portfolio_type))
 
 
 @app.get("/theme/forecast")

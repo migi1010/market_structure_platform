@@ -1,6 +1,7 @@
 from .market_data import (
     CACHE_SCHEMA_VERSION,
     debug_provider,
+    get_cached_entry,
     get_cached_value,
     get_history,
     get_news,
@@ -16,6 +17,7 @@ from .market_data import (
 
 __all__ = [
     "get_cached_value",
+    "get_cached_entry",
     "CACHE_SCHEMA_VERSION",
     "debug_provider",
     "get_history",

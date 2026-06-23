@@ -62,7 +62,7 @@ function AnalystForecastPanel({ targets, consensus, price = 0, lifecycleState, q
         : "Analyst target framework awaiting provider data.";
 
   return (
-    <section className="miji-card terminal-panel p-5">
+    <section className="terminal-panel p-5">
       <div className="mb-5 flex items-center justify-between">
         <div>
           <p className="terminal-micro-label">Institutional Analyst Consensus</p>
@@ -71,20 +71,20 @@ function AnalystForecastPanel({ targets, consensus, price = 0, lifecycleState, q
         <Target className="text-[var(--theme-warning)]" size={22} />
       </div>
 
-      <div className="miji-card-metrics grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-5 border-y border-[var(--theme-divider)] py-3">
         {[
           ["High Target", high, "text-[var(--theme-bullish)]"],
           ["Average Target", averageTarget, "text-[var(--theme-highlight)]"],
           ["Low Target", low, "text-[var(--theme-bearish)]"],
         ].map(([label, value, color]) => (
-          <div key={String(label)} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
-            <p className={`mt-2 font-mono text-xl font-bold ${hasTargets ? color : "text-[var(--theme-muted)]"}`}>{targetLabel(value as number | null)}</p>
+          <div key={String(label)}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">{label}</p>
+            <p className={`mt-1 font-mono text-xl font-semibold ${hasTargets ? color : "text-[var(--theme-muted)]"}`}>{targetLabel(value as number | null)}</p>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-panel-inset)] p-4">
+      <div className="mt-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-[var(--theme-muted)]">Implied Upside</span>
           <span className={typeof upside === "number" && upside >= 0 ? "font-mono text-xl font-bold text-[var(--theme-bullish)]" : typeof upside === "number" ? "font-mono text-xl font-bold text-[var(--theme-bearish)]" : "font-mono text-xl font-bold text-[var(--theme-muted)]"}>
@@ -92,16 +92,16 @@ function AnalystForecastPanel({ targets, consensus, price = 0, lifecycleState, q
           </span>
         </div>
 
-        <div className="miji-card-metrics mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-lg border border-[var(--theme-bullish)] bg-[var(--theme-positive-tag-bg)] p-3">
+        <div className="mt-4 grid grid-cols-3 gap-5 border-y border-[var(--theme-divider)] py-3">
+          <div>
             <p className="text-xs font-bold text-[var(--theme-bullish)]">Buy</p>
             <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(buyCount) : waitingLabel}</p>
           </div>
-          <div className="rounded-lg border border-[var(--theme-warning)] bg-[var(--theme-panel)] p-3">
+          <div>
             <p className="text-xs font-bold text-[var(--theme-warning)]">Hold</p>
             <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(holdCount) : waitingLabel}</p>
           </div>
-          <div className="rounded-lg border border-[var(--theme-bearish)] bg-[var(--theme-negative-tag-bg)] p-3">
+          <div>
             <p className="text-xs font-bold text-[var(--theme-bearish)]">Sell</p>
             <p className="mt-1 font-mono text-lg font-bold text-[var(--theme-text)]">{hasConsensus ? analystLabel(sellCount) : waitingLabel}</p>
           </div>
